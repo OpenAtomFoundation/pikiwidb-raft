@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "common.h"
+#include "net/tcp_connection.h"
 #include "net/unbounded_buffer.h"
 #include "net/util.h"
 #include "pstd/memory_file.h"
@@ -126,6 +127,7 @@ class PReplication {
   void SendToSlaves(const std::vector<PString>& params);
 
   // slave side
+  void SetFailCallback(TcpConnectionFailCallback cb) { on_fail_ = std::move(cb); }
   void SaveTmpRdb(const char* data, std::size_t& len);
   void SetMaster(const std::shared_ptr<PClient>& cli);
   void SetMasterState(PReplState s);
@@ -151,6 +153,9 @@ class PReplication {
   PMasterInfo masterInfo_;
   std::weak_ptr<PClient> master_;
   pstd::OutputMemoryFile rdb_;
+
+  // Callback function that failed to connect to the master node
+  TcpConnectionFailCallback on_fail_ = nullptr;
 };
 
 }  // namespace pikiwidb

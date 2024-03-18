@@ -11,58 +11,56 @@
 
 #include "braft/raft.h"
 #include "rocksdb/status.h"
+#include "braft/util.h"
+#include "brpc/server.h"
+#include "butil/status.h"
+#include "client.h"
 
 namespace pikiwidb {
 
-#define RAFT_DBID_LEN 32
+#define RAFT_GROUPID_LEN 32
 
 #define PRAFT PRaft::Instance()
 
-class PClient;
 class EventLoop;
 class Binlog;
 
-class JoinCmdContext {
+class ClusterCmdContext {
   friend class PRaft;
 
  public:
-  JoinCmdContext() = default;
-  ~JoinCmdContext() = default;
+  enum ClusterCmdType{
+    NONE,
+    JOIN,
+    REMOVE,
+  };
 
-  bool Set(PClient* client, const std::string& peer_ip, int port) {
-    std::unique_lock<std::mutex> lck(mtx_);
-    if (client_ != nullptr) {
-      return false;
-    }
-    assert(client);
-    client_ = client;
-    peer_ip_ = peer_ip;
-    port_ = port;
-    return true;
-  }
+  ClusterCmdContext() = default;
+  ~ClusterCmdContext() = default;
 
-  void Clear() {
-    std::unique_lock<std::mutex> lck(mtx_);
-    client_ = nullptr;
-    peer_ip_.clear();
-    port_ = 0;
-  }
+  bool Set(ClusterCmdType cluster_cmd_type, PClient* client, const std::string& peer_ip, 
+        int port, std::string node_id = "");
+
+  void Clear();
 
   // @todo the function seems useless
-  bool IsEmpty() {
-    std::unique_lock<std::mutex> lck(mtx_);
-    return client_ == nullptr;
-  }
+  bool IsEmpty();
 
+  ClusterCmdType GetClusterCmdType() { return cluster_cmd_type_; }
   PClient* GetClient() { return client_; }
   const std::string& GetPeerIp() { return peer_ip_; }
   int GetPort() { return port_; }
+  const std::string& GetNodeID() { return node_id_; }
+
+  void ConnectTargetNode();
 
  private:
+  ClusterCmdType cluster_cmd_type_ = ClusterCmdType::NONE;
   std::mutex mtx_;
   PClient* client_ = nullptr;
   std::string peer_ip_;
   int port_ = 0;
+  std::string node_id_;
 };
 
 class PRaftWriteDoneClosure : public braft::Closure {
@@ -100,13 +98,19 @@ class PRaft : public braft::StateMachine {
   void AppendLog(const Binlog& log, std::promise<rocksdb::Status>&& promise);
 
   //===--------------------------------------------------------------------===//
-  // ClusterJoin command
+  // Cluster command
   //===--------------------------------------------------------------------===//
-  JoinCmdContext& GetJoinCtx() { return join_ctx_; }
-  void SendNodeInfoRequest(PClient* client);
+  ClusterCmdContext& GetClusterCmdCtx() { return cluster_cmd_ctx_; }
+  void SendNodeRequest(PClient* client);
+  void SendNodeInfoRequest(PClient* client, const std::string info_type);
   void SendNodeAddRequest(PClient* client);
-  std::tuple<int, bool> ProcessClusterJoinCmdResponse(PClient* client, const char* start, int len);
-  void OnJoinCmdConnectionFailed(EventLoop*, const char* peer_ip, int port);
+  void SendNodeRemoveRequest(PClient* client); 
+
+  int ProcessClusterCmdResponse(PClient* client, const char* start, int len);
+  int ProcessClusterJoinCmdResponse(PClient* client, const char* start, int len);
+  int ProcessClusterRemoveCmdResponse(PClient* client, const char* start, int len);
+
+  void OnClusterCmdConnectionFailed(EventLoop*, const char* peer_ip, int port);
 
   bool IsLeader() const;
   std::string GetLeaderId() const;
@@ -138,8 +142,8 @@ class PRaft : public braft::StateMachine {
   braft::NodeOptions node_options_;  // options for raft node
   std::string raw_addr_;             // ip:port of this node
 
-  JoinCmdContext join_ctx_;  // context for cluster join command
-  std::string dbid_;         // dbid of group,
+  ClusterCmdContext cluster_cmd_ctx_;  // context for cluster join/remove command
+  std::string group_id_;         // group id
 };
 
 }  // namespace pikiwidb
