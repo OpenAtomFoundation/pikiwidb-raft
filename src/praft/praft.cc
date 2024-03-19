@@ -31,8 +31,13 @@
 
 namespace pikiwidb {
 
+<<<<<<< HEAD
 bool ClusterCmdContext::Set(ClusterCmdType cluster_cmd_type, PClient* client, const std::string& peer_ip, int port,
                             std::string node_id) {
+=======
+bool ClusterCmdContext::Set(ClusterCmdType cluster_cmd_type, PClient* client, const std::string& peer_ip, 
+      int port, std::string peer_id) {
+>>>>>>> d80b170 (fix:the debugging of the deletion is complete)
   std::unique_lock<std::mutex> lck(mtx_);
   if (client_ != nullptr) {
     return false;
@@ -42,7 +47,7 @@ bool ClusterCmdContext::Set(ClusterCmdType cluster_cmd_type, PClient* client, co
   client_ = client;
   peer_ip_ = peer_ip;
   port_ = port;
-  node_id_ = node_id;
+  peer_id_ = peer_id;
   return true;
 }
 
@@ -52,7 +57,7 @@ void ClusterCmdContext::Clear() {
   client_ = nullptr;
   peer_ip_.clear();
   port_ = 0;
-  node_id_.clear();
+  peer_id_.clear();
 }
 
 bool ClusterCmdContext::IsEmpty() {
@@ -64,6 +69,7 @@ void ClusterCmdContext::ConnectTargetNode() {
   auto ip = PREPL.GetMasterAddr().GetIP();
   auto port = PREPL.GetMasterAddr().GetPort();
   if (ip == peer_ip_ && port == port_ && PREPL.GetMasterState() == kPReplStateConnected) {
+    PRAFT.SendNodeRequest(PREPL.GetMaster());
     return;
   }
 
@@ -86,6 +92,8 @@ PRaft& PRaft::Instance() {
   static PRaft store;
   return store;
 }
+
+
 
 butil::Status PRaft::Init(std::string& group_id, bool initial_conf_is_null) {
   if (node_ && server_) {
@@ -179,7 +187,7 @@ bool PRaft::IsLeader() const {
   return node_->is_leader();
 }
 
-std::string PRaft::GetLeaderId() const {
+std::string PRaft::GetLeaderID() const {
   if (!node_) {
     ERROR("Node is not initialized");
     return "Failed to get leader id";
@@ -187,6 +195,7 @@ std::string PRaft::GetLeaderId() const {
   return node_->leader_id().to_string();
 }
 
+<<<<<<< HEAD
 std::string PRaft::GetLeaderAddress() const {
   if (!node_) {
     ERROR("Node is not initialized");
@@ -199,6 +208,9 @@ std::string PRaft::GetLeaderAddress() const {
 }
 
 std::string PRaft::GetNodeId() const {
+=======
+std::string PRaft::GetNodeID() const {
+>>>>>>> d80b170 (fix:the debugging of the deletion is complete)
   if (!node_) {
     ERROR("Node is not initialized");
     return "Failed to get node id";
@@ -206,7 +218,19 @@ std::string PRaft::GetNodeId() const {
   return node_->node_id().to_string();
 }
 
-std::string PRaft::GetGroupId() const {
+std::string PRaft::GetPeerID() const {
+  if (!node_) {
+    ERROR("Node is not initialized");
+    return "Failed to get node id";
+  }
+  
+  auto node_id = node_->node_id().to_string();
+  auto pos = node_id.find(':');
+  auto peer_id = node_id.substr(pos + 1, node_id.size());
+  return peer_id;
+}
+
+std::string PRaft::GetGroupID() const {
   if (!node_) {
     ERROR("Node is not initialized");
     return "Failed to get cluster id";
@@ -283,7 +307,7 @@ void PRaft::SendNodeRemoveRequest(PClient* client) {
 
   UnboundedBuffer req;
   req.PushData("RAFT.NODE REMOVE ", 17);
-  req.PushData(cluster_cmd_ctx_.GetNodeID().c_str(), cluster_cmd_ctx_.GetNodeID().size());
+  req.PushData(cluster_cmd_ctx_.GetPeerID().c_str(), cluster_cmd_ctx_.GetPeerID().size());
   req.PushData("\r\n", 2);
   client->SendPacket(req);
   client->Clear();
@@ -316,7 +340,7 @@ int PRaft::ProcessClusterJoinCmdResponse(PClient* client, const char* start, int
 
   std::string reply(start, len);
   if (reply.find("+OK") != std::string::npos) {
-    INFO("Joined Raft cluster, node id: {}, group_id: {}", PRAFT.GetNodeId(), PRAFT.group_id_);
+    INFO("Joined Raft cluster, node id: {}, group_id: {}", PRAFT.GetNodeID(), PRAFT.group_id_);
     join_client->SetRes(CmdRes::kOK);
     join_client->SendPacket(join_client->Message());
     join_client->Clear();
@@ -430,10 +454,18 @@ int PRaft::ProcessClusterRemoveCmdResponse(PClient* client, const char* start, i
 
   std::string reply(start, len);
   if (reply.find("+OK") != std::string::npos) {
-    INFO("Removed Raft cluster, node id: {}, group_id: {}", PRAFT.GetNodeId(), PRAFT.group_id_);
+    INFO("Removed Raft cluster, node id: {}, group_id: {}", PRAFT.GetNodeID(), PRAFT.group_id_);
+    ShutDown();
+    Join();
+    Clear();
+
     remove_client->SetRes(CmdRes::kOK);
     remove_client->SendPacket(remove_client->Message());
     remove_client->Clear();
+  } else if (reply.find("Not leader") != std::string::npos) {
+    auto remove_client = cluster_cmd_ctx_.GetClient();
+    remove_client->Clear();
+    remove_client->Reexecutecommand();
   } else {
     ERROR("Removed Raft cluster fail, str: {}", start);
     remove_client->SetRes(CmdRes::kErrOther, std::string(start, len));
@@ -492,10 +524,7 @@ void PRaft::OnClusterCmdConnectionFailed([[maybe_unused]] EventLoop* loop, const
   }
   cluster_cmd_ctx_.Clear();
 
-  // if (PRAFT.IsInitialized()) {
-  //   PRAFT.ShutDown();
-  //   PRAFT.Join();
-  // }
+  PREPL.GetMasterAddr().Clear();
 }
 
 // Shut this node and server down.
@@ -520,6 +549,7 @@ void PRaft::Join() {
   }
 }
 
+<<<<<<< HEAD
 void PRaft::AppendLog(const Binlog& log, std::promise<rocksdb::Status>&& promise) {
   assert(node_);
   assert(node_->is_leader());
@@ -530,6 +560,21 @@ void PRaft::AppendLog(const Binlog& log, std::promise<rocksdb::Status>&& promise
     done->SetStatus(rocksdb::Status::Incomplete("Failed to serialize binlog"));
     done->Run();
     return;
+=======
+void PRaft::Clear() {
+  if (node_) {
+    node_.reset();
+  }
+
+  if (server_) {
+    server_.reset();
+  }
+}
+
+void PRaft::Apply(braft::Task& task) {
+  if (node_) {
+    node_->apply(task);
+>>>>>>> d80b170 (fix:the debugging of the deletion is complete)
   }
   DEBUG("append binlog: {}", log.ShortDebugString());
   braft::Task task;
