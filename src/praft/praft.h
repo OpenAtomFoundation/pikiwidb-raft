@@ -7,29 +7,29 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <filesystem>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <tuple>
 #include <vector>
+=======
+#include <future>
+>>>>>>> pr213
 
-#include "braft/configuration.h"
 #include "braft/raft.h"
-#include "braft/util.h"
-#include "brpc/controller.h"
-#include "brpc/server.h"
-#include "butil/status.h"
-
-#include "client.h"
-#include "event_loop.h"
-#include "tcp_connection.h"
+#include "rocksdb/status.h"
 
 namespace pikiwidb {
 
 #define RAFT_DBID_LEN 32
 
 #define PRAFT PRaft::Instance()
+
+class PClient;
+class EventLoop;
+class Binlog;
 
 class JoinCmdContext {
   friend class PRaft;
@@ -74,10 +74,24 @@ class JoinCmdContext {
   int port_ = 0;
 };
 
+class PRaftWriteDoneClosure : public braft::Closure {
+ public:
+  explicit PRaftWriteDoneClosure(std::promise<rocksdb::Status>&& promise) : promise_(std::move(promise)) {}
+
+  void Run() override {
+    promise_.set_value(result_);
+    delete this;
+  }
+  void SetStatus(rocksdb::Status status) { result_ = std::move(status); }
+
+ private:
+  std::promise<rocksdb::Status> promise_;
+  rocksdb::Status result_{rocksdb::Status::Aborted("Unknown error")};
+};
+
 class PRaft : public braft::StateMachine {
  public:
-  PRaft() : server_(nullptr), node_(nullptr) {}
-
+  PRaft() = default;
   ~PRaft() override = default;
 
   static PRaft& Instance();
@@ -93,7 +107,7 @@ class PRaft : public braft::StateMachine {
 
   void ShutDown();
   void Join();
-  void Apply(braft::Task& task);
+  void AppendLog(const Binlog& log, std::promise<rocksdb::Status>&& promise);
 
   //===--------------------------------------------------------------------===//
   // ClusterJoin command
@@ -128,6 +142,7 @@ class PRaft : public braft::StateMachine {
   void on_start_following(const ::braft::LeaderChangeContext& ctx) override;
 
  private:
+<<<<<<< HEAD
   void add_all_files(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path);
 
   void recursive_copy(const std::filesystem::path& source, const std::filesystem::path& destination);
@@ -135,6 +150,10 @@ class PRaft : public braft::StateMachine {
  private:
   std::unique_ptr<brpc::Server> server_;  // brpc
   std::unique_ptr<braft::Node> node_;
+=======
+  std::unique_ptr<brpc::Server> server_{nullptr};  // brpc
+  std::unique_ptr<braft::Node> node_{nullptr};
+>>>>>>> pr213
   braft::NodeOptions node_options_;  // options for raft node
   std::string raw_addr_;             // ip:port of this node
 
