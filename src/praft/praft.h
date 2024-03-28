@@ -7,16 +7,13 @@
 
 #pragma once
 
-<<<<<<< HEAD
 #include <filesystem>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <tuple>
 #include <vector>
-=======
 #include <future>
->>>>>>> pr213
 
 #include "braft/raft.h"
 #include "rocksdb/status.h"
@@ -142,7 +139,6 @@ class PRaft : public braft::StateMachine {
   void on_start_following(const ::braft::LeaderChangeContext& ctx) override;
 
  private:
-<<<<<<< HEAD
   void add_all_files(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path);
 
   void recursive_copy(const std::filesystem::path& source, const std::filesystem::path& destination);
@@ -150,10 +146,6 @@ class PRaft : public braft::StateMachine {
  private:
   std::unique_ptr<brpc::Server> server_;  // brpc
   std::unique_ptr<braft::Node> node_;
-=======
-  std::unique_ptr<brpc::Server> server_{nullptr};  // brpc
-  std::unique_ptr<braft::Node> node_{nullptr};
->>>>>>> pr213
   braft::NodeOptions node_options_;  // options for raft node
   std::string raw_addr_;             // ip:port of this node
 

@@ -11,7 +11,7 @@
 #include <string>
 
 #include "checkpoint_manager.h"
-#include "log.h"
+#include "pstd/log.h"
 #include "pstd/noncopyable.h"
 #include "storage/storage.h"
 namespace pikiwidb {

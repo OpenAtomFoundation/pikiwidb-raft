@@ -66,12 +66,9 @@ struct StorageOptions {
   size_t small_compaction_threshold = 5000;
   size_t small_compaction_duration_threshold = 10000;
   size_t db_instance_num = 3;  // default = 3
-<<<<<<< HEAD
   int db_id;
-=======
   bool is_use_raft = true;
   uint32_t raft_timeout = 10;
->>>>>>> pr213
   Status ResetOptions(const OptionType& option_type, const std::unordered_map<std::string, std::string>& options_map);
 };
 

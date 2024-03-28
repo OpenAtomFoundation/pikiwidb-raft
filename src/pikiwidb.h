@@ -8,12 +8,8 @@
 #include "cmd_table_manager.h"
 #include "common.h"
 #include "io_thread_pool.h"
-<<<<<<< HEAD
-=======
 #include "net/tcp_connection.h"
->>>>>>> pr213
 #include "praft/praft.h"
-#include "tcp_connection.h"
 
 #define kPIKIWIDB_VERSION "4.0.0"
 

@@ -10,10 +10,8 @@
 
 #include <cassert>
 
-<<<<<<< HEAD
 #include "braft/snapshot.h"
 
-=======
 #include "braft/util.h"
 #include "brpc/server.h"
 
@@ -21,17 +19,12 @@
 #include "pstd/pstd_string.h"
 
 #include "binlog.pb.h"
->>>>>>> pr213
 #include "client.h"
 #include "config.h"
 #include "pikiwidb.h"
-<<<<<<< HEAD
 #include "praft.h"
 #include "praft.pb.h"
-#include "pstd_string.h"
-=======
 #include "store.h"
->>>>>>> pr213
 
 #define ERROR_LOG_AND_STATUS(msg) \
   ({                              \
@@ -104,7 +97,7 @@ butil::Status PRaft::Init(std::string& group_id, bool initial_conf_is_null) {
   // node_options_.election_timeout_ms = FLAGS_election_timeout_ms;
   node_options_.fsm = this;
   node_options_.node_owns_fsm = false;
-  // node_options_.snapshot_interval_s = FLAGS_snapshot_interval;
+  node_options_.snapshot_interval_s = 0;
   std::string prefix = "local://" + g_config.dbpath + "_praft";
   node_options_.log_uri = prefix + "/log";
   node_options_.raft_meta_uri = prefix + "/raft_meta";
@@ -379,7 +372,6 @@ void PRaft::AppendLog(const Binlog& log, std::promise<rocksdb::Status>&& promise
   node_->apply(task);
 }
 
-<<<<<<< HEAD
 void PRaft::add_all_files(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path) {
   for (const auto& entry : std::filesystem::directory_iterator(dir)) {
     if (entry.is_directory()) {
@@ -421,8 +413,6 @@ void PRaft::recursive_copy(const std::filesystem::path& source, const std::files
 }
 
 // @braft::StateMachine
-=======
->>>>>>> pr213
 void PRaft::on_apply(braft::Iterator& iter) {
   // A batch of tasks are committed, which must be processed through
   for (; iter.valid(); iter.next()) {
@@ -444,7 +434,7 @@ void PRaft::on_apply(braft::Iterator& iter) {
       return;
     }
 
-    auto s = PSTORE.GetBackend(log.db_id())->OnBinlogWrite(log);
+    auto s = PSTORE.GetBackend(log.db_id())->GetStorage()->OnBinlogWrite(log);
     if (done) {  // in leader
       dynamic_cast<PRaftWriteDoneClosure*>(done)->SetStatus(s);
     }
