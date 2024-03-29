@@ -41,15 +41,12 @@ DB::DB(int db_index, const std::string& db_path)
   INFO("Open DB{} success!", db_index_);
 }
 
-void DB::DoBgSave(CheckpointInfo& checkpoint_info, const std::string& path, int i) {
+void DB::DoBgSave(const std::string& path, int i) {
   // 1) always hold storage's sharedLock
   std::shared_lock sharedLock(storage_mutex_);
 
   // 2）Create the storage's checkpoint 。
   auto status = storage_->CreateCheckpoint(path, i);
-
-  // 3) write the status
-  checkpoint_info.checkpoint_in_process = false;
 }
 
 void DB::CreateCheckpoint(const std::string& path) { checkpoint_manager_->CreateCheckpoint(path); }
