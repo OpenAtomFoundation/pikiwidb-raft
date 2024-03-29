@@ -5,8 +5,7 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-#ifndef PIKIWIDB_DB_H
-#define PIKIWIDB_DB_H
+#pragma once
 
 #include <string>
 
@@ -18,6 +17,7 @@ namespace pikiwidb {
 class DB {
  public:
   DB(int db_id, const std::string& db_path);
+
   std::unique_ptr<storage::Storage>& GetStorage() { return storage_; }
 
   void Lock() { storage_mutex_.lock(); }
@@ -29,7 +29,7 @@ class DB {
   void UnLockShared() { storage_mutex_.unlock_shared(); }
 
  private:
-  const int db_id_;
+  const int db_id_ = 0;
   const std::string db_path_;
 
   /**
@@ -53,6 +53,5 @@ class DB {
   int64_t last_checkpoint_time_ = -1;
   bool last_checkpoint_success_ = false;
 };
-}  // namespace pikiwidb
 
-#endif  // PIKIWIDB_DB_H
+}  // namespace pikiwidb
