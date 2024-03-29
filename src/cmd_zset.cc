@@ -760,7 +760,7 @@ void ZIncrbyCmd::DoCmd(PClient* client) {
 }
 
 ZRemrangebyscoreCmd::ZRemrangebyscoreCmd(const std::string& name, int16_t arity)
-  : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategorySortedSet) {}
+    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategorySortedSet) {}
 
 bool ZRemrangebyscoreCmd::DoInitial(PClient* client) {
   client->SetKey(client->argv_[1]);

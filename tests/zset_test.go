@@ -453,7 +453,7 @@ var _ = Describe("Zset", Ordered, func() {
 		rem, err := client.ZIncrBy(ctx, "zincrby", 5, "one").Result()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rem).To(Equal(float64(6)))
-  })
+	})
 
 	It("should ZRemRangeByScore", func() {
 		err := client.ZAdd(ctx, "zset", redis.Z{Score: 1, Member: "one"}).Err()
