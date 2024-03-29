@@ -31,6 +31,7 @@ const std::string kCmdNamePExpireat = "pexpireat";
 const std::string kCmdNamePersist = "persist";
 const std::string kCmdNameKeys = "keys";
 
+const std::string kCmdNamePttl = "pttl";
 // string cmd
 const std::string kCmdNameSet = "set";
 const std::string kCmdNameGet = "get";
@@ -120,6 +121,7 @@ const std::string kCmdNameLLen = "llen";
 const std::string kCmdNameZAdd = "zadd";
 const std::string kCmdNameZRevrange = "zrevrange";
 const std::string kCmdNameZRangebyscore = "zrangebyscore";
+const std::string kCmdNameZRemrangebyscore = "zremrangebyscore";
 const std::string kCmdNameZRemrangebyrank = "zremrangebyrank";
 const std::string kCmdNameZRevrangebyscore = "zrevrangebyscore";
 const std::string kCmdNameZCard = "zcard";
