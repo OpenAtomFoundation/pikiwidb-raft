@@ -24,6 +24,7 @@
 #include "pikiwidb.h"
 #include "praft.h"
 #include "praft.pb.h"
+#include "psnapshot.h"
 #include "store.h"
 
 #define ERROR_LOG_AND_STATUS(msg) \
@@ -103,22 +104,8 @@ butil::Status PRaft::Init(std::string& group_id, bool initial_conf_is_null) {
   node_options_.raft_meta_uri = prefix + "/raft_meta";
   node_options_.snapshot_uri = prefix + "/snapshot";
   // node_options_.disable_cli = FLAGS_disable_cli;
-
-  // checkpoint callback
-  auto checkpoint_callback = [&] (braft::SnapshotWriter* writer) {
-    TasksVector tasks;
-    tasks.reserve(g_config.databases);
-    for (auto i = 0; i < g_config.databases; ++i) {
-      tasks.push_back({TaskType::kCheckpoint, i, {{TaskArg::kCheckpointPath, writer->get_path()}}});
-    }
-    INFO("start generate snapshot");
-    PSTORE.DoSomeThingSpecificDB(tasks);
-    PSTORE.WaitForCheckpointDone();
-    auto writer_path = writer->get_path();
-    add_all_files(writer_path, writer, writer_path);
-    INFO("end generate snapshot");
-  };
-  node_options_.checkpoint_callback = checkpoint_callback;  
+  snapshot_adaptor_ = new PPosixFileSystemAdaptor();
+  node_options_.snapshot_file_system_adaptor = &snapshot_adaptor_;
 
   node_ = std::make_unique<braft::Node>("pikiwidb", braft::PeerId(addr));  // group_id
   if (node_->init(node_options_) != 0) {
@@ -314,14 +301,19 @@ butil::Status PRaft::RemovePeer(const std::string& peer) {
   return {0, "OK"};
 }
 
-butil::Status PRaft::DoSnapshot() {
+butil::Status PRaft::DoSnapshot(int64_t self_snapshot_index) {
   if (!node_) {
     return ERROR_LOG_AND_STATUS("Node is not initialized");
   }
   braft::SynchronizedClosure done;
-  node_->snapshot(&done);
+  node_->snapshot(&done);  // @todo self_snapshot_index
   done.wait();
   return {0, "OK"};
+}
+
+void PRaft::GenerateRealSnapshot() {
+  is_generate_snapshot_.store(true, std::memory_order_release);
+  DoSnapshot();  // @todo customize the snapshot index
 }
 
 void PRaft::OnJoinCmdConnectionFailed([[maybe_unused]] EventLoop* loop, const char* peer_ip, int port) {
@@ -445,6 +437,22 @@ void PRaft::on_apply(braft::Iterator& iter) {
 
 void PRaft::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) {
   brpc::ClosureGuard done_guard(done);
+  if (is_generate_snapshot_.load(std::memory_order_acquire)) {
+    TasksVector tasks;
+    tasks.reserve(g_config.databases);
+    for (auto i = 0; i < g_config.databases; ++i) {
+      tasks.push_back({TaskType::kCheckpoint, i, {{TaskArg::kCheckpointPath, writer->get_path()}}});
+    }
+
+    INFO("start generate snapshot");
+    PSTORE.DoSomeThingSpecificDB(tasks);
+    PSTORE.WaitForCheckpointDone();
+    auto writer_path = writer->get_path();
+    add_all_files(writer_path, writer, writer_path);
+    INFO("end generate snapshot");
+
+    is_generate_snapshot_.store(false, std::memory_order_release);
+  }
 }
 
 int PRaft::on_snapshot_load(braft::SnapshotReader* reader) {

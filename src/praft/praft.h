@@ -8,13 +8,14 @@
 #pragma once
 
 #include <filesystem>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <tuple>
 #include <vector>
-#include <future>
 
+#include "braft/file_system_adaptor.h"
 #include "braft/raft.h"
 #include "rocksdb/status.h"
 
@@ -27,6 +28,7 @@ namespace pikiwidb {
 class PClient;
 class EventLoop;
 class Binlog;
+class PPosixFileSystemAdaptor;
 
 class JoinCmdContext {
   friend class PRaft;
@@ -99,8 +101,8 @@ class PRaft : public braft::StateMachine {
   butil::Status Init(std::string& group_id, bool initial_conf_is_null);
   butil::Status AddPeer(const std::string& peer);
   butil::Status RemovePeer(const std::string& peer);
-  butil::Status RaftRecvEntry();
-  butil::Status DoSnapshot();
+  butil::Status DoSnapshot(int64_t self_snapshot_index = 0);
+  void GenerateRealSnapshot();
 
   void ShutDown();
   void Join();
@@ -140,7 +142,6 @@ class PRaft : public braft::StateMachine {
 
  private:
   void add_all_files(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path);
-
   void recursive_copy(const std::filesystem::path& source, const std::filesystem::path& destination);
 
  private:
@@ -151,6 +152,9 @@ class PRaft : public braft::StateMachine {
 
   JoinCmdContext join_ctx_;  // context for cluster join command
   std::string dbid_;         // dbid of group,
+
+  std::atomic<bool> is_generate_snapshot_ = false;  // whether generate real snapshot
+  scoped_refptr<braft::FileSystemAdaptor> snapshot_adaptor_ = nullptr;
 };
 
 }  // namespace pikiwidb

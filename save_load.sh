@@ -5,13 +5,13 @@ mkdir leader follower1
 cd leader && ulimit -n 99999  && rm -fr *  && ../bin/pikiwidb ../pikiwidb.conf --port 7777 &
 cd follower1 && ulimit -n 99999 && rm -fr * && ../bin/pikiwidb ../pikiwidb.conf --port 8888 &
 
-# sleep 10
+sleep 10
 
-# redis-cli -p 7777 raft.cluster init 
+redis-cli -p 7777 raft.cluster init 
 
-# redis-benchmark -p 7777 -c 5 -n 100 -r 1000 -d 1024 -t hset
-# redis-cli -p 7777 raft.node DSS
-# redis-benchmark -p 7777 -c 5 -n 10000 -r 1000000 -d 1024 -t hset
-# redis-cli -p 7777 raft.node DSS
+redis-benchmark -p 7777 -c 5 -n 100 -r 1000 -d 1024 -t hset
+redis-cli -p 7777 raft.node DSS
+redis-benchmark -p 7777 -c 5 -n 100 -r 1000 -d 1024 -t hset
+redis-cli -p 7777 raft.node DSS
 
-# redis-cli -p 8888 raft.cluster join 127.0.0.1:7777
+redis-cli -p 8888 raft.cluster join 127.0.0.1:7777
