@@ -82,6 +82,10 @@ bool ExpireCmd::DoInitial(PClient* client) {
 
 void ExpireCmd::DoCmd(PClient* client) {
   uint64_t sec = 0;
+  if (pstd::String2int(client->argv_[2], &sec) == 0) {
+    client->SetRes(CmdRes ::kInvalidInt);
+    return;
+  }
   auto res = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Expire(client->Key(), sec);
   if (res != -1) {
     client->AppendInteger(res);
