@@ -14,31 +14,31 @@
 
 #include "common.h"
 
-//namespace pikiwidb {
+// namespace pikiwidb {
 //
-//class PClient;
-//class PMulti {
-// public:
-//  static PMulti& Instance();
+// class PClient;
+// class PMulti {
+//  public:
+//   static PMulti& Instance();
 //
-//  PMulti(const PMulti&) = delete;
-//  void operator=(const PMulti&) = delete;
+//   PMulti(const PMulti&) = delete;
+//   void operator=(const PMulti&) = delete;
 //
-//  void Watch(PClient* client, int dbno, const PString& key);
-//  bool Multi(PClient* client);
-//  bool Exec(PClient* client);
-//  void Discard(PClient* client);
+//   void Watch(PClient* client, int dbno, const PString& key);
+//   bool Multi(PClient* client);
+//   bool Exec(PClient* client);
+//   void Discard(PClient* client);
 //
-//  void NotifyDirty(int dbno, const PString& key);
-//  void NotifyDirtyAll(int dbno);
+//   void NotifyDirty(int dbno, const PString& key);
+//   void NotifyDirtyAll(int dbno);
 //
-// private:
-//  PMulti() {}
+//  private:
+//   PMulti() {}
 //
-//  using Clients = std::vector<std::weak_ptr<PClient> >;
-//  using WatchedClients = std::map<int, std::map<PString, Clients> >;
+//   using Clients = std::vector<std::weak_ptr<PClient> >;
+//   using WatchedClients = std::map<int, std::map<PString, Clients> >;
 //
-//  WatchedClients clients_;
-//};
+//   WatchedClients clients_;
+// };
 //
-//}  // namespace pikiwidb
+// }  // namespace pikiwidb
