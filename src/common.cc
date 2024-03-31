@@ -45,42 +45,6 @@ struct PErrorInfo g_errorInfo[] = {
     {sizeof "-ERR module already loaded\r\n" - 1, "-ERR module already loaded\r\n"},
 };
 
-bool IsValidNumber(const PString& str) {
-  size_t slen = str.size();
-  if (slen == 0 || slen > 20 || (str[0] != '-' && !isdigit(str[0]))) {
-    return false;
-  }
-
-  size_t pos = 0;
-  if (str[0] == '-') {
-    if (slen == 1) {
-      return false;  // "-" is not a valid number
-    }
-    pos = 1;  // skip the sign
-  }
-
-  // "0", "-0" is a valid number, but "01", "001", etc. are not
-  if (str[pos] == '0' && slen > pos + 1) {
-    return false;
-  }
-
-  for (; pos < slen; ++pos) {
-    if (!isdigit(str[pos])) {
-      return false;
-    }
-  }
-
-  // TODO:
-  // @jettcc
-  // If this method is used to determine whether a numeric string is valid,
-  // it should consider whether the string exceeds the range of int64,
-  // that is, the string should be a valid long long number.
-
-  return true;
-}
-
-int Double2Str(char* ptr, std::size_t nBytes, double val) { return snprintf(ptr, nBytes - 1, "%.6g", val); }
-
 int StrToLongDouble(const char* s, size_t slen, long double* ldval) {
   char* pEnd;
   std::string t(s, slen);
@@ -98,144 +62,6 @@ int StrToLongDouble(const char* s, size_t slen, long double* ldval) {
   return 0;
 }
 
-int LongDoubleToStr(long double ldval, std::string* value) {
-  if (isnan(ldval)) {
-    return -1;
-  } else if (isinf(ldval)) {
-    if (ldval > 0) {
-      *value = "inf";
-    } else {
-      *value = "-inf";
-    }
-    return -1;
-  } else {
-    std::ostringstream oss;
-    oss << std::setprecision(15) << ldval;
-    *value = oss.str();
-
-    // Remove trailing zeroes after the '.'
-    size_t dotPos = value->find('.');
-    if (dotPos != std::string::npos) {
-      value->erase(value->find_last_not_of('0') + 1, std::string::npos);
-      if (value->back() == '.') {
-        value->pop_back();
-      }
-    }
-    return 0;
-  }
-}
-
-bool TryStr2Long(const char* ptr, size_t nBytes, long& val) {
-  bool negtive = false;
-  size_t i = 0;
-
-  if (ptr[0] == '-' || ptr[0] == '+') {
-    if (nBytes <= 1 || !isdigit(ptr[1])) {
-      return false;
-    }
-
-    negtive = (ptr[0] == '-');
-    i = 1;
-  }
-
-  val = 0;
-  for (; i < nBytes; ++i) {
-    if (!isdigit(ptr[i])) {
-      break;
-    }
-
-    if (!negtive && val > std::numeric_limits<long>::max() / 10) {
-      std::cerr << "long will overflow " << val << std::endl;
-      return false;
-    }
-
-    if (negtive && val > (-(std::numeric_limits<long>::min() + 1)) / 10) {
-      std::cerr << "long will underflow " << val << std::endl;
-      return false;
-    }
-
-    val *= 10;
-
-    if (!negtive && val > std::numeric_limits<long>::max() - (ptr[i] - '0')) {
-      std::cerr << "long will overflow " << val << std::endl;
-      return false;
-    }
-
-    if (negtive && (val - 1) > (-(std::numeric_limits<long>::min() + 1)) - (ptr[i] - '0')) {
-      std::cerr << "long will underflow " << val << std::endl;
-      return false;
-    }
-
-    val += ptr[i] - '0';
-  }
-
-  if (negtive) {
-    val *= -1;
-  }
-
-  return true;
-}
-// to be delete : https://github.com/OpenAtomFoundation/pikiwidb/pull/141#issue-2095887990
-// @578223592
-bool Strtol(const char* ptr, size_t nBytes, long* outVal) {
-  if (nBytes == 0 || nBytes > 20) {  // include the sign
-    return false;
-  }
-
-  errno = 0;
-  char* pEnd = 0;
-  *outVal = strtol(ptr, &pEnd, 0);
-
-  if (errno == ERANGE || errno == EINVAL) {
-    return false;
-  }
-
-  return pEnd == ptr + nBytes;
-}
-
-bool Strtof(const char* ptr, size_t nBytes, float* outVal) {
-  if (nBytes == 0 || nBytes > 20) {
-    return false;
-  }
-
-  errno = 0;
-  char* pEnd = 0;
-  *outVal = strtof(ptr, &pEnd);
-
-  if (errno == ERANGE || errno == EINVAL) {
-    return false;
-  }
-
-  return pEnd == ptr + nBytes;
-}
-
-bool Strtod(const char* ptr, size_t nBytes, double* outVal) {
-  if (nBytes == 0 || nBytes > 20) {
-    return false;
-  }
-
-  errno = 0;
-  char* pEnd = 0;
-  *outVal = strtod(ptr, &pEnd);
-
-  if (errno == ERANGE || errno == EINVAL) {
-    return false;
-  }
-
-  return pEnd == ptr + nBytes;
-}
-
-const char* Strstr(const char* ptr, size_t nBytes, const char* pattern, size_t nBytes2) {
-  if (!pattern || *pattern == 0) {
-    return nullptr;
-  }
-
-  const char* ret = std::search(ptr, ptr + nBytes, pattern, pattern + nBytes2);
-  return ret == ptr + nBytes ? nullptr : ret;
-}
-
-const char* SearchCRLF(const char* ptr, size_t nBytes) { return Strstr(ptr, nBytes, CRLF, 2); }
-
 size_t FormatInt(long value, UnboundedBuffer* reply) {
   if (!reply) {
     return 0;
@@ -250,20 +76,6 @@ size_t FormatInt(long value, UnboundedBuffer* reply) {
 
   return reply->ReadableSize() - oldSize;
 }
-
-size_t FormatSingle(const char* str, size_t len, UnboundedBuffer* reply) {
-  if (!reply) {
-    return 0;
-  }
-  size_t oldSize = reply->ReadableSize();
-  reply->PushData("+");
-  reply->PushData(str, len);
-  reply->PushData(CRLF);
-
-  return reply->ReadableSize() - oldSize;
-}
-
-size_t FormatSingle(const PString& str, UnboundedBuffer* reply) { return FormatSingle(str.c_str(), str.size(), reply); }
 
 size_t FormatBulk(const char* str, size_t len, UnboundedBuffer* reply) {
   if (!reply) {
@@ -303,8 +115,6 @@ size_t PreFormatMultiBulk(size_t nBulk, UnboundedBuffer* reply) {
   return reply->ReadableSize() - oldSize;
 }
 
-std::size_t FormatEmptyBulk(UnboundedBuffer* reply) { return reply->PushData("$0" CRLF CRLF, 6); }
-
 void ReplyError(PError err, UnboundedBuffer* reply) {
   if (!reply) {
     return;
@@ -315,28 +125,6 @@ void ReplyError(PError err, UnboundedBuffer* reply) {
   reply->PushData(info.errorStr, info.len);
 }
 
-size_t FormatNull(UnboundedBuffer* reply) {
-  if (!reply) {
-    return 0;
-  }
-
-  size_t oldSize = reply->ReadableSize();
-  reply->PushData("$-1" CRLF);
-
-  return reply->ReadableSize() - oldSize;
-}
-
-size_t FormatNullArray(UnboundedBuffer* reply) {
-  if (!reply) {
-    return 0;
-  }
-
-  size_t oldSize = reply->ReadableSize();
-  reply->PushData("*-1" CRLF);
-
-  return reply->ReadableSize() - oldSize;
-}
-
 size_t FormatOK(UnboundedBuffer* reply) {
   if (!reply) {
     return 0;
@@ -344,32 +132,6 @@ size_t FormatOK(UnboundedBuffer* reply) {
 
   size_t oldSize = reply->ReadableSize();
   reply->PushData("+OK" CRLF);
-
-  return reply->ReadableSize() - oldSize;
-}
-
-size_t Format1(UnboundedBuffer* reply) {
-  if (!reply) {
-    return 0;
-  }
-
-  const char* val = ":1\r\n";
-
-  size_t oldSize = reply->ReadableSize();
-  reply->PushData(val);
-
-  return reply->ReadableSize() - oldSize;
-}
-
-size_t Format0(UnboundedBuffer* reply) {
-  if (!reply) {
-    return 0;
-  }
-
-  const char* val = ":0\r\n";
-
-  size_t oldSize = reply->ReadableSize();
-  reply->PushData(val);
 
   return reply->ReadableSize() - oldSize;
 }
@@ -437,21 +199,4 @@ std::vector<PString> SplitString(const PString& str, char seperator) {
   return results;
 }
 
-bool NotGlobRegex(const char* pattern, std::size_t plen) {
-  for (std::size_t i(0); i < plen; ++i) {
-    if (pattern[i] == '?' || pattern[i] == '\\' || pattern[i] == '[' || pattern[i] == ']' || pattern[i] == '*' ||
-        pattern[i] == '^' || pattern[i] == '-') {
-      return false;  //  may be regex, may not, who cares?
-    }
-  }
-
-  return true;  // must not be regex
-}
-
 }  // namespace pikiwidb
-
-int64_t Now() {
-  using namespace std::chrono;
-  auto now = system_clock::now();
-  return duration_cast<milliseconds>(now.time_since_epoch()).count();
-}

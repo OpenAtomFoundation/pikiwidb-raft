@@ -25,57 +25,6 @@ const int kStringMaxBytes = 1 * 1024 * 1024 * 1024;
 
 #define PIKIWIDB_SCAN_STEP_LENGTH 1000
 
-enum PType {
-  kPTypeInvalid,
-  kPTypeString,
-  kPTypeList,
-  kPTypeSet,
-  kPTypeSortedSet,
-  kPTypeHash,
-  // < 16
-};
-
-enum PEncode {
-  kPEncodeInvalid,
-
-  kPEncodeRaw,  // string
-  kPEncodeInt,  // string as int
-
-  kPEncodeList,
-
-  kPEncodeSet,
-  kPEncodeHash,
-
-  kPEncodeZset,
-};
-
-inline const char* EncodingStringInfo(unsigned encode) {
-  switch (encode) {
-    case kPEncodeRaw:
-      return "raw";
-
-    case kPEncodeInt:
-      return "int";
-
-    case kPEncodeList:
-      return "list";
-
-    case kPEncodeSet:
-      return "set";
-
-    case kPEncodeHash:
-      return "hash";
-
-    case kPEncodeZset:
-      return "zset";
-
-    default:
-      break;
-  }
-
-  return "unknown";
-}
-
 enum PError {
   kPErrorNop = -1,
   kPErrorOK = 0,
@@ -106,107 +55,18 @@ extern struct PErrorInfo {
   const char* errorStr;
 } g_errorInfo[];
 
-template <typename T>
-inline std::size_t Number2Str(char* ptr, std::size_t nBytes, T val) {
-  if (!ptr || nBytes < 2) {
-    return 0;
-  }
-
-  if (val == 0) {
-    ptr[0] = '0';
-    ptr[1] = 0;
-    return 1;
-  }
-
-  bool negative = false;
-  if (val < 0) {
-    negative = true;
-    val = -val;
-  }
-
-  std::size_t off = 0;
-  while (val > 0) {
-    if (off >= nBytes) {
-      return 0;
-    }
-
-    ptr[off++] = val % 10 + '0';
-    val /= 10;
-  }
-
-  if (negative) {
-    if (off >= nBytes) {
-      return 0;
-    }
-
-    ptr[off++] = '-';
-  }
-
-  std::reverse(ptr, ptr + off);
-  ptr[off] = 0;
-
-  return off;
-}
-
-bool IsValidNumber(const PString& str);
-
-int Double2Str(char* ptr, std::size_t nBytes, double val);
 int StrToLongDouble(const char* s, size_t slen, long double* ldval);
-int LongDoubleToStr(long double ldval, std::string* value);
-bool TryStr2Long(const char* ptr, std::size_t nBytes, long& val);  // only for decimal
-bool Strtol(const char* ptr, std::size_t nBytes, long* outVal);
-bool Strtoll(const char* ptr, std::size_t nBytes, long long* outVal);
-bool Strtof(const char* ptr, std::size_t nBytes, float* outVal);
-bool Strtod(const char* ptr, std::size_t nBytes, double* outVal);
-const char* Strstr(const char* ptr, std::size_t nBytes, const char* pattern, std::size_t nBytes2);
-const char* SearchCRLF(const char* ptr, std::size_t nBytes);
 
 class UnboundedBuffer;
 
 std::size_t FormatInt(long value, UnboundedBuffer* reply);
-std::size_t FormatSingle(const char* str, std::size_t len, UnboundedBuffer* reply);
-std::size_t FormatSingle(const PString& str, UnboundedBuffer* reply);
 std::size_t FormatBulk(const char* str, std::size_t len, UnboundedBuffer* reply);
 std::size_t FormatBulk(const PString& str, UnboundedBuffer* reply);
 std::size_t PreFormatMultiBulk(std::size_t nBulk, UnboundedBuffer* reply);
 
-std::size_t FormatEmptyBulk(UnboundedBuffer* reply);
-std::size_t FormatNull(UnboundedBuffer* reply);
-std::size_t FormatNullArray(UnboundedBuffer* reply);
 std::size_t FormatOK(UnboundedBuffer* reply);
-std::size_t Format1(UnboundedBuffer* reply);
-std::size_t Format0(UnboundedBuffer* reply);
 
 void ReplyError(PError err, UnboundedBuffer* reply);
-
-inline void AdjustIndex(long& start, long& end, size_t size) {
-  if (size == 0) {
-    end = 0, start = 1;
-    return;
-  }
-
-  if (start < 0) {
-    start += size;
-  }
-  if (start < 0) {
-    start = 0;
-  }
-  if (end < 0) {
-    end += size;
-  }
-
-  if (end >= static_cast<long>(size)) {
-    end = size - 1;
-  }
-}
-
-struct NocaseComp {
-  bool operator()(const PString& s1, const PString& s2) const { return strcasecmp(s1.c_str(), s2.c_str()) < 0; }
-
-  bool operator()(const char* s1, const PString& s2) const { return strcasecmp(s1, s2.c_str()) < 0; }
-
-  bool operator()(const PString& s1, const char* s2) const { return strcasecmp(s1.c_str(), s2) < 0; }
-};
 
 enum class PParseResult : int8_t {
   kOK,
@@ -249,8 +109,4 @@ class ExecuteOnScopeExit {
 
 #define DEFER _MAKE_DEFER_HELPER_(__LINE__)
 
-bool NotGlobRegex(const char* pattern, std::size_t plen);
-
 }  // namespace pikiwidb
-
-int64_t Now();

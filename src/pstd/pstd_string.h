@@ -93,4 +93,6 @@ std::string RandomStringWithNumber(size_t len);
 
 bool StringHasSpaces(const std::string& str);
 
+bool IsValidNumber(const std::string& str);
+
 }  // namespace pstd

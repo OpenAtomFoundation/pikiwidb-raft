@@ -485,7 +485,7 @@ bool GetBitCmd::DoInitial(PClient* client) {
 void GetBitCmd::DoCmd(PClient* client) {
   int32_t bit_val = 0;
   long offset = 0;
-  if (!Strtol(client->argv_[2].c_str(), client->argv_[2].size(), &offset)) {
+  if (!pstd::String2int(client->argv_[2].c_str(), client->argv_[2].size(), &offset)) {
     client->SetRes(CmdRes::kInvalidInt);
     return;
   }
@@ -543,8 +543,8 @@ bool SetBitCmd::DoInitial(PClient* client) {
 void SetBitCmd::DoCmd(PClient* client) {
   long offset = 0;
   long on = 0;
-  if (!Strtol(client->argv_[2].c_str(), client->argv_[2].size(), &offset) ||
-      !Strtol(client->argv_[3].c_str(), client->argv_[3].size(), &on)) {
+  if (!pstd::String2int(client->argv_[2].c_str(), client->argv_[2].size(), &offset) ||
+      !pstd::String2int(client->argv_[3].c_str(), client->argv_[3].size(), &on)) {
     client->SetRes(CmdRes::kInvalidInt);
     return;
   }
