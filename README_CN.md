@@ -2,11 +2,41 @@
 ![](docs/images/pikiwidb-logo.png)
 [Click me switch to English](README.en.md)
 
-C++11实现的增强版Redis服务器,使用RocksDB作为持久化存储引擎。(集群支持尚正在计划中)
+C++20实现的增强版Redis服务器,使用RocksDB作为持久化存储引擎。(集群支持尚正在计划中)
 
 ## 环境需求
-* C++11、CMake
+
+* C++20、CMake
 * Linux 或 MAC OS
+
+## 编译
+
+**建议使用最新版本的Ubuntu或Debian Linux系统**
+
+执行编译:
+
+如果机器的GCC版本低于11，特别是在CentOS6或CentOS7上，你需要先升级gcc版本。
+
+在CentOS上执行以下命令:
+
+```bash
+sudo yum -y install centos-release-scl
+sudo yum -y install devtoolset-11-gcc devtoolset-11-gcc-c++
+scl enable devtoolset-11 bash
+```
+
+执行以下命令开始编译Pikiwidb:
+
+```bash
+./build.sh
+```
+
+Pikiwidb默认以release模式编译，不支持调试。如果需要调试，请以debug模式编译。
+
+```bash
+./clean.sh
+./build.sh --debug
+```
 
 ## 与Redis完全兼容
  你可以用redis的各种工具来测试PikiwiDB，比如官方的redis-cli, redis-benchmark。

@@ -12,7 +12,13 @@
 #include "io_thread_pool.h"
 #include "tcp_connection.h"
 
-#define kPIKIWIDB_VERSION "4.0.0"
+#define KPIKIWIDB_VERSION "4.0.0"
+
+#ifdef BUILD_DEBUG
+#  define KPIKIWIDB_BUILD_TYPE "DEBUG"
+#else
+#  define KPIKIWIDB_BUILD_TYPE "RELEASE"
+#endif
 
 class PikiwiDB final {
  public:

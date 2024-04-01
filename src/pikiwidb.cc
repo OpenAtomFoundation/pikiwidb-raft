@@ -63,14 +63,16 @@ bool PikiwiDB::ParseArgs(int ac, char* av[]) {
       cfg_file_ = av[i];
       continue;
     } else if (strncasecmp(av[i], "-v", 2) == 0 || strncasecmp(av[i], "--version", 9) == 0) {
-      std::cerr << "PikiwiDB Server v=" << kPIKIWIDB_VERSION << " bits=" << (sizeof(void*) == 8 ? 64 : 32) << std::endl;
+      std::cerr << "PikiwiDB Server version: " << KPIKIWIDB_VERSION << " bits=" << (sizeof(void*) == 8 ? 64 : 32)
+                << std::endl;
+      std::cerr << "PikiwiDB Server Build Type: " << KPIKIWIDB_BUILD_TYPE << std::endl;
+      std::cerr << "PikiwiDB Server Build Date: " << KPIKIWIDB_BUILD_DATE << std::endl;
+      std::cerr << "PikiwiDB Server Build GIT SHA: " << KPIKIWIDB_GIT_COMMIT_ID << std::endl;
 
       exit(0);
-      return true;
     } else if (strncasecmp(av[i], "-h", 2) == 0 || strncasecmp(av[i], "--help", 6) == 0) {
       Usage();
       exit(0);
-      return true;
     } else if (strncasecmp(av[i], "--port", 6) == 0) {
       if (++i == ac) {
         return false;
@@ -323,7 +325,7 @@ int main(int ac, char* av[]) {
 
   // output logo to console
   char logo[512] = "";
-  snprintf(logo, sizeof logo - 1, pikiwidbLogo, kPIKIWIDB_VERSION, static_cast<int>(sizeof(void*)) * 8,
+  snprintf(logo, sizeof logo - 1, pikiwidbLogo, KPIKIWIDB_VERSION, static_cast<int>(sizeof(void*)) * 8,
            static_cast<int>(pikiwidb::g_config.port));
   std::cout << logo;
 
