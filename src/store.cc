@@ -8,9 +8,9 @@
 #include <string>
 
 #include "config.h"
-#include "db.h"
 #include "log.h"
 #include "store.h"
+#include "checkpoint_manager.h"
 
 namespace pikiwidb {
 

@@ -12,8 +12,6 @@
 
 namespace pikiwidb {
 
-class DB;
-
 void CheckpointManager::Init(int instNum, DB* db) {
   checkpoint_num_ = instNum;
   res_.reserve(checkpoint_num_);

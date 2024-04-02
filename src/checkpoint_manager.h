@@ -9,12 +9,7 @@
 
 #include <future>
 #include <shared_mutex>
-#include <thread>
-#include <utility>
 #include <vector>
-
-#include "rocksdb/db.h"
-#include "rocksdb/utilities/checkpoint.h"
 
 namespace pikiwidb {
 
@@ -38,4 +33,5 @@ class CheckpointManager {
 
   std::shared_mutex shared_mutex_;
 };
+
 }  // namespace pikiwidb

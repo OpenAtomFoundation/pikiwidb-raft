@@ -7,11 +7,19 @@
 
 #pragma once
 
+#include <memory>
+#include <shared_mutex>
 #include <string>
 
-#include "checkpoint_manager.h"
 #include "storage/storage.h"
+
+namespace storage {
+class Storage;
+}  //  namespace storage
+
 namespace pikiwidb {
+
+class CheckpointManager;
 
 class DB {
  public:
@@ -53,4 +61,5 @@ class DB {
 
   std::unique_ptr<CheckpointManager> checkpoint_manager_;
 };
+
 }  // namespace pikiwidb
