@@ -16,7 +16,7 @@ A C++20 implementation of Redis Server, use RocksDB for persist storage.(not inc
 Execute compilation
 
 If the machine's GCC version is less than 11, especially on CentOS6 or CentOS7, you need to upgrade the gcc version
-first.
+firstly.
 
 Execute the following commands on CentOS:
 
