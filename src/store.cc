@@ -7,10 +7,10 @@
 
 #include <string>
 
+#include "checkpoint_manager.h"
 #include "config.h"
 #include "log.h"
 #include "store.h"
-#include "checkpoint_manager.h"
 
 namespace pikiwidb {
 
