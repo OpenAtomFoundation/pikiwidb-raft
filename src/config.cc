@@ -5,13 +5,18 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
+#include <algorithm>
 #include <iostream>
+#include <string>
 #include <vector>
 
 #include "config.h"
 #include "config_parser.h"
 
 namespace pikiwidb {
+
+constexpr const unsigned short PORT_LIMIT_MAX = 65535;
+constexpr const unsigned short PORT_LIMIT_MIN = 1;
 
 static void EraseQuotes(PString& str) {
   // convert "hello" to  hello
@@ -22,7 +27,7 @@ static void EraseQuotes(PString& str) {
     str.erase(str.begin());
     str.pop_back();
   }
-}
+}  // namespace pikiwidb
 
 extern std::vector<PString> SplitString(const PString& str, char seperator);
 
@@ -215,5 +220,56 @@ bool PConfig::CheckArgs() const {
 }
 
 bool PConfig::CheckPassword(const PString& pwd) const { return password.empty() || password == pwd; }
+
+bool BaseValue::SetValue(const std::string& value) {
+  if (!rewritable_) {
+    return false;
+  }
+  auto v = custom_process_func_ptr_ ? custom_process_func_ptr_(value) : value;
+  if (!check(v)) {
+    return false;
+  }
+  SetValuePrivate(v);
+  return true;
+}
+
+void StringValue::SetValuePrivate(const std::string& value) { value_ = std::move(value); }
+
+void BoolValue::SetValuePrivate(const std::string& value) {
+  string_value_ = std::move(value);
+  value_ = (string_value_ == "yes") ? true : false;
+}
+
+template <typename T>
+void NumberValue<T>::SetValuePrivate(const std::string& value) {
+  string_value_ = value;
+  std::istringstream iss(value);
+  iss >> value_;
+}
+
+Config::Config() {
+  // 提供各种检查和预处理函数
+  auto check_nothing = [](const std::string&) { return true; };
+  auto process_nothing = [](const std::string& val) -> std::string { return val; };
+  // ....
+
+  // pikiwidb config
+  {
+    // 这里之后换成宏定义.
+    config_map_.insert(std::make_pair("daemonize", std::make_unique<BoolValue>("daemonize", pikiwidb_config.daemonize,
+                                                                               check_nothing, process_nothing)));
+    config_map_.insert(std::make_pair(
+        "port", std::make_unique<NumberValue<unsigned short>>("port", pikiwidb_config.port, check_nothing,
+                                                              process_nothing, PORT_LIMIT_MIN, PORT_LIMIT_MAX)));
+    config_map_.insert(
+        std::make_pair("ip", std::make_unique<StringValue>("ip", pikiwidb_config.ip, check_nothing, process_nothing)));
+    // ....
+  }
+
+  // rocksdb config
+  {
+    // ....
+  }
+}
 
 }  // namespace pikiwidb
