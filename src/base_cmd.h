@@ -287,8 +287,6 @@ class BaseCmd : public std::enable_shared_from_this<BaseCmd> {
 
   uint32_t GetCmdId() const;
 
-  bool isExclusive() { return static_cast<bool>(flag_ & kCmdFlagsExclusive); }
-
  protected:
   // Execute a specific command
   virtual void DoCmd(PClient* client) = 0;

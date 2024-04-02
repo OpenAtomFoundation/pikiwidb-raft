@@ -30,7 +30,7 @@ std::vector<std::string> BaseCmd::CurrentKey(PClient* client) const { return std
 
 void BaseCmd::Execute(PClient* client) {
   auto dbIndex = client->GetCurrentDB();
-  if (!isExclusive()) {
+  if (!HasFlag(kCmdFlagsExclusive)) {
     PSTORE.GetBackend(dbIndex)->LockShared();
   }
 
@@ -39,8 +39,8 @@ void BaseCmd::Execute(PClient* client) {
   }
   DoCmd(client);
 
-  if (!isExclusive()) {
-    PSTORE.GetBackend(dbIndex)->UnLockShared();
+  if (!HasFlag(kCmdFlagsExclusive)) {
+    PSTORE.GetBackend(dbIndex)->LockShared();
   }
 }
 
