@@ -16,10 +16,8 @@ ExternalProject_Add(
         extern_braft
         ${EXTERNAL_PROJECT_LOG_ARGS}
         DEPENDS brpc
-        # URL "https://github.com/baidu/braft/archive/v1.1.2.tar.gz"
-        # URL_HASH SHA256=bb3705f61874f8488e616ae38464efdec1a20610ddd6cd82468adc814488f14e
-        GIT_REPOSITORY https://github.com/panlei-coder/braft.git
-        GIT_TAG snapshot_before_reader
+        URL "https://github.com/baidu/braft/archive/v1.1.2.tar.gz"
+        URL_HASH SHA256=bb3705f61874f8488e616ae38464efdec1a20610ddd6cd82468adc814488f14e
         PREFIX ${BRAFT_SOURCES_DIR}
         UPDATE_COMMAND ""
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}

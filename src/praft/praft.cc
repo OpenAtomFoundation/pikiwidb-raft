@@ -301,19 +301,17 @@ butil::Status PRaft::RemovePeer(const std::string& peer) {
   return {0, "OK"};
 }
 
-butil::Status PRaft::DoSnapshot(int64_t self_snapshot_index) {
+butil::Status PRaft::DoSnapshot(int64_t self_snapshot_index, bool is_sync) {
   if (!node_) {
     return ERROR_LOG_AND_STATUS("Node is not initialized");
   }
   braft::SynchronizedClosure done;
   node_->snapshot(&done);  // @todo self_snapshot_index
-  done.wait();
-  return {0, "OK"};
-}
+  if (is_sync) {
+    done.wait();
+  }
 
-void PRaft::GenerateRealSnapshot() {
-  is_generate_snapshot_.store(true, std::memory_order_release);
-  DoSnapshot();  // @todo customize the snapshot index
+  return {0, "OK"};
 }
 
 void PRaft::OnJoinCmdConnectionFailed([[maybe_unused]] EventLoop* loop, const char* peer_ip, int port) {
@@ -362,22 +360,6 @@ void PRaft::AppendLog(const Binlog& log, std::promise<rocksdb::Status>&& promise
   task.data = &data;
   task.done = done;
   node_->apply(task);
-}
-
-void PRaft::add_all_files(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path) {
-  for (const auto& entry : std::filesystem::directory_iterator(dir)) {
-    if (entry.is_directory()) {
-      if (entry.path() != "." && entry.path() != "..") {
-        INFO("dir_path = {}", entry.path().string());
-        add_all_files(entry.path(), writer, path);
-      }
-    } else {
-      INFO("file_path = {}", std::filesystem::relative(entry.path(), path).string());
-      if (writer->add_file(std::filesystem::relative(entry.path(), path)) != 0) {
-        WARN("出出出出 错错错错错错 啦啦啦啦啦啦");
-      }
-    }
-  }
 }
 
 void PRaft::recursive_copy(const std::filesystem::path& source, const std::filesystem::path& destination) {
@@ -437,22 +419,6 @@ void PRaft::on_apply(braft::Iterator& iter) {
 
 void PRaft::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) {
   brpc::ClosureGuard done_guard(done);
-  if (is_generate_snapshot_.load(std::memory_order_acquire)) {
-    TasksVector tasks;
-    tasks.reserve(g_config.databases);
-    for (auto i = 0; i < g_config.databases; ++i) {
-      tasks.push_back({TaskType::kCheckpoint, i, {{TaskArg::kCheckpointPath, writer->get_path()}}});
-    }
-
-    INFO("start generate snapshot");
-    PSTORE.DoSomeThingSpecificDB(tasks);
-    PSTORE.WaitForCheckpointDone();
-    auto writer_path = writer->get_path();
-    add_all_files(writer_path, writer, writer_path);
-    INFO("end generate snapshot");
-
-    is_generate_snapshot_.store(false, std::memory_order_release);
-  }
 }
 
 int PRaft::on_snapshot_load(braft::SnapshotReader* reader) {

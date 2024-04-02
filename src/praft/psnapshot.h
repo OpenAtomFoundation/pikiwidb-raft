@@ -7,8 +7,15 @@
 
 #pragma once
 
+#include <mutex>
+
 #include "braft/file_system_adaptor.h"
-#include "praft.h"
+
+#define PBRAFT_SNAPSHOT_META_FILE "__raft_snapshot_meta"
+
+namespace braft {
+class LocalSnapshotMetaTable;
+}
 
 namespace pikiwidb {
 
@@ -19,6 +26,11 @@ class PPosixFileSystemAdaptor : public braft::PosixFileSystemAdaptor {
 
   braft::FileAdaptor* open(const std::string& path, int oflag, const ::google::protobuf::Message* file_meta,
                            butil::File::Error* e) override;
+  void add_all_files(const std::filesystem::path& dir, braft::LocalSnapshotMetaTable* snapshot_meta_memtable,
+                     const std::string& path);
+
+ private:
+  std::mutex mutex_;
 };
 
 }  // namespace pikiwidb
