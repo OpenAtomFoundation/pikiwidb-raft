@@ -247,9 +247,9 @@ class SetRangeCmd : public BaseCmd {
   void DoCmd(PClient *client) override;
 };
 
-class MSetNXCmd : public BaseCmd {
+class MSetnxCmd : public BaseCmd {
  public:
-  MSetNXCmd(const std::string &name, int16_t arity);
+  MSetnxCmd(const std::string &name, int16_t arity);
 
  protected:
   bool DoInitial(PClient *client) override;

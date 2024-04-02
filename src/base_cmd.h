@@ -54,7 +54,7 @@ const std::string kCmdNameGetRange = "getrange";
 const std::string kCmdNameSetRange = "setrange";
 const std::string kCmdNameDecr = "decr";
 const std::string kCmdNameIncr = "incr";
-const std::string kCmdNameMSetNX = "msetnx";
+const std::string kCmdNameMSetnx = "msetnx";
 
 // multi
 const std::string kCmdNameMulti = "multi";

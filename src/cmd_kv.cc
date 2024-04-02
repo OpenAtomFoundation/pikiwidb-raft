@@ -597,13 +597,13 @@ void SetRangeCmd::DoCmd(PClient* client) {
   client->AppendInteger(static_cast<int>(ret));
 }
 
-MSetNXCmd::MSetNXCmd(const std::string& name, int16_t arity)
+MSetnxCmd::MSetnxCmd(const std::string& name, int16_t arity)
     : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryString) {}
 
-bool MSetNXCmd::DoInitial(PClient* client) {
+bool MSetnxCmd::DoInitial(PClient* client) {
   size_t argcSize = client->argv_.size();
   if (argcSize % 2 == 0) {
-    client->SetRes(CmdRes::kWrongNum, kCmdNameMSetNX);
+    client->SetRes(CmdRes::kWrongNum, kCmdNameMSetnx);
     return false;
   }
   std::vector<std::string> keys;
@@ -614,7 +614,7 @@ bool MSetNXCmd::DoInitial(PClient* client) {
   return true;
 }
 
-void MSetNXCmd::DoCmd(PClient* client) {
+void MSetnxCmd::DoCmd(PClient* client) {
   int32_t success = 0;
   std::vector<storage::KeyValue> kvs;
   for (size_t index = 1; index != client->argv_.size(); index += 2) {
@@ -622,7 +622,7 @@ void MSetNXCmd::DoCmd(PClient* client) {
   }
   storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->MSetnx(kvs, &success);
   if (s.ok()) {
-    client->SetRes(CmdRes::kOK);
+    client->AppendInteger(success);
   } else {
     client->SetRes(CmdRes::kErrOther, s.ToString());
   }
