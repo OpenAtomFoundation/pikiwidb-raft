@@ -14,11 +14,12 @@
 #include <vector>
 
 #include "common.h"
+#include "net/config_parser.h"
 
 namespace pikiwidb {
 
 using CheckFunc = std::function<bool(const std::string&)>;
-using PreProcessFunc = std::function<std::string(const std::string&)>;
+using PreProcessFunc = std::function<void(std::string&)>;
 
 enum BackEndType {
   kBackEndNone = 0,
@@ -26,100 +27,27 @@ enum BackEndType {
   kBackEndMax = 2,
 };
 
-struct PConfig {
-  bool daemonize;
-  PString pidfile;
-
-  PString ip;
-  unsigned short port;
-
-  int timeout;
-
-  PString dbpath;
-
-  PString loglevel;
-  PString logdir;  // the log directory, differ from redis
-
-  int databases;
-
-  // auth
-  PString password;
-
-  std::map<PString, PString> aliases;
-
-  // @ rdb
-  // save seconds changes
-  int saveseconds;
-  int savechanges;
-  bool rdbcompression;  // yes
-  bool rdbchecksum;     // yes
-  PString rdbfullname;  // ./dump.rdb
-
-  int maxclients;  // 10000
-
-  int slowlogtime;    // 1000 microseconds
-  int slowlogmaxlen;  // 128
-
-  int hz;  // 10  [1,500]
-
-  PString masterIp;
-  unsigned short masterPort;  // replication
-  PString masterauth;
-
-  PString runid;
-
-  PString includefile;  // the template config
-
-  std::vector<PString> modules;  // modules
-
-  // use redis as cache, level db as backup
-  uint64_t maxmemory;    // default 2GB
-  int maxmemorySamples;  // default 5
-  bool noeviction;       // default true
-
-  // THREADED I/O
-  int worker_threads_num;
-
-  // THREADED SLAVE
-  int slave_threads_num;
-
-  int backend;  // enum BackEndType
-  PString backendPath;
-  int backendHz;  // the frequency of dump to backend
-
-  int64_t max_client_response_size;
-
-  int db_instance_num;
-  uint64_t rocksdb_ttl_second;
-  uint64_t rocksdb_periodic_second;
-  PConfig();
-
-  bool CheckArgs() const;
-  bool CheckPassword(const PString& pwd) const;
-};
-
-extern PConfig g_config;
-
-extern bool LoadPikiwiDBConfig(const char* cfgFile, PConfig& cfg);
-
 class BaseValue {
  public:
   BaseValue(const std::string& key, CheckFunc check_func_ptr, PreProcessFunc preprocess_func_ptr,
             bool rewritable = false)
-      : key_(key), custom_check_func_ptr_(check_func_ptr), rewritable_(rewritable) {}
+      : key_(key),
+        custom_check_func_ptr_(check_func_ptr),
+        custom_process_func_ptr_(preprocess_func_ptr),
+        rewritable_(rewritable) {}
 
-  virtual ~BaseValue(){};
+  virtual ~BaseValue() = default;
 
-  std::string Key() const { return key_; }
+  const std::string& Key() const { return key_; }
 
-  virtual const std::string& Value() = 0;
+  virtual std::string Value() const = 0;
 
-  bool SetValue(const std::string& value);
+  bool Set(std::string value, bool from_file);
 
-  bool SupportDynamicSet() { return rewritable_; }
+  bool ReWritable() { return rewritable_; }
 
  protected:
-  virtual void SetValuePrivate(const std::string&) = 0;
+  virtual bool SetValue(const std::string&) = 0;
   bool check(const std::string& value) {
     if (custom_check_func_ptr_ && !custom_check_func_ptr_(value)) {
       return false;
@@ -128,7 +56,7 @@ class BaseValue {
   }
 
  protected:
-  std::string key_ = "";
+  std::string key_;
   CheckFunc custom_check_func_ptr_ = nullptr;
   PreProcessFunc custom_process_func_ptr_ = nullptr;
   bool rewritable_ = false;
@@ -137,78 +65,83 @@ class BaseValue {
 class StringValue : public BaseValue {
  public:
   StringValue(const std::string& key, std::string value, CheckFunc check_func_ptr, PreProcessFunc preprocess_func_ptr,
-              bool support_dynamic_set = false)
-      : BaseValue(key, check_func_ptr, preprocess_func_ptr, support_dynamic_set) {
-    value_ = std::move(value);
+              bool rewritable, std::string* value_ptr)
+      : BaseValue(key, check_func_ptr, preprocess_func_ptr, rewritable), value_(value_ptr) {
+    *value_ = std::move(value);
   };
+  virtual ~StringValue() = default;
 
-  virtual const std::string& Value() override { return value_; };
+  virtual std::string Value() const override { return *value_; };
 
  private:
-  virtual void SetValuePrivate(const std::string&) override;
+  virtual bool SetValue(const std::string&) override;
 
-  std::string value_ = "";
+  std::string* value_ = nullptr;
 };
 
 template <typename T>
 class NumberValue : public BaseValue {
  public:
   NumberValue(const std::string& key, T value, CheckFunc check_func_ptr, PreProcessFunc preprocess_func_ptr,
-              T max = std::numeric_limits<T>::max(), T min = std::numeric_limits<T>::min(),
-              bool support_dynamic_set = false)
-      : BaseValue(key, check_func_ptr, preprocess_func_ptr, support_dynamic_set) {
-    value_ = value;
-    value_max_ = max;
-    value_min_ = min;
-    string_value_ = std::move(std::to_string(value));
-  };
+              bool rewritable, T* value_ptr, T min = std::numeric_limits<T>::min(),
+              T max = std::numeric_limits<T>::max())
+      : BaseValue(key, check_func_ptr, preprocess_func_ptr, rewritable),
+        value_(value_ptr),
+        value_max_(max),
+        value_min_(min){};
 
-  virtual const std::string& Value() override { return string_value_; }
+  virtual std::string Value() const override { return std::to_string(*value_); }
 
  private:
-  virtual void SetValuePrivate(const std::string&) override;
+  virtual bool SetValue(const std::string&) override;
 
-  T value_;
+  T* value_;
   T value_max_;
   T value_min_;
-  std::string string_value_ = "";
 };
 
 class BoolValue : public BaseValue {
  public:
   BoolValue(const std::string& key, bool value, CheckFunc check_func_ptr, PreProcessFunc preprocess_func_ptr,
-            bool support_dynamic_set = false)
-      : BaseValue(key, check_func_ptr, preprocess_func_ptr, support_dynamic_set) {
-    value_ = std::move(value);
-    string_value_ = value_ ? "yes" : "no";
+            bool rewritable, bool* value_ptr)
+      : BaseValue(key, check_func_ptr, preprocess_func_ptr, rewritable), value_(value_ptr) {
+    *value_ = std::move(value);
   };
 
-  virtual const std::string& Value() override { return string_value_; };
+  virtual std::string Value() const override { return value_ ? "yes" : "no"; };
 
  private:
-  virtual void SetValuePrivate(const std::string&) override;
+  virtual bool SetValue(const std::string&) override;
 
-  bool value_;
-  std::string string_value_ = "";
+  bool* value_;
 };
 
-// TODO other Value
+using FieldPrt = std::unique_ptr<BaseValue>;
+using ConfigMap = std::unordered_map<std::string, FieldPrt>;
 
-struct PikiwiDBConfig {
+class PConfig {
+ public:
+  PConfig();
+  ~PConfig() = default;
+  bool LoadFromFile(const std::string& file_name);
+  const std::string& ConfigFileName() const { return config_file_name_; }
+
+ private:
+  // 应该无用了, 在 Set 的时候会进行检查, 考虑删除.
+  bool CheckArgs() const;
+
+ public:
   bool daemonize = false;
   PString pidfile = "/var/run/pikiwidb.pid";
   PString ip = "127.0.0.1";
   unsigned short port = 9221;
-  int timeout = 0;
+  int timeout = 60;
   PString dbpath = "./db";
   PString loglevel = "warning";
   PString logdir = "stdout";
   int databases = 3;
-
-  // auth
-  PString password = "";
-
-  //    std::map<PString, PString> aliases;
+  PString password;
+  std::map<PString, PString> aliases;
 
   // @ rdb
   // save seconds changes
@@ -217,67 +150,39 @@ struct PikiwiDBConfig {
   bool rdbcompression = true;          // yes
   bool rdbchecksum = true;             // yes
   PString rdbfullname = "./dump.rdb";  // ./dump.rdb
-
-  int maxclients = 1000;  // 10000
-
-  int slowlogtime = 1000;   // 1000 microseconds
-  int slowlogmaxlen = 128;  // 128
-
-  int hz = 10;  // 10  [1,500]
-
+  int maxclients = 1000;               // 10000
+  int slowlogtime = 1000;              // 1000 microseconds
+  int slowlogmaxlen = 128;             // 128
+  int hz = 10;                         // 10  [1,500]
   PString masterIp = "";
   unsigned short masterPort = 0;  // replication
   PString masterauth = "";
-
   PString runid = "";
-
-  PString includefile = "";  // the template config
-
+  PString includefile = "";      // the template config
+  std::vector<PString> modules;  // modules
   // use redis as cache, level db as backup
   uint64_t maxmemory = 2 * 1024 * 1024 * 1024UL;  // default 2GB
   int maxmemorySamples = 5;                       // default 5
   bool noeviction = true;                         // default true
-
   // THREADED I/O
   int worker_threads_num = 2;
-
   // THREADED SLAVE
   int slave_threads_num = 2;
-
   int backend = kBackEndRocksDB;  // enum BackEndType
   PString backendPath = "dump";
   int backendHz = 10;  // the frequency of dump to backend
-
   int64_t max_client_response_size = 1073741824;
-
   int db_instance_num = 3;
-};
 
-struct RocksDBConfig {
   uint64_t rocksdb_ttl_second = 0;
   uint64_t rocksdb_periodic_second = 0;
-};
-
-// TODO other config
-
-using FieldPrt = std::unique_ptr<BaseValue>;
-using ConfigMap = std::unordered_map<std::string, FieldPrt>;
-
-class Config {
- public:
-  Config();
-  ~Config();
-
- public:
-  PikiwiDBConfig pikiwidb_config;
-  RocksDBConfig rocksdb_config;
-  bool LoadFromFile(const std::string& file_name);
-
-  // 提供访问 config_map_ 的接口.
+  ConfigMap config_map_;
 
  private:
-  std::string config_file_name_ = "";
-  ConfigMap config_map_;
+  ConfigParser parser_;
+  std::string config_file_name_;
 };
+
+extern PConfig g_config;
 
 }  // namespace pikiwidb

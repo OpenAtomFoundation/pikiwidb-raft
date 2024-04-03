@@ -40,7 +40,7 @@ void BaseCmd::Execute(PClient* client) {
   DoCmd(client);
 
   if (!HasFlag(kCmdFlagsExclusive)) {
-    PSTORE.GetBackend(dbIndex)->LockShared();
+    PSTORE.GetBackend(dbIndex)->UnLockShared();
   }
 }
 

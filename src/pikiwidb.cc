@@ -300,7 +300,7 @@ int main(int ac, char* av[]) {
   }
 
   if (!g_pikiwidb->GetConfigName().empty()) {
-    if (!LoadPikiwiDBConfig(g_pikiwidb->GetConfigName().c_str(), pikiwidb::g_config)) {
+    if (!pikiwidb::g_config.LoadFromFile(g_pikiwidb->GetConfigName())) {
       std::cerr << "Load config file [" << g_pikiwidb->GetConfigName() << "] failed!\n";
       return -1;
     }

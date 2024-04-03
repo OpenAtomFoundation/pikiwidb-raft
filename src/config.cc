@@ -11,186 +11,168 @@
 #include <vector>
 
 #include "config.h"
-#include "config_parser.h"
+#include "pstd/pstd_string.h"
 
 namespace pikiwidb {
 
 constexpr const unsigned short PORT_LIMIT_MAX = 65535;
 constexpr const unsigned short PORT_LIMIT_MIN = 1;
+constexpr const int DBNUMBER_MAX = 16;
+constexpr const int THREAD_MAX = 100;
+constexpr const int ROCKSDB_INSTANCE_NUMBER_MAX = 10;
 
-static void EraseQuotes(PString& str) {
-  // convert "hello" to  hello
-  if (str.size() < 2) {
-    return;
-  }
-  if (str[0] == '"' && str[str.size() - 1] == '"') {
-    str.erase(str.begin());
-    str.pop_back();
-  }
-}  // namespace pikiwidb
+#define CONFIGADDSTRING(key, var, checkfun, prefun, rewritable, val_ptr) \
+  config_map_.emplace(key, std::make_unique<StringValue>(key, var, checkfun, prefun, rewritable, val_ptr));
+
+#define CONFIGADDBOOL(key, var, checkfun, prefun, rewritable, val_ptr) \
+  config_map_.emplace(key, std::make_unique<BoolValue>(key, var, checkfun, prefun, rewritable, val_ptr));
+
+#define CONFIGADDNUMBER(type, key, var, checkfun, prefun, rewritable, val_ptr, min, max) \
+  config_map_.emplace(key,                                                               \
+                      std::make_unique<NumberValue<type>>(key, var, checkfun, prefun, rewritable, val_ptr, min, max));
+
+// static void EraseQuotes(PString& str) {
+//   // convert "hello" to  hello
+//   if (str.size() < 2) {
+//     return;
+//   }
+//   if (str[0] == '"' && str[str.size() - 1] == '"') {
+//     str.erase(str.begin());
+//     str.pop_back();
+//   }
+// }  // namespace pikiwidb
 
 extern std::vector<PString> SplitString(const PString& str, char seperator);
 
 PConfig g_config;
 
-PConfig::PConfig() {
-  daemonize = false;
-  pidfile = "/var/run/pikiwidb.pid";
-
-  ip = "127.0.0.1";
-  port = 9221;
-  timeout = 0;
-  dbpath = "./db";
-
-  loglevel = "notice";
-  logdir = "stdout";
-
-  databases = 16;
-
-  // rdb
-  saveseconds = 999999999;
-  savechanges = 999999999;
-  rdbcompression = true;
-  rdbchecksum = true;
-  rdbfullname = "./dump.rdb";
-
-  maxclients = 10000;
-
-  // slow log
-  slowlogtime = 0;
-  slowlogmaxlen = 128;
-
-  hz = 10;
-
-  includefile = "";
-
-  maxmemory = 2 * 1024 * 1024 * 1024UL;
-  maxmemorySamples = 5;
-  noeviction = true;
-
-  backend = kBackEndRocksDB;
-  backendPath = "dump";
-  backendHz = 10;
-
-  max_client_response_size = 1073741824;
-
-  db_instance_num = 3;
-
-  rocksdb_ttl_second = 0;
-  rocksdb_periodic_second = 0;
+bool BaseValue::Set(std::string value, bool from_file) {
+  if (!from_file && !rewritable_) {
+    std::printf("!from_file && !rewritable_ return \n");
+    return false;
+  }
+  if (custom_process_func_ptr_) {
+    custom_process_func_ptr_(value);
+  }
+  if (!check(value)) {
+    return false;
+  }
+  return SetValue(value);
 }
 
-bool LoadPikiwiDBConfig(const char* cfgFile, PConfig& cfg) {
-  ConfigParser parser;
-  if (!parser.Load(cfgFile)) {
+bool StringValue::SetValue(const std::string& value) {
+  std::printf("string\n");
+
+  *value_ = std::move(value);
+  return true;
+}
+
+bool BoolValue::SetValue(const std::string& value) {
+  std::printf("bool\n");
+
+  if (pstd::StringEqualCaseInsensitive(value, "yes")) {
+    *value_ = true;
+    return true;
+  } else if (pstd::StringEqualCaseInsensitive(value, "no")) {
+    *value_ = false;
+    return true;
+  } else {
+    return false;
+  }
+}
+
+template <typename T>
+bool NumberValue<T>::SetValue(const std::string& value) {
+  std::printf("number\n");
+
+  T v;
+  std::istringstream iss(value);
+  iss >> v;
+  if (v < value_min_ || v > value_max_) {
+    return false;
+  }
+  *value_ = v;
+  return true;
+}
+
+PConfig::PConfig() {
+  // preprocess func
+  auto EraseQuotes = [](std::string& value) {
+    if (value.size() < 2) {
+      return;
+    }
+    if (value[0] == '"' && value[value.size() - 1] == '"') {
+      value.erase(value.begin());
+      value.pop_back();
+    }
+  };
+  // ....
+
+  // check func
+  auto CheckYesNo = [](const std::string& value) -> bool {
+    if (pstd::StringEqualCaseInsensitive(value, "yes") || pstd::StringEqualCaseInsensitive(value, "no")) {
+      return true;
+    }
+    return false;
+  };
+  auto CheckLogLevel = [](const std::string& value) -> bool {
+    if (pstd::StringEqualCaseInsensitive(value, "debug") || pstd::StringEqualCaseInsensitive(value, "verbose") ||
+        pstd::StringEqualCaseInsensitive(value, "notice") || pstd::StringEqualCaseInsensitive(value, "warning")) {
+      return true;
+    }
+    return false;
+  };
+  // ....
+
+  {
+    CONFIGADDBOOL("daemonize", daemonize, CheckYesNo, EraseQuotes, false, &daemonize);
+    CONFIGADDSTRING("ip", ip, nullptr, nullptr, false, &ip)
+    CONFIGADDNUMBER(unsigned short, "port", port, nullptr, nullptr, false, &port, PORT_LIMIT_MIN, PORT_LIMIT_MAX);
+    CONFIGADDNUMBER(int, "timeout", timeout, nullptr, nullptr, true, &timeout, -1, INT32_MAX);
+    CONFIGADDSTRING("db-path", dbpath, nullptr, nullptr, false, &dbpath);
+    CONFIGADDSTRING("loglevel", loglevel, CheckLogLevel, nullptr, true, &loglevel);
+    CONFIGADDSTRING("logfile", logdir, nullptr, nullptr, true, &logdir);
+    CONFIGADDNUMBER(int, "databases", databases, nullptr, nullptr, false, &databases, 0, DBNUMBER_MAX);
+    CONFIGADDSTRING("requirepass", password, nullptr, nullptr, true, &password)
+    CONFIGADDNUMBER(int, "maxclients", maxclients, nullptr, nullptr, true, &maxclients, 0, INT32_MAX);
+    CONFIGADDNUMBER(int, "worker-threads", worker_threads_num, nullptr, nullptr, false, &worker_threads_num, 0,
+                    THREAD_MAX);
+    CONFIGADDNUMBER(int, "slave-threads", worker_threads_num, nullptr, nullptr, false, &worker_threads_num, 0,
+                    THREAD_MAX);
+    CONFIGADDNUMBER(int, "slowlog-log-slower-than", slowlogtime, nullptr, nullptr, true, &slowlogtime, INT32_MIN,
+                    INT32_MAX);
+    CONFIGADDNUMBER(int, "slowlog-max-len", slowlogmaxlen, nullptr, nullptr, true, &slowlogmaxlen, 0, INT32_MAX);
+    CONFIGADDNUMBER(int, "db-instance-num", db_instance_num, nullptr, nullptr, true, &db_instance_num, 0,
+                    ROCKSDB_INSTANCE_NUMBER_MAX);
+  }
+
+  // rocksdb config
+  {
+    CONFIGADDNUMBER(uint64_t, "rocksdb-ttl-second", rocksdb_ttl_second, nullptr, nullptr, true, &rocksdb_ttl_second, 0,
+                    UINT64_MAX);
+    CONFIGADDNUMBER(uint64_t, "rocksdb-periodic-second", rocksdb_periodic_second, nullptr, nullptr, true,
+                    &rocksdb_periodic_second, 0, UINT64_MAX);
+    // ....
+  }
+}
+
+bool PConfig::LoadFromFile(const std::string& file_name) {
+  config_file_name_ = file_name;
+  if (!parser_.Load(file_name.c_str())) {
     return false;
   }
 
-  if (parser.GetData<PString>("daemonize") == "yes") {
-    cfg.daemonize = true;
-  } else {
-    cfg.daemonize = false;
-  }
-
-  cfg.pidfile = parser.GetData<PString>("pidfile", cfg.pidfile);
-
-  cfg.ip = parser.GetData<PString>("bind", cfg.ip);
-  cfg.port = parser.GetData<unsigned short>("port");
-  cfg.timeout = parser.GetData<int>("timeout");
-  cfg.dbpath = parser.GetData<PString>("db-path");
-
-  cfg.loglevel = parser.GetData<PString>("loglevel", cfg.loglevel);
-  cfg.logdir = parser.GetData<PString>("logfile", cfg.logdir);
-  EraseQuotes(cfg.logdir);
-  if (cfg.logdir.empty()) {
-    cfg.logdir = "stdout";
-  }
-
-  cfg.databases = parser.GetData<int>("databases", cfg.databases);
-  cfg.password = parser.GetData<PString>("requirepass");
-  EraseQuotes(cfg.password);
-
-  // alias command
-  {
-    std::vector<PString> alias(SplitString(parser.GetData<PString>("rename-command"), ' '));
-    if (alias.size() % 2 == 0) {
-      for (auto it(alias.begin()); it != alias.end();) {
-        const PString& oldCmd = *(it++);
-        const PString& newCmd = *(it++);
-        cfg.aliases[oldCmd] = newCmd;
-      }
+  for (auto& [key, value] : parser_.GetMap()) {
+    if (auto iter = config_map_.find(key); iter == config_map_.end() || value.size() > 1) {
+      continue;
     }
-  }
-
-  // load rdb config
-  std::vector<PString> saveInfo(SplitString(parser.GetData<PString>("save"), ' '));
-  if (!saveInfo.empty() && saveInfo.size() != 2) {
-    EraseQuotes(saveInfo[0]);
-    if (!(saveInfo.size() == 1 && saveInfo[0].empty())) {
-      std::cerr << "bad format save rdb interval, bad string " << parser.GetData<PString>("save") << std::endl;
+    assert(value.size() == 1);
+    if (auto& v = config_map_[key]; !v->Set(value.at(0), true)) {
+      std::printf("key = %s", key.c_str());
       return false;
     }
-  } else if (!saveInfo.empty()) {
-    cfg.saveseconds = std::stoi(saveInfo[0]);
-    cfg.savechanges = std::stoi(saveInfo[1]);
   }
-
-  if (cfg.saveseconds == 0) {
-    cfg.saveseconds = 999999999;
-  }
-  if (cfg.savechanges == 0) {
-    cfg.savechanges = 999999999;
-  }
-
-  cfg.rdbcompression = (parser.GetData<PString>("rdbcompression") == "yes");
-  cfg.rdbchecksum = (parser.GetData<PString>("rdbchecksum") == "yes");
-
-  cfg.rdbfullname = parser.GetData<PString>("dir", "./") + parser.GetData<PString>("dbfilename", "dump.rdb");
-
-  cfg.maxclients = parser.GetData<int>("maxclients", 10000);
-
-  cfg.slowlogtime = parser.GetData<int>("slowlog-log-slower-than", 0);
-  cfg.slowlogmaxlen = parser.GetData<int>("slowlog-max-len", cfg.slowlogmaxlen);
-
-  cfg.hz = parser.GetData<int>("hz", 10);
-
-  // load master ip port
-  std::vector<PString> master(SplitString(parser.GetData<PString>("slaveof"), ' '));
-  if (master.size() == 2) {
-    cfg.masterIp = std::move(master[0]);
-    cfg.masterPort = static_cast<unsigned short>(std::stoi(master[1]));
-  }
-  cfg.masterauth = parser.GetData<PString>("masterauth");
-
-  // load modules' names
-  cfg.modules = parser.GetDataVector("loadmodule");
-
-  cfg.includefile = parser.GetData<PString>("include");  // TODO multi files include
-
-  // lru cache
-  cfg.maxmemory = parser.GetData<uint64_t>("maxmemory", 2 * 1024 * 1024 * 1024UL);
-  cfg.maxmemorySamples = parser.GetData<int>("maxmemory-samples", 5);
-  cfg.noeviction = (parser.GetData<PString>("maxmemory-policy", "noeviction") == "noeviction");
-
-  // worker threads
-  cfg.worker_threads_num = parser.GetData<int>("worker-threads", 1);
-
-  // slave threads
-  cfg.slave_threads_num = parser.GetData<int>("slave-threads", 1);
-
-  // backend
-  cfg.backend = parser.GetData<int>("backend", kBackEndNone);
-  cfg.backendPath = parser.GetData<PString>("backendpath", cfg.backendPath);
-  EraseQuotes(cfg.backendPath);
-  cfg.backendHz = parser.GetData<int>("backendhz", 10);
-
-  cfg.max_client_response_size = parser.GetData<int64_t>("max-client-response-size", 1073741824);
-
-  cfg.db_instance_num = parser.GetData<int>("db-instance-num", 3);
-  cfg.rocksdb_ttl_second = parser.GetData<uint64_t>("rocksdb-ttl-second");
-  cfg.rocksdb_periodic_second = parser.GetData<uint64_t>("rocksdb-periodic-second");
-
-  return cfg.CheckArgs();
+  return true;
 }
 
 bool PConfig::CheckArgs() const {
@@ -217,59 +199,6 @@ bool PConfig::CheckArgs() const {
 #undef RETURN_IF_FAIL
 
   return true;
-}
-
-bool PConfig::CheckPassword(const PString& pwd) const { return password.empty() || password == pwd; }
-
-bool BaseValue::SetValue(const std::string& value) {
-  if (!rewritable_) {
-    return false;
-  }
-  auto v = custom_process_func_ptr_ ? custom_process_func_ptr_(value) : value;
-  if (!check(v)) {
-    return false;
-  }
-  SetValuePrivate(v);
-  return true;
-}
-
-void StringValue::SetValuePrivate(const std::string& value) { value_ = std::move(value); }
-
-void BoolValue::SetValuePrivate(const std::string& value) {
-  string_value_ = std::move(value);
-  value_ = (string_value_ == "yes") ? true : false;
-}
-
-template <typename T>
-void NumberValue<T>::SetValuePrivate(const std::string& value) {
-  string_value_ = value;
-  std::istringstream iss(value);
-  iss >> value_;
-}
-
-Config::Config() {
-  // 提供各种检查和预处理函数
-  auto check_nothing = [](const std::string&) { return true; };
-  auto process_nothing = [](const std::string& val) -> std::string { return val; };
-  // ....
-
-  // pikiwidb config
-  {
-    // 这里之后换成宏定义.
-    config_map_.insert(std::make_pair("daemonize", std::make_unique<BoolValue>("daemonize", pikiwidb_config.daemonize,
-                                                                               check_nothing, process_nothing)));
-    config_map_.insert(std::make_pair(
-        "port", std::make_unique<NumberValue<unsigned short>>("port", pikiwidb_config.port, check_nothing,
-                                                              process_nothing, PORT_LIMIT_MIN, PORT_LIMIT_MAX)));
-    config_map_.insert(
-        std::make_pair("ip", std::make_unique<StringValue>("ip", pikiwidb_config.ip, check_nothing, process_nothing)));
-    // ....
-  }
-
-  // rocksdb config
-  {
-    // ....
-  }
 }
 
 }  // namespace pikiwidb
