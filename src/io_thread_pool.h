@@ -108,4 +108,3 @@ class WorkIOThreadPool : public IOThreadPool {
 };
 
 }  // namespace pikiwidb
-
