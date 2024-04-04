@@ -9,9 +9,10 @@
 
 #include <cassert>
 #include <functional>
-#include <map>
+#include <unordered_map>
 #include <string>
 #include <vector>
+#include <memory>
 
 #include "common.h"
 #include "net/config_parser.h"
@@ -108,7 +109,7 @@ class BoolValue : public BaseValue {
     *value_ = std::move(value);
   };
 
-  virtual std::string Value() const override { return value_ ? "yes" : "no"; };
+  virtual std::string Value() const override { return *value_ ? "yes" : "no"; };
 
  private:
   virtual bool SetValue(const std::string&) override;
@@ -116,8 +117,8 @@ class BoolValue : public BaseValue {
   bool* value_;
 };
 
-using FieldPrt = std::unique_ptr<BaseValue>;
-using ConfigMap = std::unordered_map<std::string, FieldPrt>;
+using ValuePrt = std::unique_ptr<BaseValue>;
+using ConfigMap = std::unordered_map<std::string, ValuePrt>;
 
 class PConfig {
  public:
@@ -125,10 +126,8 @@ class PConfig {
   ~PConfig() = default;
   bool LoadFromFile(const std::string& file_name);
   const std::string& ConfigFileName() const { return config_file_name_; }
-
- private:
-  // 应该无用了, 在 Set 的时候会进行检查, 考虑删除.
-  bool CheckArgs() const;
+  void Get(const std::string&, std::vector<std::string>*) const;
+  bool Set(std::string, const std::string&);
 
  public:
   bool daemonize = false;
@@ -173,13 +172,17 @@ class PConfig {
   int backendHz = 10;  // the frequency of dump to backend
   int64_t max_client_response_size = 1073741824;
   int db_instance_num = 3;
+  double double_test = 333.444;
+  long long_test = 2323232323;
+  bool booltrue_test = true;
+  bool boolfalse_test = false;
 
   uint64_t rocksdb_ttl_second = 0;
   uint64_t rocksdb_periodic_second = 0;
-  ConfigMap config_map_;
 
  private:
   ConfigParser parser_;
+  ConfigMap config_map_;
   std::string config_file_name_;
 };
 

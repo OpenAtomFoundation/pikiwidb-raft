@@ -19,14 +19,26 @@ CmdConfigGet::CmdConfigGet(const std::string& name, int16_t arity)
 
 bool CmdConfigGet::DoInitial(PClient* client) { return true; }
 
-void CmdConfigGet::DoCmd(PClient* client) { client->AppendString("config cmd in development"); }
+void CmdConfigGet::DoCmd(PClient* client) {
+  std::vector<std::string> results;
+  for (int i = 0; i < client->argv_.size() - 2; i++) {
+    g_config.Get(client->argv_[i + 2], &results);
+  }
+  client->AppendStringVector(results);
+}
 
 CmdConfigSet::CmdConfigSet(const std::string& name, int16_t arity)
     : BaseCmd(name, arity, kCmdFlagsAdmin, kAclCategoryAdmin) {}
 
 bool CmdConfigSet::DoInitial(PClient* client) { return true; }
 
-void CmdConfigSet::DoCmd(PClient* client) { client->AppendString("config cmd in development"); }
+void CmdConfigSet::DoCmd(PClient* client) {
+  if (!g_config.Set(client->argv_[2], client->argv_[3])) {
+    client->SetRes(CmdRes::kErrOther, "config set error!");
+  } else {
+    client->SetRes(CmdRes::kOK, "OK");
+  }
+}
 
 FlushdbCmd::FlushdbCmd(const std::string& name, int16_t arity)
     : BaseCmd(name, arity, kCmdFlagsAdmin | kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryAdmin) {}

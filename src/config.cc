@@ -5,8 +5,6 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-#include <algorithm>
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -18,7 +16,7 @@ namespace pikiwidb {
 constexpr const unsigned short PORT_LIMIT_MAX = 65535;
 constexpr const unsigned short PORT_LIMIT_MIN = 1;
 constexpr const int DBNUMBER_MAX = 16;
-constexpr const int THREAD_MAX = 100;
+constexpr const int THREAD_MAX = 129;
 constexpr const int ROCKSDB_INSTANCE_NUMBER_MAX = 10;
 
 #define CONFIGADDSTRING(key, var, checkfun, prefun, rewritable, val_ptr) \
@@ -31,24 +29,12 @@ constexpr const int ROCKSDB_INSTANCE_NUMBER_MAX = 10;
   config_map_.emplace(key,                                                               \
                       std::make_unique<NumberValue<type>>(key, var, checkfun, prefun, rewritable, val_ptr, min, max));
 
-// static void EraseQuotes(PString& str) {
-//   // convert "hello" to  hello
-//   if (str.size() < 2) {
-//     return;
-//   }
-//   if (str[0] == '"' && str[str.size() - 1] == '"') {
-//     str.erase(str.begin());
-//     str.pop_back();
-//   }
-// }  // namespace pikiwidb
-
 extern std::vector<PString> SplitString(const PString& str, char seperator);
 
 PConfig g_config;
 
 bool BaseValue::Set(std::string value, bool from_file) {
   if (!from_file && !rewritable_) {
-    std::printf("!from_file && !rewritable_ return \n");
     return false;
   }
   if (custom_process_func_ptr_) {
@@ -61,15 +47,11 @@ bool BaseValue::Set(std::string value, bool from_file) {
 }
 
 bool StringValue::SetValue(const std::string& value) {
-  std::printf("string\n");
-
   *value_ = std::move(value);
   return true;
 }
 
 bool BoolValue::SetValue(const std::string& value) {
-  std::printf("bool\n");
-
   if (pstd::StringEqualCaseInsensitive(value, "yes")) {
     *value_ = true;
     return true;
@@ -83,13 +65,14 @@ bool BoolValue::SetValue(const std::string& value) {
 
 template <typename T>
 bool NumberValue<T>::SetValue(const std::string& value) {
-  std::printf("number\n");
-
   T v;
   std::istringstream iss(value);
   iss >> v;
-  if (v < value_min_ || v > value_max_) {
-    return false;
+  if (v < value_min_) {
+    v = value_min_;
+  }
+  if (v > value_max_) {
+    v = value_max_;
   }
   *value_ = v;
   return true;
@@ -175,30 +158,23 @@ bool PConfig::LoadFromFile(const std::string& file_name) {
   return true;
 }
 
-bool PConfig::CheckArgs() const {
-#define RETURN_IF_FAIL(cond)        \
-  if (!(cond)) {                    \
-    std::cerr << #cond " failed\n"; \
-    return false;                   \
+void PConfig::Get(const std::string& key, std::vector<std::string>* values) const {
+  values->clear();
+  for (const auto& [k, v] : config_map_) {
+    if (key == "*" || pstd::StringMatch(key.c_str(), k.c_str(), 1)) {
+      values->emplace_back(k);
+      values->emplace_back(v->Value());
+    }
   }
+}
 
-  RETURN_IF_FAIL(port > 0);
-  RETURN_IF_FAIL(databases > 0);
-  RETURN_IF_FAIL(maxclients > 0);
-  RETURN_IF_FAIL(hz > 0 && hz < 500);
-  RETURN_IF_FAIL(maxmemory >= 512 * 1024 * 1024UL);
-  RETURN_IF_FAIL(maxmemorySamples > 0 && maxmemorySamples < 10);
-  RETURN_IF_FAIL(worker_threads_num > 0 && worker_threads_num < 129);  // as redis
-  RETURN_IF_FAIL(backend >= kBackEndNone && backend < kBackEndMax);
-  RETURN_IF_FAIL(backendHz >= 1 && backendHz <= 50);
-  RETURN_IF_FAIL(db_instance_num >= 1);
-  RETURN_IF_FAIL(rocksdb_ttl_second > 0);
-  RETURN_IF_FAIL(rocksdb_periodic_second > 0);
-  RETURN_IF_FAIL(max_client_response_size > 0);
-
-#undef RETURN_IF_FAIL
-
-  return true;
+bool PConfig::Set(std::string key, const std::string& value) {
+  std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+  auto iter = config_map_.find(key);
+  if (iter == config_map_.end() || !iter->second->ReWritable()) {
+    return false;
+  }
+  return iter->second->Set(value, false);
 }
 
 }  // namespace pikiwidb
