@@ -130,55 +130,74 @@ class PConfig {
   bool Set(std::string, const std::string&);
 
  public:
-  bool daemonize = false;
-  PString pidfile = "/var/run/pikiwidb.pid";
-  PString ip = "127.0.0.1";
-  unsigned short port = 9221;
-  int timeout = 60;
-  PString dbpath = "./db";
-  PString loglevel = "warning";
-  PString logdir = "stdout";
-  int databases = 3;
+  bool daemonize;
+  PString pidfile;
+
+  PString ip;
+  unsigned short port;
+
+  int timeout;
+
+  PString dbpath;
+
+  PString loglevel;
+  PString logdir;  // the log directory, differ from redis
+
+  int databases;
+
+  // auth
   PString password;
+
   std::map<PString, PString> aliases;
 
   // @ rdb
   // save seconds changes
-  int saveseconds = 999999999;
-  int savechanges = 999999999;
-  bool rdbcompression = true;          // yes
-  bool rdbchecksum = true;             // yes
-  PString rdbfullname = "./dump.rdb";  // ./dump.rdb
-  int maxclients = 1000;               // 10000
-  int slowlogtime = 1000;              // 1000 microseconds
-  int slowlogmaxlen = 128;             // 128
-  int hz = 10;                         // 10  [1,500]
-  PString masterIp = "";
-  unsigned short masterPort = 0;  // replication
-  PString masterauth = "";
-  PString runid = "";
-  PString includefile = "";      // the template config
-  std::vector<PString> modules;  // modules
-  // use redis as cache, level db as backup
-  uint64_t maxmemory = 2 * 1024 * 1024 * 1024UL;  // default 2GB
-  int maxmemorySamples = 5;                       // default 5
-  bool noeviction = true;                         // default true
-  // THREADED I/O
-  int worker_threads_num = 2;
-  // THREADED SLAVE
-  int slave_threads_num = 2;
-  int backend = kBackEndRocksDB;  // enum BackEndType
-  PString backendPath = "dump";
-  int backendHz = 10;  // the frequency of dump to backend
-  int64_t max_client_response_size = 1073741824;
-  int db_instance_num = 3;
-  double double_test = 333.444;
-  long long_test = 2323232323;
-  bool booltrue_test = true;
-  bool boolfalse_test = false;
+  int saveseconds;
+  int savechanges;
+  bool rdbcompression;  // yes
+  bool rdbchecksum;     // yes
+  PString rdbfullname;  // ./dump.rdb
 
-  uint64_t rocksdb_ttl_second = 0;
-  uint64_t rocksdb_periodic_second = 0;
+  int maxclients;  // 10000
+
+  int slowlogtime;    // 1000 microseconds
+  int slowlogmaxlen;  // 128
+
+  int hz;  // 10  [1,500]
+
+  PString masterIp;
+  unsigned short masterPort;  // replication
+  PString masterauth;
+
+  PString runid;
+
+  PString includefile;  // the template config
+
+  std::vector<PString> modules;  // modules
+
+  // use redis as cache, level db as backup
+  uint64_t maxmemory;    // default 2GB
+  int maxmemorySamples;  // default 5
+  bool noeviction;       // default true
+
+  // THREADED I/O
+  int worker_threads_num;
+
+  // THREADED SLAVE
+  int slave_threads_num;
+
+  int fast_cmd_threads_num;
+  int slow_cmd_threads_num;
+
+  int backend;  // enum BackEndType
+  PString backendPath;
+  int backendHz;  // the frequency of dump to backend
+
+  int64_t max_client_response_size;
+
+  int db_instance_num;
+  uint64_t rocksdb_ttl_second;
+  uint64_t rocksdb_periodic_second;
 
  private:
   ConfigParser parser_;

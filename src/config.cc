@@ -127,6 +127,10 @@ PConfig::PConfig() {
     CONFIGADDNUMBER(int, "slowlog-max-len", slowlogmaxlen, nullptr, nullptr, true, &slowlogmaxlen, 0, INT32_MAX);
     CONFIGADDNUMBER(int, "db-instance-num", db_instance_num, nullptr, nullptr, true, &db_instance_num, 0,
                     ROCKSDB_INSTANCE_NUMBER_MAX);
+    CONFIGADDNUMBER(int, "fast-cmd-threads-num", fast_cmd_threads_num, nullptr, nullptr, false, &fast_cmd_threads_num,
+                    0, THREAD_MAX);
+    CONFIGADDNUMBER(int, "slow-cmd-threads-num", slow_cmd_threads_num, nullptr, nullptr, false, &slow_cmd_threads_num,
+                    0, THREAD_MAX);
   }
 
   // rocksdb config

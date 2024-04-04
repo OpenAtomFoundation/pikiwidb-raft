@@ -15,8 +15,8 @@ BaseCmd::BaseCmd(std::string name, int16_t arity, uint32_t flag, uint32_t aclCat
   name_ = std::move(name);
   arity_ = arity;
   flag_ = flag;
-  aclCategory_ = aclCategory;
-  cmdId_ = g_pikiwidb->GetCmdTableManager().GetCmdId();
+  acl_category_ = aclCategory;
+  cmd_id_ = g_pikiwidb->GetCmdID();
 }
 
 bool BaseCmd::CheckArg(size_t num) const {
@@ -55,13 +55,13 @@ void BaseCmd::SetFlag(uint32_t flag) { flag_ |= flag; }
 void BaseCmd::ResetFlag(uint32_t flag) { flag_ &= ~flag; }
 bool BaseCmd::HasSubCommand() const { return false; }
 BaseCmd* BaseCmd::GetSubCmd(const std::string& cmdName) { return nullptr; }
-uint32_t BaseCmd::AclCategory() const { return aclCategory_; }
-void BaseCmd::AddAclCategory(uint32_t aclCategory) { aclCategory_ |= aclCategory; }
+uint32_t BaseCmd::AclCategory() const { return acl_category_; }
+void BaseCmd::AddAclCategory(uint32_t aclCategory) { acl_category_ |= aclCategory; }
 std::string BaseCmd::Name() const { return name_; }
 // CmdRes& BaseCommand::Res() { return res_; }
 // void BaseCommand::SetResp(const std::shared_ptr<std::string>& resp) { resp_ = resp; }
 // std::shared_ptr<std::string> BaseCommand::GetResp() { return resp_.lock(); }
-uint32_t BaseCmd::GetCmdId() const { return cmdId_; }
+uint32_t BaseCmd::GetCmdID() const { return cmd_id_; }
 
 // BaseCmdGroup
 BaseCmdGroup::BaseCmdGroup(const std::string& name, uint32_t flag) : BaseCmdGroup(name, -2, flag) {}

@@ -54,6 +54,7 @@ const std::string kCmdNameGetRange = "getrange";
 const std::string kCmdNameSetRange = "setrange";
 const std::string kCmdNameDecr = "decr";
 const std::string kCmdNameIncr = "incr";
+const std::string kCmdNameMSetnx = "msetnx";
 
 // multi
 const std::string kCmdNameMulti = "multi";
@@ -285,7 +286,7 @@ class BaseCmd : public std::enable_shared_from_this<BaseCmd> {
   //  void SetResp(const std::shared_ptr<std::string>& resp);
   //  std::shared_ptr<std::string> GetResp();
 
-  uint32_t GetCmdId() const;
+  uint32_t GetCmdID() const;
 
  protected:
   // Execute a specific command
@@ -301,8 +302,8 @@ class BaseCmd : public std::enable_shared_from_this<BaseCmd> {
   //  std::weak_ptr<std::string> resp_;
   //  uint64_t doDuration_ = 0;
 
-  uint32_t cmdId_ = 0;
-  uint32_t aclCategory_ = 0;
+  uint32_t cmd_id_ = 0;
+  uint32_t acl_category_ = 0;
 
  private:
   // The function to be executed first before executing `DoCmd`
