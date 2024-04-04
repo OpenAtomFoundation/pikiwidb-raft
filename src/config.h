@@ -113,7 +113,6 @@ class BoolValue : public BaseValue {
 
  private:
   virtual bool SetValue(const std::string&) override;
-
   bool* value_;
 };
 
@@ -130,20 +129,20 @@ class PConfig {
   bool Set(std::string, const std::string&);
 
  public:
-  bool daemonize;
-  PString pidfile;
+  bool daemonize = "no";
+  PString pidfile = "./pikiwidb.pid";
 
-  PString ip;
-  unsigned short port;
+  PString ip = "127.0.0.1";
+  unsigned short port = 9221;
 
-  int timeout;
+  int timeout = 60;
 
-  PString dbpath;
+  PString dbpath = "./db/";
 
-  PString loglevel;
-  PString logdir;  // the log directory, differ from redis
+  PString loglevel = "warning";
+  PString logdir = "stdout";  // the log directory, differ from redis
 
-  int databases;
+  int databases = 3;
 
   // auth
   PString password;
@@ -158,10 +157,10 @@ class PConfig {
   bool rdbchecksum;     // yes
   PString rdbfullname;  // ./dump.rdb
 
-  int maxclients;  // 10000
+  int maxclients = 10000;  // 10000
 
-  int slowlogtime;    // 1000 microseconds
-  int slowlogmaxlen;  // 128
+  int slowlogtime = 1000;   // 1000 microseconds
+  int slowlogmaxlen = 128;  // 128
 
   int hz;  // 10  [1,500]
 
@@ -181,23 +180,23 @@ class PConfig {
   bool noeviction;       // default true
 
   // THREADED I/O
-  int worker_threads_num;
+  int worker_threads_num = 2;
 
   // THREADED SLAVE
-  int slave_threads_num;
+  int slave_threads_num = 2;
 
-  int fast_cmd_threads_num;
-  int slow_cmd_threads_num;
+  int fast_cmd_threads_num = 12;
+  int slow_cmd_threads_num = 12;
 
-  int backend;  // enum BackEndType
+  int backend = 1;  // enum BackEndType
   PString backendPath;
   int backendHz;  // the frequency of dump to backend
 
   int64_t max_client_response_size;
 
-  int db_instance_num;
-  uint64_t rocksdb_ttl_second;
-  uint64_t rocksdb_periodic_second;
+  int db_instance_num = 3;
+  uint64_t rocksdb_ttl_second = 604800;
+  uint64_t rocksdb_periodic_second = 259200;
 
  private:
   ConfigParser parser_;
