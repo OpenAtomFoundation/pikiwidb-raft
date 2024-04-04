@@ -113,7 +113,6 @@ class BoolValue : public BaseValue {
 
  private:
   virtual bool SetValue(const std::string&) override;
-
   bool* value_;
 };
 

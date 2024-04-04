@@ -19,11 +19,21 @@ IF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     ENDIF ()
 ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # using GCC
-    IF (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "10.0")
-        MESSAGE(FATAL_ERROR "GCC G++ version must be greater than 10.0")
+    IF (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0")
+        MESSAGE(FATAL_ERROR "GCC G++ version must be greater than 11.0")
     ENDIF ()
 ENDIF ()
 
+# get current date and time
+EXECUTE_PROCESS(COMMAND date "+%Y-%m-%d_%H:%M:%S" OUTPUT_VARIABLE BUILD_TIMESTAMP OUTPUT_STRIP_TRAILING_WHITESPACE)
+ADD_DEFINITIONS(-DKPIKIWIDB_BUILD_DATE="${BUILD_TIMESTAMP}")
+
+message(STATUS "Build timestamp: ${BUILD_TIMESTAMP}")
+
+# get git commit id
+EXECUTE_PROCESS(COMMAND git rev-parse HEAD OUTPUT_VARIABLE GIT_COMMIT_ID OUTPUT_STRIP_TRAILING_WHITESPACE)
+ADD_DEFINITIONS(-DKPIKIWIDB_GIT_COMMIT_ID="${GIT_COMMIT_ID}")
+MESSAGE(STATUS "Git commit id: ${GIT_COMMIT_ID}")
 
 ############# You should enable sanitizer if you are developing pika #############
 # Uncomment the following two lines to enable AddressSanitizer to detect memory leaks and other memory-related bugs.

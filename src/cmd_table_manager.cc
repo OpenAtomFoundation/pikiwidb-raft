@@ -75,6 +75,7 @@ void CmdTableManager::InitCmdTable() {
   ADD_COMMAND(SetRange, 4);
   ADD_COMMAND(Decr, 2);
   ADD_COMMAND(SetBit, 4);
+  ADD_COMMAND(MSetnx, -3);
 
   // hash
   ADD_COMMAND(HSet, -4);
