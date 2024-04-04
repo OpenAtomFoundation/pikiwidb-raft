@@ -131,6 +131,8 @@ PConfig::PConfig() {
                     0, THREAD_MAX);
     CONFIGADDNUMBER(int, "slow-cmd-threads-num", slow_cmd_threads_num, nullptr, nullptr, false, &slow_cmd_threads_num,
                     0, THREAD_MAX);
+    CONFIGADDNUMBER(int64_t, "max-client-response-size", max_client_response_size, nullptr, nullptr, true,
+                    &max_client_response_size, 0, INT64_MAX);
   }
 
   // rocksdb config

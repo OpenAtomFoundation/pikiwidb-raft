@@ -192,7 +192,7 @@ class PConfig {
   PString backendPath;
   int backendHz;  // the frequency of dump to backend
 
-  int64_t max_client_response_size;
+  int64_t max_client_response_size = 1073741824;
 
   int db_instance_num = 3;
   uint64_t rocksdb_ttl_second = 604800;
