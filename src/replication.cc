@@ -60,7 +60,7 @@ void PReplication::OnRdbSaveDone() {
     if (cli->GetSlaveInfo()->state == kPSlaveStateWaitBgsaveEnd) {
       cli->GetSlaveInfo()->state = kPSlaveStateOnline;
 
-      if (!rdb.IsOpen() && !rdb.Open(g_config.rdbfullname.c_str())) {
+      if (!rdb.IsOpen() && !rdb.Open(g_config.GetRDBFullName().c_str())) {
         ERROR("can not open rdb when replication\n");
         return;  // fatal error;
       }
@@ -175,7 +175,7 @@ void PReplication::Cron() {
   if (masterInfo_.addr.IsValid()) {
     switch (masterInfo_.state) {
       case kPReplStateNone: {
-        if (masterInfo_.addr.GetIP() == g_config.ip && masterInfo_.addr.GetPort() == g_config.port) {
+        if (masterInfo_.addr.GetIP() == g_config.GetIp() && masterInfo_.addr.GetPort() == g_config.GetPort()) {
           ERROR("Fix config, master addr is self addr!");
           assert(!!!"wrong config for master addr");
         }
@@ -208,14 +208,14 @@ void PReplication::Cron() {
       } break;
 
       case kPReplStateConnected:
-        if (!g_config.masterauth.empty()) {
+        if (!g_config.GetMasterAuth().empty()) {
           if (auto master = master_.lock()) {
             UnboundedBuffer req;
             req.PushData("auth ");
-            req.PushData(g_config.masterauth.data(), g_config.masterauth.size());
+            req.PushData(g_config.GetMasterAuth().data(), g_config.GetMasterAuth().size());
             req.PushData("\r\n");
             master->SendPacket(req);
-            INFO("send auth with password {}", g_config.masterauth);
+            INFO("send auth with password {}", g_config.GetMasterAuth());
 
             masterInfo_.state = kPReplStateWaitAuth;
             break;
@@ -232,11 +232,11 @@ void PReplication::Cron() {
         } else if (master->GetAuth()) {
           // send replconf
           char req[128];
-          auto len = snprintf(req, sizeof req - 1, "replconf listening-port %hu\r\n", g_config.port);
+          auto len = snprintf(req, sizeof req - 1, "replconf listening-port %hu\r\n", g_config.GetPort());
           master->SendPacket(req, len);
           masterInfo_.state = kPReplStateWaitReplconf;
 
-          INFO("Send replconf listening-port {}", g_config.port);
+          INFO("Send replconf listening-port {}", g_config.GetPort());
         } else {
           WARN("Haven't auth to master yet, or check masterauth password");
         }

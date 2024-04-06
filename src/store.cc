@@ -20,15 +20,15 @@ PStore& PStore::Instance() {
 }
 
 void PStore::Init(int dbNum) {
-  if (g_config.backend == kBackEndNone) {
+  if (g_config.GetBackEndType() == kBackEndNone) {
     return;
   }
 
   backends_.reserve(dbNum);
 
-  if (g_config.backend == kBackEndRocksDB) {
+  if (g_config.GetBackEndType() == kBackEndRocksDB) {
     for (int i = 0; i < dbNum; i++) {
-      auto db = std::make_unique<DB>(i, g_config.dbpath);
+      auto db = std::make_unique<DB>(i, g_config.GetDBPath());
       backends_.push_back(std::move(db));
     }
   } else {

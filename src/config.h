@@ -10,6 +10,7 @@
 #include <cassert>
 #include <functional>
 #include <memory>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -43,7 +44,7 @@ class BaseValue {
 
   virtual std::string Value() const = 0;
 
-  bool Set(std::string value, bool from_file);
+  bool Set(std::string value, bool force = false);
 
   bool ReWritable() { return rewritable_; }
 
@@ -126,77 +127,209 @@ class PConfig {
   bool LoadFromFile(const std::string& file_name);
   const std::string& ConfigFileName() const { return config_file_name_; }
   void Get(const std::string&, std::vector<std::string>*) const;
-  bool Set(std::string, const std::string&);
+  bool Set(std::string, const std::string&, bool force = false);
 
  public:
-  bool daemonize = "no";
-  PString pidfile = "./pikiwidb.pid";
+  bool GetDaemonize() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return daemonize_;
+  }
 
-  PString ip = "127.0.0.1";
-  unsigned short port = 9221;
+  std::string GetPidfile() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return pidfile_;
+  }
 
-  int timeout = 60;
+  std::string GetIp() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return ip_;
+  }
 
-  PString dbpath = "./db/";
+  unsigned short GetPort() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return port_;
+  }
 
-  PString loglevel = "warning";
-  PString logdir = "stdout";  // the log directory, differ from redis
+  int GetTimeout() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return timeout_;
+  }
 
-  int databases = 3;
+  std::string GetDBPath() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return dbpath_;
+  }
+
+  std::string GetLogLevel() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return loglevel_;
+  }
+
+  std::string GetLogDir() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return logdir_;
+  }
+
+  int GetDataBases() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return databases_;
+  }
+
+  std::string GetPassword() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return password_;
+  }
+
+  int GetSlowlogTime() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return slowlogtime_;
+  }
+
+  int GetSlowlogMaxLen() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return slowlogmaxlen_;
+  }
+
+  int GetWorkerThreadsNumber() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return worker_threads_num_;
+  }
+
+  int GetSlaveThreadsNumber() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return slave_threads_num_;
+  }
+
+  int GetFastCmdThreadsNumber() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return fast_cmd_threads_num_;
+  }
+
+  int GetSlowCmdThreadsNumber() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return slow_cmd_threads_num_;
+  }
+
+  int64_t GetMaxClientResponseSize() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return max_client_response_size_;
+  }
+
+  int GetDBInstanceNumber() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return db_instance_num_;
+  }
+
+  uint64_t GetRocksDBTTLSeconds() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return rocksdb_ttl_second_;
+  }
+
+  uint64_t GetRocksDBPeriodicSeconds() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return rocksdb_periodic_second_;
+  }
+
+  std::string GetMasterAuth() const {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return masterauth_;
+  }
+
+  int GetBackEndType() {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return backend_;
+  }
+
+  std::string GetMasterIP() {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return masterIp_;
+  }
+
+  unsigned short GetMasterPort() {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return masterPort_;
+  }
+
+  int GetHZ() {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return hz_;
+  }
+
+  std::string GetRDBFullName() {
+    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
+    return rdbfullname_;
+  }
+
+ private:
+  mutable std::shared_mutex mutex_;
+  bool daemonize_ = false;
+  PString pidfile_ = "./pikiwidb.pid";
+
+  PString ip_ = "127.0.0.1";
+  unsigned short port_ = 9221;
+
+  int timeout_ = 60;
+
+  PString dbpath_ = "./db/";
+
+  PString loglevel_ = "warning";
+  PString logdir_ = "stdout";  // the log directory, differ from redis
+
+  int databases_ = 3;
 
   // auth
-  PString password;
+  PString password_;
 
-  std::map<PString, PString> aliases;
+  std::map<PString, PString> aliases_;
 
   // @ rdb
   // save seconds changes
-  int saveseconds;
-  int savechanges;
-  bool rdbcompression;  // yes
-  bool rdbchecksum;     // yes
-  PString rdbfullname;  // ./dump.rdb
+  int saveseconds_;
+  int savechanges_;
+  bool rdbcompression_;  // yes
+  bool rdbchecksum_;     // yes
+  PString rdbfullname_;  // ./dump.rdb
 
-  int maxclients = 10000;  // 10000
+  int maxclients_ = 10000;  // 10000
 
-  int slowlogtime = 1000;   // 1000 microseconds
-  int slowlogmaxlen = 128;  // 128
+  int slowlogtime_ = 1000;   // 1000 microseconds
+  int slowlogmaxlen_ = 128;  // 128
 
-  int hz;  // 10  [1,500]
+  int hz_;  // 10  [1,500]
 
-  PString masterIp;
-  unsigned short masterPort;  // replication
-  PString masterauth;
+  PString masterIp_;
+  unsigned short masterPort_;  // replication
+  PString masterauth_;
 
-  PString runid;
+  PString runid_;
 
-  PString includefile;  // the template config
+  PString includefile_;  // the template config
 
-  std::vector<PString> modules;  // modules
+  std::vector<PString> modules_;  // modules
 
   // use redis as cache, level db as backup
-  uint64_t maxmemory;    // default 2GB
-  int maxmemorySamples;  // default 5
-  bool noeviction;       // default true
+  uint64_t maxmemory_;    // default 2GB
+  int maxmemorySamples_;  // default 5
+  bool noeviction_;       // default true
 
   // THREADED I/O
-  int worker_threads_num = 2;
+  int worker_threads_num_ = 2;
 
   // THREADED SLAVE
-  int slave_threads_num = 2;
+  int slave_threads_num_ = 2;
 
-  int fast_cmd_threads_num = 12;
-  int slow_cmd_threads_num = 12;
+  int fast_cmd_threads_num_ = 12;
+  int slow_cmd_threads_num_ = 12;
 
-  int backend = 1;  // enum BackEndType
-  PString backendPath;
-  int backendHz;  // the frequency of dump to backend
+  int backend_ = 1;  // enum BackEndType
+  PString backendPath_;
+  int backendHz_;  // the frequency of dump to backend
 
-  int64_t max_client_response_size = 1073741824;
+  int64_t max_client_response_size_ = 1073741824;
 
-  int db_instance_num = 3;
-  uint64_t rocksdb_ttl_second = 604800;
-  uint64_t rocksdb_periodic_second = 259200;
+  int db_instance_num_ = 3;
+  uint64_t rocksdb_ttl_second_ = 604800;
+  uint64_t rocksdb_periodic_second_ = 259200;
 
  private:
   ConfigParser parser_;

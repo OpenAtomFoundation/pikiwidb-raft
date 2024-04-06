@@ -82,7 +82,7 @@ bool SelectCmd::DoInitial(PClient* client) { return true; }
 
 void SelectCmd::DoCmd(PClient* client) {
   int index = atoi(client->argv_[1].c_str());
-  if (index < 0 || index >= g_config.databases) {
+  if (index < 0 || index >= g_config.GetDataBases()) {
     client->SetRes(CmdRes::kInvalidIndex, kCmdNameSelect + " DB index is out of range");
     return;
   }

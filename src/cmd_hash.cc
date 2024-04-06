@@ -152,7 +152,7 @@ void HGetAllCmd::DoCmd(PClient* client) {
   int64_t total_fv = 0;
   int64_t cursor = 0;
   int64_t next_cursor = 0;
-  size_t raw_limit = g_config.max_client_response_size;
+  size_t raw_limit = g_config.GetMaxClientResponseSize();
   std::string raw;
   std::vector<storage::FieldValue> fvs;
   storage::Status s;

@@ -33,8 +33,8 @@ extern std::vector<PString> SplitString(const PString& str, char seperator);
 
 PConfig g_config;
 
-bool BaseValue::Set(std::string value, bool from_file) {
-  if (!from_file && !rewritable_) {
+bool BaseValue::Set(std::string value, bool force) {
+  if (!force && !rewritable_) {
     return false;
   }
   if (custom_process_func_ptr_) {
@@ -58,9 +58,9 @@ bool BoolValue::SetValue(const std::string& value) {
   } else if (pstd::StringEqualCaseInsensitive(value, "no")) {
     *value_ = false;
     return true;
-  } else {
-    return false;
   }
+
+  return false;
 }
 
 template <typename T>
@@ -89,7 +89,6 @@ PConfig::PConfig() {
       value.pop_back();
     }
   };
-  // ....
 
   // check func
   auto CheckYesNo = [](const std::string& value) -> bool {
@@ -105,42 +104,42 @@ PConfig::PConfig() {
     }
     return false;
   };
-  // ....
 
   {
-    CONFIGADDBOOL("daemonize", daemonize, CheckYesNo, EraseQuotes, false, &daemonize);
-    CONFIGADDSTRING("ip", ip, nullptr, nullptr, false, &ip)
-    CONFIGADDNUMBER(unsigned short, "port", port, nullptr, nullptr, false, &port, PORT_LIMIT_MIN, PORT_LIMIT_MAX);
-    CONFIGADDNUMBER(int, "timeout", timeout, nullptr, nullptr, true, &timeout, -1, INT32_MAX);
-    CONFIGADDSTRING("db-path", dbpath, nullptr, nullptr, false, &dbpath);
-    CONFIGADDSTRING("loglevel", loglevel, CheckLogLevel, nullptr, true, &loglevel);
-    CONFIGADDSTRING("logfile", logdir, nullptr, nullptr, true, &logdir);
-    CONFIGADDNUMBER(int, "databases", databases, nullptr, nullptr, false, &databases, 0, DBNUMBER_MAX);
-    CONFIGADDSTRING("requirepass", password, nullptr, nullptr, true, &password)
-    CONFIGADDNUMBER(int, "maxclients", maxclients, nullptr, nullptr, true, &maxclients, 0, INT32_MAX);
-    CONFIGADDNUMBER(int, "worker-threads", worker_threads_num, nullptr, nullptr, false, &worker_threads_num, 0,
+    CONFIGADDBOOL("daemonize", daemonize_, CheckYesNo, EraseQuotes, false, &daemonize_);
+    CONFIGADDSTRING("ip", ip_, nullptr, nullptr, false, &ip_)
+    CONFIGADDNUMBER(unsigned short, "port", port_, nullptr, nullptr, false, &port_, PORT_LIMIT_MIN, PORT_LIMIT_MAX);
+    CONFIGADDNUMBER(int, "timeout", timeout_, nullptr, nullptr, true, &timeout_, -1, INT32_MAX);
+    CONFIGADDSTRING("db-path", dbpath_, nullptr, nullptr, false, &dbpath_);
+    CONFIGADDSTRING("loglevel", loglevel_, CheckLogLevel, nullptr, true, &loglevel_);
+    CONFIGADDSTRING("logfile", logdir_, nullptr, nullptr, true, &logdir_);
+    CONFIGADDNUMBER(int, "databases", databases_, nullptr, nullptr, false, &databases_, 0, DBNUMBER_MAX);
+    CONFIGADDSTRING("requirepass", password_, nullptr, nullptr, true, &password_)
+    CONFIGADDNUMBER(int, "maxclients", maxclients_, nullptr, nullptr, true, &maxclients_, 0, INT32_MAX);
+    CONFIGADDNUMBER(int, "worker-threads", worker_threads_num_, nullptr, nullptr, false, &worker_threads_num_, 0,
                     THREAD_MAX);
-    CONFIGADDNUMBER(int, "slave-threads", worker_threads_num, nullptr, nullptr, false, &worker_threads_num, 0,
+    CONFIGADDNUMBER(int, "slave-threads", worker_threads_num_, nullptr, nullptr, false, &worker_threads_num_, 0,
                     THREAD_MAX);
-    CONFIGADDNUMBER(int, "slowlog-log-slower-than", slowlogtime, nullptr, nullptr, true, &slowlogtime, INT32_MIN,
+    CONFIGADDNUMBER(int, "slowlog-log-slower-than", slowlogtime_, nullptr, nullptr, true, &slowlogtime_, INT32_MIN,
                     INT32_MAX);
-    CONFIGADDNUMBER(int, "slowlog-max-len", slowlogmaxlen, nullptr, nullptr, true, &slowlogmaxlen, 0, INT32_MAX);
-    CONFIGADDNUMBER(int, "db-instance-num", db_instance_num, nullptr, nullptr, true, &db_instance_num, 0,
+    CONFIGADDNUMBER(int, "slowlog-max-len", slowlogmaxlen_, nullptr, nullptr, true, &slowlogmaxlen_, 0, INT32_MAX);
+    CONFIGADDNUMBER(int, "db-instance-num", db_instance_num_, nullptr, nullptr, true, &db_instance_num_, 0,
                     ROCKSDB_INSTANCE_NUMBER_MAX);
-    CONFIGADDNUMBER(int, "fast-cmd-threads-num", fast_cmd_threads_num, nullptr, nullptr, false, &fast_cmd_threads_num,
+    CONFIGADDNUMBER(int, "fast-cmd-threads-num", fast_cmd_threads_num_, nullptr, nullptr, false, &fast_cmd_threads_num_,
                     0, THREAD_MAX);
-    CONFIGADDNUMBER(int, "slow-cmd-threads-num", slow_cmd_threads_num, nullptr, nullptr, false, &slow_cmd_threads_num,
+    CONFIGADDNUMBER(int, "slow-cmd-threads-num", slow_cmd_threads_num_, nullptr, nullptr, false, &slow_cmd_threads_num_,
                     0, THREAD_MAX);
-    CONFIGADDNUMBER(int64_t, "max-client-response-size", max_client_response_size, nullptr, nullptr, true,
-                    &max_client_response_size, 0, INT64_MAX);
+    CONFIGADDNUMBER(int64_t, "max-client-response-size", max_client_response_size_, nullptr, nullptr, true,
+                    &max_client_response_size_, 0, INT64_MAX);
+    CONFIGADDSTRING("runid", runid_, nullptr, nullptr, false, &runid_)
   }
 
   // rocksdb config
   {
-    CONFIGADDNUMBER(uint64_t, "rocksdb-ttl-second", rocksdb_ttl_second, nullptr, nullptr, true, &rocksdb_ttl_second, 0,
-                    UINT64_MAX);
-    CONFIGADDNUMBER(uint64_t, "rocksdb-periodic-second", rocksdb_periodic_second, nullptr, nullptr, true,
-                    &rocksdb_periodic_second, 0, UINT64_MAX);
+    CONFIGADDNUMBER(uint64_t, "rocksdb-ttl-second", rocksdb_ttl_second_, nullptr, nullptr, true, &rocksdb_ttl_second_,
+                    0, UINT64_MAX);
+    CONFIGADDNUMBER(uint64_t, "rocksdb-periodic-second", rocksdb_periodic_second_, nullptr, nullptr, true,
+                    &rocksdb_periodic_second_, 0, UINT64_MAX);
     // ....
   }
 }
@@ -157,7 +156,6 @@ bool PConfig::LoadFromFile(const std::string& file_name) {
     }
     assert(value.size() == 1);
     if (auto& v = config_map_[key]; !v->Set(value.at(0), true)) {
-      std::printf("key = %s", key.c_str());
       return false;
     }
   }
@@ -166,6 +164,7 @@ bool PConfig::LoadFromFile(const std::string& file_name) {
 
 void PConfig::Get(const std::string& key, std::vector<std::string>* values) const {
   values->clear();
+  std::shared_lock<std::shared_mutex> sharedLock(mutex_);
   for (const auto& [k, v] : config_map_) {
     if (key == "*" || pstd::StringMatch(key.c_str(), k.c_str(), 1)) {
       values->emplace_back(k);
@@ -174,13 +173,14 @@ void PConfig::Get(const std::string& key, std::vector<std::string>* values) cons
   }
 }
 
-bool PConfig::Set(std::string key, const std::string& value) {
+bool PConfig::Set(std::string key, const std::string& value, bool force) {
   std::transform(key.begin(), key.end(), key.begin(), ::tolower);
   auto iter = config_map_.find(key);
   if (iter == config_map_.end() || !iter->second->ReWritable()) {
     return false;
   }
-  return iter->second->Set(value, false);
+  std::lock_guard<std::shared_mutex> Lock(mutex_);
+  return iter->second->Set(value, force);
 }
 
 }  // namespace pikiwidb
