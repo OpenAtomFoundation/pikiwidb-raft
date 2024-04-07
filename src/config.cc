@@ -5,6 +5,7 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,17 @@ constexpr const int ROCKSDB_INSTANCE_NUMBER_MAX = 10;
 #define CONFIGADDNUMBER(type, key, var, checkfun, prefun, rewritable, val_ptr, min, max) \
   config_map_.emplace(key,                                                               \
                       std::make_unique<NumberValue<type>>(key, var, checkfun, prefun, rewritable, val_ptr, min, max));
+
+static void EraseQuotes(PString& str) {
+  // convert "hello" to  hello
+  if (str.size() < 2) {
+    return;
+  }
+  if (str[0] == '"' && str[str.size() - 1] == '"') {
+    str.erase(str.begin());
+    str.pop_back();
+  }
+}
 
 extern std::vector<PString> SplitString(const PString& str, char seperator);
 
@@ -159,6 +171,35 @@ bool PConfig::LoadFromFile(const std::string& file_name) {
       return false;
     }
   }
+
+  // Handle separately
+  std::vector<PString> master(SplitString(parser_.GetData<PString>("slaveof"), ' '));
+  if (master.size() == 2) {
+    masterIp_ = master[0];
+    masterPort_ = static_cast<unsigned short>(std::stoi(master[1]));
+  }
+
+  std::vector<PString> saveInfo(SplitString(parser_.GetData<PString>("save"), ' '));
+  if (!saveInfo.empty() && saveInfo.size() != 2) {
+    EraseQuotes(saveInfo[0]);
+    if (!(saveInfo.size() == 1 && saveInfo[0].empty())) {
+      std::cerr << "bad format save rdb interval, bad string " << parser_.GetData<PString>("save") << std::endl;
+      return false;
+    }
+  } else if (!saveInfo.empty()) {
+    saveseconds_ = std::stoi(saveInfo[0]);
+    savechanges_ = std::stoi(saveInfo[1]);
+  }
+
+  std::vector<PString> alias(SplitString(parser_.GetData<PString>("rename-command"), ' '));
+  if (alias.size() % 2 == 0) {
+    for (auto it(alias.begin()); it != alias.end();) {
+      const PString& oldCmd = *(it++);
+      const PString& newCmd = *(it++);
+      aliases_[oldCmd] = newCmd;
+    }
+  }
+
   return true;
 }
 
@@ -176,7 +217,7 @@ void PConfig::Get(const std::string& key, std::vector<std::string>* values) cons
 bool PConfig::Set(std::string key, const std::string& value, bool force) {
   std::transform(key.begin(), key.end(), key.begin(), ::tolower);
   auto iter = config_map_.find(key);
-  if (iter == config_map_.end() || !iter->second->ReWritable()) {
+  if (iter == config_map_.end() || (!force && !iter->second->ReWritable())) {
     return false;
   }
   std::lock_guard<std::shared_mutex> Lock(mutex_);

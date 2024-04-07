@@ -44,7 +44,7 @@ class BaseValue {
 
   virtual std::string Value() const = 0;
 
-  bool Set(std::string value, bool force = false);
+  bool Set(std::string value, bool force);
 
   bool ReWritable() { return rewritable_; }
 
@@ -331,7 +331,6 @@ class PConfig {
   uint64_t rocksdb_ttl_second_ = 604800;
   uint64_t rocksdb_periodic_second_ = 259200;
 
- private:
   ConfigParser parser_;
   ConfigMap config_map_;
   std::string config_file_name_;

@@ -78,6 +78,7 @@ bool PikiwiDB::ParseArgs(int ac, char* av[]) {
         return false;
       }
       port_ = static_cast<int16_t>(std::atoi(av[i]));
+      std::printf("port_ = %d\n", port_);
     } else if (strncasecmp(av[i], "--loglevel", 10) == 0) {
       if (++i == ac) {
         return false;
@@ -191,6 +192,18 @@ bool PikiwiDB::Init() {
   char runid[kRunidSize + 1] = "";
   getRandomHexChars(runid, kRunidSize);
   g_config.Set("runid", {runid, kRunidSize}, true);
+
+  if (port_ != 0) {
+    g_config.Set("port", std::to_string(port_), true);
+  }
+
+  if (!log_level_.empty()) {
+    g_config.Set("log-level", log_level_, true);
+  }
+
+  if (!master_.empty()) {
+    g_config.Set("slaveof", master_ + ' ' + std::to_string(master_port_));
+  }
 
   NewTcpConnectionCallback cb = std::bind(&PikiwiDB::OnNewConnection, this, std::placeholders::_1);
   if (!worker_threads_.Init(g_config.GetIp().c_str(), g_config.GetPort(), cb)) {
