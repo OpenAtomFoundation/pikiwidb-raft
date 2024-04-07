@@ -145,7 +145,7 @@ class PConfig {
     return ip_;
   }
 
-  unsigned short GetPort() const {
+  uint16_t GetPort() const {
     std::shared_lock<std::shared_mutex> SharedLock(mutex_);
     return port_;
   }
@@ -245,7 +245,7 @@ class PConfig {
     return masterIp_;
   }
 
-  unsigned short GetMasterPort() {
+  uint16_t GetMasterPort() {
     std::shared_lock<std::shared_mutex> SharedLock(mutex_);
     return masterPort_;
   }
@@ -266,9 +266,9 @@ class PConfig {
   PString pidfile_ = "./pikiwidb.pid";
 
   PString ip_ = "127.0.0.1";
-  unsigned short port_ = 9221;
+  uint16_t port_ = 9221;
 
-  int timeout_ = 60;
+  int timeout_ = 0;
 
   PString dbpath_ = "./db/";
 
@@ -278,7 +278,7 @@ class PConfig {
   int databases_ = 3;
 
   // auth
-  PString password_;
+  PString password_ = "";
 
   std::map<PString, PString> aliases_;
 
@@ -298,7 +298,7 @@ class PConfig {
   int hz_;  // 10  [1,500]
 
   PString masterIp_;
-  unsigned short masterPort_;  // replication
+  uint16_t masterPort_;  // replication
   PString masterauth_;
 
   PString runid_;

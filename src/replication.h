@@ -68,7 +68,7 @@ enum PSlaveState {
 
 struct PSlaveInfo {
   PSlaveState state;
-  unsigned short listenPort;  // slave listening port
+  uint16_t listenPort;  // slave listening port
 
   PSlaveInfo() : state(kPSlaveStateNone), listenPort(0) {}
 };
@@ -129,7 +129,7 @@ class PReplication {
   void SaveTmpRdb(const char* data, std::size_t& len);
   void SetMaster(const std::shared_ptr<PClient>& cli);
   void SetMasterState(PReplState s);
-  void SetMasterAddr(const char* ip, unsigned short port);
+  void SetMasterAddr(const char* ip, uint16_t port);
   void SetRdbSize(std::size_t s);
   PReplState GetMasterState() const;
   SocketAddr GetMasterAddr() const;

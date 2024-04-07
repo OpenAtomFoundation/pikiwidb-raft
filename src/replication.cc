@@ -318,7 +318,7 @@ PReplState PReplication::GetMasterState() const { return masterInfo_.state; }
 
 SocketAddr PReplication::GetMasterAddr() const { return masterInfo_.addr; }
 
-void PReplication::SetMasterAddr(const char* ip, unsigned short port) {
+void PReplication::SetMasterAddr(const char* ip, uint16_t port) {
   if (ip) {
     masterInfo_.addr.Init(ip, port);
   } else {
@@ -351,7 +351,7 @@ PError replconf(const std::vector<PString>& params, UnboundedBuffer* reply) {
         info = client->GetSlaveInfo();
         PREPL.AddSlave(client);
       }
-      info->listenPort = static_cast<unsigned short>(port);
+      info->listenPort = static_cast<uint16_t>(port);
     } else {
       break;
     }
@@ -431,7 +431,7 @@ PError slaveof(const std::vector<PString>& params, UnboundedBuffer* reply) {
   } else {
     long tmpPort = 0;
     pstd::String2int(params[2].c_str(), params[2].size(), &tmpPort);
-    unsigned short port = static_cast<unsigned short>(tmpPort);
+    uint16_t port = static_cast<uint16_t>(tmpPort);
 
     SocketAddr reqMaster(params[1].c_str(), port);
 

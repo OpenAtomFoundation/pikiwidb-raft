@@ -102,4 +102,29 @@ var _ = Describe("Admin", Ordered, func() {
 		Expect(eDel).NotTo(HaveOccurred())
 		Expect(rDel).To(Equal(int64(1)))
 	})
+
+	It("Cmd Config", func() {
+		res := client.ConfigGet(ctx, "timeout")
+		Expect(res.Err()).NotTo(HaveOccurred())
+		Expect(res.Val()).To(Equal(map[string]string{"timeout": "0"}))
+
+		res = client.ConfigGet(ctx, "daemonize")
+		Expect(res.Err()).NotTo(HaveOccurred())
+		Expect(res.Val()).To(Equal(map[string]string{"daemonize": "no"}))
+
+		resSet := client.ConfigSet(ctx, "timeout", "60")
+		Expect(resSet.Err()).NotTo(HaveOccurred())
+		Expect(resSet.Val()).To(Equal("OK"))
+
+		resSet = client.ConfigSet(ctx, "daemonize", "yes")
+		Expect(resSet.Err()).To(MatchError("ERR Invalid Argument"))
+
+		res = client.ConfigGet(ctx, "timeout")
+		Expect(res.Err()).NotTo(HaveOccurred())
+		Expect(res.Val()).To(Equal(map[string]string{"timeout": "60"}))
+
+		res = client.ConfigGet(ctx, "time*")
+		Expect(res.Err()).NotTo(HaveOccurred())
+		Expect(res.Val()).To(Equal(map[string]string{"timeout": "60"}))
+	})
 })

@@ -14,8 +14,8 @@
 
 namespace pikiwidb {
 
-constexpr const unsigned short PORT_LIMIT_MAX = 65535;
-constexpr const unsigned short PORT_LIMIT_MIN = 1;
+constexpr const uint16_t PORT_LIMIT_MAX = 65535;
+constexpr const uint16_t PORT_LIMIT_MIN = 1;
 constexpr const int DBNUMBER_MAX = 16;
 constexpr const int THREAD_MAX = 129;
 constexpr const int ROCKSDB_INSTANCE_NUMBER_MAX = 10;
@@ -59,7 +59,7 @@ bool BaseValue::Set(std::string value, bool force) {
 }
 
 bool StringValue::SetValue(const std::string& value) {
-  *value_ = std::move(value);
+  *value_ = value;
   return true;
 }
 
@@ -120,7 +120,7 @@ PConfig::PConfig() {
   {
     CONFIGADDBOOL("daemonize", daemonize_, CheckYesNo, EraseQuotes, false, &daemonize_);
     CONFIGADDSTRING("ip", ip_, nullptr, nullptr, false, &ip_)
-    CONFIGADDNUMBER(unsigned short, "port", port_, nullptr, nullptr, false, &port_, PORT_LIMIT_MIN, PORT_LIMIT_MAX);
+    CONFIGADDNUMBER(uint16_t, "port", port_, nullptr, nullptr, false, &port_, PORT_LIMIT_MIN, PORT_LIMIT_MAX);
     CONFIGADDNUMBER(int, "timeout", timeout_, nullptr, nullptr, true, &timeout_, -1, INT32_MAX);
     CONFIGADDSTRING("db-path", dbpath_, nullptr, nullptr, false, &dbpath_);
     CONFIGADDSTRING("loglevel", loglevel_, CheckLogLevel, nullptr, true, &loglevel_);
@@ -176,7 +176,7 @@ bool PConfig::LoadFromFile(const std::string& file_name) {
   std::vector<PString> master(SplitString(parser_.GetData<PString>("slaveof"), ' '));
   if (master.size() == 2) {
     masterIp_ = master[0];
-    masterPort_ = static_cast<unsigned short>(std::stoi(master[1]));
+    masterPort_ = static_cast<uint16_t>(std::stoi(master[1]));
   }
 
   std::vector<PString> saveInfo(SplitString(parser_.GetData<PString>("save"), ' '));

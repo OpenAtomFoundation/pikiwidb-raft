@@ -34,9 +34,9 @@ bool CmdConfigSet::DoInitial(PClient* client) { return true; }
 
 void CmdConfigSet::DoCmd(PClient* client) {
   if (!g_config.Set(client->argv_[2], client->argv_[3])) {
-    client->SetRes(CmdRes::kErrOther, "config set error!");
+    client->SetRes(CmdRes::kInvalidParameter);
   } else {
-    client->SetRes(CmdRes::kOK, "OK");
+    client->SetRes(CmdRes::kOK);
   }
 }
 
