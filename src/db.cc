@@ -27,7 +27,6 @@ DB::DB(int db_id, const std::string &db_path) : db_id_(db_id), db_path_(db_path 
     abort();
   }
   opened_ = true;
-  INFO("Open DB{} success!", db_id);
 }
 
 }  // namespace pikiwidb

@@ -77,8 +77,7 @@ bool PikiwiDB::ParseArgs(int ac, char* av[]) {
       if (++i == ac) {
         return false;
       }
-      port_ = static_cast<int16_t>(std::atoi(av[i]));
-      std::printf("port_ = %d\n", port_);
+      port_ = static_cast<uint16_t>(std::atoi(av[i]));
     } else if (strncasecmp(av[i], "--loglevel", 10) == 0) {
       if (++i == ac) {
         return false;
@@ -201,12 +200,9 @@ bool PikiwiDB::Init() {
     g_config.Set("log-level", log_level_, true);
   }
 
-  if (!master_.empty()) {
-    g_config.Set("slaveof", master_ + ' ' + std::to_string(master_port_));
-  }
-
   NewTcpConnectionCallback cb = std::bind(&PikiwiDB::OnNewConnection, this, std::placeholders::_1);
   if (!worker_threads_.Init(g_config.GetIp().c_str(), g_config.GetPort(), cb)) {
+    ERROR("worker_threads Init failed. IP = {} Port = {}", g_config.GetIp(), g_config.GetPort());
     return false;
   }
 
@@ -228,15 +224,13 @@ bool PikiwiDB::Init() {
 
   PSTORE.Init(g_config.GetDataBases());
 
-  // Only if there is no backend, load rdb
-  if (g_config.GetBackEndType() == pikiwidb::kBackEndNone) {
-    LoadDBFromDisk();
-  }
-
+  std::printf("begin to init SlowlogTime\n");
   PSlowLog::Instance().SetThreshold(g_config.GetSlowlogTime());
+  std::printf("begin to init SlowlogMaxLen\n");
   PSlowLog::Instance().SetLogLimit(static_cast<std::size_t>(g_config.GetSlowlogMaxLen()));
 
   // init base loop
+  std::printf("begin to init worker threads\n");
   auto loop = worker_threads_.BaseLoop();
   loop->ScheduleRepeatedly(1000 / pikiwidb::g_config.GetHZ(), PdbCron);
   loop->ScheduleRepeatedly(1000, &PReplication::Cron, &PREPL);
@@ -247,11 +241,14 @@ bool PikiwiDB::Init() {
   }
 
   //  cmd_table_manager_.InitCmdTable();
+  std::printf("init success\n");
 
   return true;
 }
 
 void PikiwiDB::Run() {
+  std::printf("begin to run worker threads\n");
+
   worker_threads_.SetName("pikiwi-main");
   slave_threads_.SetName("pikiwi-slave");
 
@@ -308,7 +305,6 @@ static void closeStd() {
 }
 
 int main(int ac, char* av[]) {
-  [[maybe_unused]] rocksdb::DB* db;
   g_pikiwidb = std::make_unique<PikiwiDB>();
 
   if (!g_pikiwidb->ParseArgs(ac - 1, av + 1)) {

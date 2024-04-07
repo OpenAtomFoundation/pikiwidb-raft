@@ -145,15 +145,15 @@ func StartServer(config string, options map[string]string, delete bool) *Server 
 	b := getBinPath()
 	c := exec.Command(b)
 
-	outfile, err := os.Create("test.log")
-	if err != nil {
-		panic(err)
-	}
-	defer outfile.Close()
+	//outfile, err := os.Create("test.log")
+	//if err != nil {
+	//	panic(err)
+	//}
+	//defer outfile.Close()
 
-	c.Stdout = outfile
-	c.Stderr = outfile
-	log.SetOutput(outfile)
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	log.SetOutput(c.Stdout)
 
 	if len(config) != 0 {
 		t := time.Now().UnixMilli()
@@ -189,7 +189,7 @@ func StartServer(config string, options map[string]string, delete bool) *Server 
 		p, _ = strconv.Atoi(options["port"])
 	}
 
-	err = c.Start()
+	err := c.Start()
 	if err != nil {
 		log.Println("pikiwidb startup failed.", err.Error())
 		return nil
