@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include "config.h"
@@ -19,35 +20,6 @@ constexpr const uint16_t PORT_LIMIT_MIN = 1;
 constexpr const int DBNUMBER_MAX = 16;
 constexpr const int THREAD_MAX = 129;
 constexpr const int ROCKSDB_INSTANCE_NUMBER_MAX = 10;
-
-#define CONFIGADDSTRING(key, rewritable, val_ptr) \
-  config_map_.emplace(key, std::make_unique<StringValue>(key, nullptr, nullptr, rewritable, val_ptr));
-
-//#define CONFIGADDSTRINGWITHSEP(key, rewritable, val_ptr, sep) \
-//  config_map_.emplace(key, std::make_unique<StringValue>(key, nullptr, nullptr, rewritable, val_ptr, sep));
-
-#define CONFIGADDSTRINGWITHFUNC(key, checkfun, prefun, rewritable, val_ptr) \
-  config_map_.emplace(key, std::make_unique<StringValue>(key, checkfun, prefun, rewritable, val_ptr));
-
-//#define CONFIGADDBOOL(key, rewritable, val_ptr) \
-//  config_map_.emplace(key, std::make_unique<BoolValue>(key, var, nullptr, nullptr, rewritable, val_ptr));
-
-#define CONFIGADDBOOLWITHFUNC(key, checkfun, prefun, rewritable, val_ptr) \
-  config_map_.emplace(key, std::make_unique<BoolValue>(key, checkfun, prefun, rewritable, val_ptr));
-
-#define CONFIGADDNUMBER(type, key, rewritable, val_ptr) \
-  config_map_.emplace(key, std::make_unique<NumberValue<type>>(key, nullptr, nullptr, rewritable, val_ptr));
-
-#define CONFIGADDNUMBERWITHLIMIT(type, key, rewritable, val_ptr, min, max) \
-  config_map_.emplace(key, std::make_unique<NumberValue<type>>(key, nullptr, nullptr, rewritable, val_ptr, min, max));
-
-//#define CONFIGADDNUMBERWITHFUNC(type, key, checkfun, prefun, rewritable, val_ptr) \
-//  config_map_.emplace(key,                                                               \
-//                      std::make_unique<NumberValue<type>>(key, checkfun, prefun, rewritable, val_ptr));
-//
-// #define CONFIGADDNUMBERWITHFUNCANDLIMIT(type, key, checkfun, prefun, rewritable, val_ptr, min, max) \
-//  config_map_.emplace(key,                                                               \
-//                      std::make_unique<NumberValue<type>>(key, checkfun, prefun, rewritable, val_ptr, min, max));
 
 // preprocess func
 static void EraseQuotes(std::string& str) {
@@ -116,8 +88,10 @@ bool BoolValue::SetValue(const std::string& value) {
 template <typename T>
 bool NumberValue<T>::SetValue(const std::string& value) {
   T v;
-  std::istringstream iss(value);
-  iss >> v;
+  auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.length(), v);
+  if (ec != std::errc()) {
+    return false;
+  }
   if (v < value_min_) {
     v = value_min_;
   }
@@ -130,31 +104,31 @@ bool NumberValue<T>::SetValue(const std::string& value) {
 
 PConfig::PConfig() {
   {
-    CONFIGADDBOOLWITHFUNC("daemonize", &CheckYesNo, &EraseQuotes, false, &daemonize);
-    CONFIGADDSTRING("ip", false, std::vector<std::string*>{&ip})
-    CONFIGADDNUMBERWITHLIMIT(uint16_t, "port", false, &port, PORT_LIMIT_MIN, PORT_LIMIT_MAX);
-    CONFIGADDNUMBER(uint32_t, "timeout", true, &timeout_);
-    CONFIGADDSTRING("db-path", false, std::vector<std::string*>{&dbpath});
-    CONFIGADDSTRINGWITHFUNC("loglevel", &CheckLogLevel, nullptr, true, std::vector<std::string*>{&loglevel});
-    CONFIGADDSTRING("logfile", true, std::vector<std::string*>{&logdir});
-    CONFIGADDNUMBERWITHLIMIT(size_t, "databases", false, &databases, 1, DBNUMBER_MAX);
-    CONFIGADDSTRING("requirepass", true, std::vector<std::string*>{&password_})
-    CONFIGADDNUMBER(uint32_t, "maxclients", true, &maxclients_);
-    CONFIGADDNUMBERWITHLIMIT(uint32_t, "worker-threads", false, &worker_threads_num, 1, THREAD_MAX);
-    CONFIGADDNUMBERWITHLIMIT(uint32_t, "slave-threads", false, &worker_threads_num, 1, THREAD_MAX);
-    CONFIGADDNUMBER(uint32_t, "slowlog-log-slower-than", true, &slowlogtime_);
-    CONFIGADDNUMBER(uint32_t, "slowlog-max-len", true, &slowlogmaxlen_);
-    CONFIGADDNUMBERWITHLIMIT(size_t, "db-instance-num", true, &db_instance_num, 1, ROCKSDB_INSTANCE_NUMBER_MAX);
-    CONFIGADDNUMBERWITHLIMIT(int32_t, "fast-cmd-threads-num", false, &fast_cmd_threads_num_, 1, THREAD_MAX);
-    CONFIGADDNUMBERWITHLIMIT(int32_t, "slow-cmd-threads-num", false, &slow_cmd_threads_num_, 1, THREAD_MAX);
-    CONFIGADDNUMBER(uint64_t, "max-client-response-size", true, &max_client_response_size_);
-    CONFIGADDSTRING("runid", false, std::vector<std::string*>{&runid})
+    AddBool("daemonize", &CheckYesNo, &EraseQuotes, false, &daemonize);
+    AddString("ip", false, {&ip});
+    AddNumberWihLimit<uint16_t>("port", false, &port, PORT_LIMIT_MIN, PORT_LIMIT_MAX);
+    AddNumber("timeout", true, &timeout_);
+    AddString("db-path", false, std::vector<std::string*>{&dbpath});
+    AddStrinWithFunc("loglevel", &CheckLogLevel, nullptr, true, std::vector<std::string*>{&loglevel});
+    AddString("logfile", true, std::vector<std::string*>{&logdir});
+    AddNumberWihLimit<size_t>("databases", false, &databases, 1, DBNUMBER_MAX);
+    AddString("requirepass", true, std::vector<std::string*>{&password_});
+    AddNumber("maxclients", true, &maxclients_);
+    AddNumberWihLimit<uint32_t>("worker-threads", false, &worker_threads_num, 1, THREAD_MAX);
+    AddNumberWihLimit<uint32_t>("slave-threads", false, &worker_threads_num, 1, THREAD_MAX);
+    AddNumber("slowlog-log-slower-than", true, &slowlogtime_);
+    AddNumber("slowlog-max-len", true, &slowlogmaxlen_);
+    AddNumberWihLimit<size_t>("db-instance-num", true, &db_instance_num, 1, ROCKSDB_INSTANCE_NUMBER_MAX);
+    AddNumberWihLimit<int32_t>("fast-cmd-threads-num", false, &fast_cmd_threads_num_, 1, THREAD_MAX);
+    AddNumberWihLimit<int32_t>("slow-cmd-threads-num", false, &slow_cmd_threads_num_, 1, THREAD_MAX);
+    AddNumber("max-client-response-size", true, &max_client_response_size_);
+    AddString("runid", false, std::vector<std::string*>{&runid});
   }
 
   // rocksdb config
   {
-    CONFIGADDNUMBER(uint64_t, "rocksdb-ttl-second", true, &rocksdb_ttl_second_);
-    CONFIGADDNUMBER(uint64_t, "rocksdb-periodic-second", true, &rocksdb_periodic_second_);
+    AddNumber("rocksdb-ttl-second", true, &rocksdb_ttl_second_);
+    AddNumber("rocksdb-periodic-second", true, &rocksdb_periodic_second_);
   }
 }
 

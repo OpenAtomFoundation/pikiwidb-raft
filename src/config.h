@@ -187,6 +187,26 @@ class PConfig {
     return masterPort_;
   }
 
+ private:
+  inline void AddString(const std::string& key, bool rewritable, std::vector<std::string*> values_ptr_vector) {
+    config_map_.emplace(key, std::make_unique<StringValue>(key, nullptr, nullptr, rewritable, values_ptr_vector));
+  }
+  inline void AddStrinWithFunc(const std::string& key, CheckFunc checkfunc, PreProcessFunc prefunc, bool rewritable, std::vector<std::string*> values_ptr_vector) {
+    config_map_.emplace(key, std::make_unique<StringValue>(key, checkfunc, prefunc, rewritable, values_ptr_vector));
+  }
+  inline void AddBool(const std::string& key, CheckFunc checkfunc, PreProcessFunc prefunc, bool rewritable, bool* value_ptr) {
+    config_map_.emplace(key, std::make_unique<BoolValue>(key, checkfunc, prefunc, rewritable, value_ptr));
+  }
+  template <typename T>
+  inline void AddNumber(const std::string& key, bool rewritable, T* value_ptr) {
+    config_map_.emplace(key, std::make_unique<NumberValue<T>>(key, nullptr, nullptr, rewritable, value_ptr));
+  }
+  template <typename T>
+  inline void AddNumberWihLimit(const std::string& key, bool rewritable, T* value_ptr, T min, T max) {
+    config_map_.emplace(key, std::make_unique<NumberValue<T>>(key, nullptr, nullptr, rewritable, value_ptr, min, max));
+  }
+
+
  public:
   // read only
   bool daemonize = false;
@@ -213,6 +233,7 @@ class PConfig {
   uint32_t slowlogtime_ = 1000;   // 1000 microseconds
   uint32_t slowlogmaxlen_ = 128;  // 128
   std::string masterIp_;
+  std::string test;
   uint16_t masterPort_;  // replication
   std::string masterauth_;
   std::string includefile_;       // the template config
