@@ -15,11 +15,11 @@
 
 namespace pikiwidb {
 
-constexpr const uint16_t PORT_LIMIT_MAX = 65535;
-constexpr const uint16_t PORT_LIMIT_MIN = 1;
-constexpr const int DBNUMBER_MAX = 16;
-constexpr const int THREAD_MAX = 129;
-constexpr const int ROCKSDB_INSTANCE_NUMBER_MAX = 10;
+constexpr uint16_t PORT_LIMIT_MAX = 65535;
+constexpr uint16_t PORT_LIMIT_MIN = 1;
+constexpr int DBNUMBER_MAX = 16;
+constexpr int THREAD_MAX = 129;
+constexpr int ROCKSDB_INSTANCE_NUMBER_MAX = 10;
 
 // preprocess func
 static void EraseQuotes(std::string& str) {
