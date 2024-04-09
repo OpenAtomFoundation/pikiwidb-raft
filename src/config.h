@@ -213,6 +213,7 @@ class PConfig {
   uint32_t slowlogtime_ = 1000;   // 1000 microseconds
   uint32_t slowlogmaxlen_ = 128;  // 128
   std::string masterIp_;
+  std::string test;
   uint16_t masterPort_;  // replication
   std::string masterauth_;
   std::string includefile_;       // the template config
@@ -222,6 +223,9 @@ class PConfig {
   uint64_t max_client_response_size_ = 1073741824;
   uint64_t rocksdb_ttl_second_ = 604800;
   uint64_t rocksdb_periodic_second_ = 259200;
+
+  std::string hello_ = "h";
+  std::string world_ = "w";
 
   ConfigParser parser_;
   ConfigMap config_map_;

@@ -157,13 +157,10 @@ bool PikiwiDB::Init() {
 
   PSTORE.Init(g_config.databases);
 
-  std::printf("begin to init SlowlogTime\n");
   PSlowLog::Instance().SetThreshold(g_config.GetSlowlogTime());
-  std::printf("begin to init SlowlogMaxLen\n");
   PSlowLog::Instance().SetLogLimit(static_cast<std::size_t>(g_config.GetSlowlogMaxLen()));
 
   // init base loop
-  std::printf("begin to init worker threads\n");
   auto loop = worker_threads_.BaseLoop();
   loop->ScheduleRepeatedly(1000, &PReplication::Cron, &PREPL);
 
@@ -173,14 +170,11 @@ bool PikiwiDB::Init() {
   }
 
   //  cmd_table_manager_.InitCmdTable();
-  std::printf("init success\n");
 
   return true;
 }
 
 void PikiwiDB::Run() {
-  std::printf("begin to run worker threads\n");
-
   worker_threads_.SetName("pikiwi-main");
   slave_threads_.SetName("pikiwi-slave");
 
