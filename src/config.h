@@ -23,12 +23,6 @@ namespace pikiwidb {
 using CheckFunc = std::function<bool(const std::string&)>;
 using PreProcessFunc = std::function<void(std::string&)>;
 
-enum BackEndType {
-  kBackEndNone = 0,
-  kBackEndRocksDB = 1,
-  kBackEndMax = 2,
-};
-
 class BaseValue {
  public:
   BaseValue(const std::string& key, CheckFunc check_func_ptr, PreProcessFunc preprocess_func_ptr,
@@ -66,31 +60,34 @@ class BaseValue {
 
 class StringValue : public BaseValue {
  public:
-  StringValue(const std::string& key, std::string value, CheckFunc check_func_ptr, PreProcessFunc preprocess_func_ptr,
-              bool rewritable, std::string* value_ptr)
-      : BaseValue(key, check_func_ptr, preprocess_func_ptr, rewritable), value_(value_ptr) {
-    *value_ = std::move(value);
-  };
+  StringValue(const std::string& key, CheckFunc check_func_ptr, PreProcessFunc preprocess_func_ptr, bool rewritable,
+              const std::vector<std::string*>& value_ptr_vec, char seperator = ' ')
+      : BaseValue(key, check_func_ptr, preprocess_func_ptr, rewritable), values_(value_ptr_vec), seperator_(seperator) {
+    assert(values_.size() >= 1);
+  }
   virtual ~StringValue() = default;
 
-  virtual std::string Value() const override { return *value_; };
+  virtual std::string Value() const override { return MergeString(values_, seperator_); };
 
  private:
   virtual bool SetValue(const std::string&) override;
 
-  std::string* value_ = nullptr;
+  std::vector<std::string*> values_;
+  char seperator_;
 };
 
 template <typename T>
 class NumberValue : public BaseValue {
  public:
-  NumberValue(const std::string& key, T value, CheckFunc check_func_ptr, PreProcessFunc preprocess_func_ptr,
-              bool rewritable, T* value_ptr, T min = std::numeric_limits<T>::min(),
-              T max = std::numeric_limits<T>::max())
+  NumberValue(const std::string& key, CheckFunc check_func_ptr, PreProcessFunc preprocess_func_ptr, bool rewritable,
+              T* value_ptr, T min = std::numeric_limits<T>::min(), T max = std::numeric_limits<T>::max())
       : BaseValue(key, check_func_ptr, preprocess_func_ptr, rewritable),
         value_(value_ptr),
-        value_max_(max),
-        value_min_(min){};
+        value_min_(min),
+        value_max_(max) {
+    assert(value_ != nullptr);
+    assert(value_min_ <= value_max_);
+  };
 
   virtual std::string Value() const override { return std::to_string(*value_); }
 
@@ -98,16 +95,16 @@ class NumberValue : public BaseValue {
   virtual bool SetValue(const std::string&) override;
 
   T* value_;
-  T value_max_;
   T value_min_;
+  T value_max_;
 };
 
 class BoolValue : public BaseValue {
  public:
-  BoolValue(const std::string& key, bool value, CheckFunc check_func_ptr, PreProcessFunc preprocess_func_ptr,
-            bool rewritable, bool* value_ptr)
+  BoolValue(const std::string& key, CheckFunc check_func_ptr, PreProcessFunc preprocess_func_ptr, bool rewritable,
+            bool* value_ptr)
       : BaseValue(key, check_func_ptr, preprocess_func_ptr, rewritable), value_(value_ptr) {
-    *value_ = std::move(value);
+    assert(value_ != nullptr);
   };
 
   virtual std::string Value() const override { return *value_ ? "yes" : "no"; };
@@ -130,49 +127,9 @@ class PConfig {
   bool Set(std::string, const std::string&, bool force = false);
 
  public:
-  bool GetDaemonize() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return daemonize_;
-  }
-
-  std::string GetPidfile() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return pidfile_;
-  }
-
-  std::string GetIp() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return ip_;
-  }
-
-  uint16_t GetPort() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return port_;
-  }
-
   int GetTimeout() const {
     std::shared_lock<std::shared_mutex> SharedLock(mutex_);
     return timeout_;
-  }
-
-  std::string GetDBPath() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return dbpath_;
-  }
-
-  std::string GetLogLevel() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return loglevel_;
-  }
-
-  std::string GetLogDir() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return logdir_;
-  }
-
-  int GetDataBases() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return databases_;
   }
 
   std::string GetPassword() const {
@@ -190,16 +147,6 @@ class PConfig {
     return slowlogmaxlen_;
   }
 
-  int GetWorkerThreadsNumber() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return worker_threads_num_;
-  }
-
-  int GetSlaveThreadsNumber() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return slave_threads_num_;
-  }
-
   int GetFastCmdThreadsNumber() const {
     std::shared_lock<std::shared_mutex> SharedLock(mutex_);
     return fast_cmd_threads_num_;
@@ -213,11 +160,6 @@ class PConfig {
   int64_t GetMaxClientResponseSize() const {
     std::shared_lock<std::shared_mutex> SharedLock(mutex_);
     return max_client_response_size_;
-  }
-
-  int GetDBInstanceNumber() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return db_instance_num_;
   }
 
   uint64_t GetRocksDBTTLSeconds() const {
@@ -235,11 +177,6 @@ class PConfig {
     return masterauth_;
   }
 
-  int GetBackEndType() {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return backend_;
-  }
-
   std::string GetMasterIP() {
     std::shared_lock<std::shared_mutex> SharedLock(mutex_);
     return masterIp_;
@@ -250,84 +187,39 @@ class PConfig {
     return masterPort_;
   }
 
-  int GetHZ() {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return hz_;
-  }
-
-  std::string GetRDBFullName() {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return rdbfullname_;
-  }
+ public:
+  // read only
+  bool daemonize = false;
+  std::string pidfile = "./pikiwidb.pid";
+  std::string ip = "127.0.0.1";
+  uint16_t port = 9221;
+  std::string dbpath = "./db/";
+  std::string logdir = "stdout";  // the log directory, differ from redis
+  std::string loglevel = "warning";
+  std::string runid;
+  size_t databases = 3;
+  uint32_t worker_threads_num = 2;
+  uint32_t slave_threads_num = 2;
+  size_t db_instance_num = 3;
 
  private:
+  // rewritable
   mutable std::shared_mutex mutex_;
-  bool daemonize_ = false;
-  PString pidfile_ = "./pikiwidb.pid";
-
-  PString ip_ = "127.0.0.1";
-  uint16_t port_ = 9221;
-
-  int timeout_ = 0;
-
-  PString dbpath_ = "./db/";
-
-  PString loglevel_ = "warning";
-  PString logdir_ = "stdout";  // the log directory, differ from redis
-
-  int databases_ = 3;
-
+  uint32_t timeout_ = 0;
   // auth
-  PString password_ = "";
-
-  std::map<PString, PString> aliases_;
-
-  // @ rdb
-  // save seconds changes
-  int saveseconds_;
-  int savechanges_;
-  bool rdbcompression_;  // yes
-  bool rdbchecksum_;     // yes
-  PString rdbfullname_;  // ./dump.rdb
-
-  int maxclients_ = 10000;  // 10000
-
-  int slowlogtime_ = 1000;   // 1000 microseconds
-  int slowlogmaxlen_ = 128;  // 128
-
-  int hz_;  // 10  [1,500]
-
-  PString masterIp_;
+  std::string password_ = "";
+  std::map<std::string, std::string> aliases_;
+  uint32_t maxclients_ = 10000;   // 10000
+  uint32_t slowlogtime_ = 1000;   // 1000 microseconds
+  uint32_t slowlogmaxlen_ = 128;  // 128
+  std::string masterIp_;
   uint16_t masterPort_;  // replication
-  PString masterauth_;
-
-  PString runid_;
-
-  PString includefile_;  // the template config
-
+  std::string masterauth_;
+  std::string includefile_;       // the template config
   std::vector<PString> modules_;  // modules
-
-  // use redis as cache, level db as backup
-  uint64_t maxmemory_;    // default 2GB
-  int maxmemorySamples_;  // default 5
-  bool noeviction_;       // default true
-
-  // THREADED I/O
-  int worker_threads_num_ = 2;
-
-  // THREADED SLAVE
-  int slave_threads_num_ = 2;
-
-  int fast_cmd_threads_num_ = 12;
-  int slow_cmd_threads_num_ = 12;
-
-  int backend_ = 1;  // enum BackEndType
-  PString backendPath_;
-  int backendHz_;  // the frequency of dump to backend
-
-  int64_t max_client_response_size_ = 1073741824;
-
-  int db_instance_num_ = 3;
+  int32_t fast_cmd_threads_num_ = 12;
+  int32_t slow_cmd_threads_num_ = 12;
+  uint64_t max_client_response_size_ = 1073741824;
   uint64_t rocksdb_ttl_second_ = 604800;
   uint64_t rocksdb_periodic_second_ = 259200;
 

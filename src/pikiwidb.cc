@@ -15,7 +15,6 @@
 #include <thread>
 
 #include "log.h"
-#include "rocksdb/db.h"
 
 #include "client.h"
 #include "store.h"
@@ -99,72 +98,6 @@ bool PikiwiDB::ParseArgs(int ac, char* av[]) {
   return true;
 }
 
-static void PdbCron() {
-  //  using namespace pikiwidb;
-  //
-  //  if (g_qdbPid != -1) {
-  //    return;
-  //  }
-  //
-  //  if (Now() > (g_lastPDBSave + static_cast<unsigned>(g_config.saveseconds)) * 1000UL)
-  //  {
-  //    int ret = fork();
-  //    if (ret == 0) {
-  //      {
-  //        PDBSaver qdb;
-  //        qdb.Save(g_config.rdbfullname.c_str());
-  //        std::cerr << "ServerCron child save rdb done, exiting child\n";
-  //      }  //  make qdb to be destructed before exit
-  //      _exit(0);
-  //    } else if (ret == -1) {
-  //      ERROR("fork qdb save process failed");
-  //    } else {
-  //      g_qdbPid = ret;
-  //    }
-  //
-  //    INFO("ServerCron save rdb file {}", g_config.rdbfullname);
-  //  }
-}
-
-static void LoadDBFromDisk() {
-  //  using namespace pikiwidb;
-  //
-  //  PDBLoader loader;
-  //  loader.Load(g_config.rdbfullname.c_str());
-  //}
-  //
-  // static void CheckChild() {
-  //  using namespace pikiwidb;
-  //
-  //  if (g_qdbPid == -1) {
-  //    return;
-  //  }
-  //
-  //  int statloc = 0;
-  //  pid_t pid = wait3(&statloc, WNOHANG, nullptr);
-  //
-  //  if (pid != 0 && pid != -1) {
-  //    int exit = WEXITSTATUS(statloc);
-  //    int signal = 0;
-  //
-  //    if (WIFSIGNALED(statloc)) {
-  //      signal = WTERMSIG(statloc);
-  //    }
-  //
-  //    if (pid == g_qdbPid) {
-  //      PDBSaver::SaveDoneHandler(exit, signal);
-  //      if (PREPL.IsBgsaving()) {
-  //        PREPL.OnRdbSaveDone();
-  //      } else {
-  //        PREPL.TryBgsave();
-  //      }
-  //    } else {
-  //      ERROR("{} is not rdb process", pid);
-  //      assert(!!!"Is there any back process except rdb?");
-  //    }
-  //  }
-}
-
 void PikiwiDB::OnNewConnection(pikiwidb::TcpConnection* obj) {
   INFO("New connection from {}:{}", obj->GetPeerIP(), obj->GetPeerPort());
 
@@ -201,19 +134,19 @@ bool PikiwiDB::Init() {
   }
 
   NewTcpConnectionCallback cb = std::bind(&PikiwiDB::OnNewConnection, this, std::placeholders::_1);
-  if (!worker_threads_.Init(g_config.GetIp().c_str(), g_config.GetPort(), cb)) {
-    ERROR("worker_threads Init failed. IP = {} Port = {}", g_config.GetIp(), g_config.GetPort());
+  if (!worker_threads_.Init(g_config.ip.c_str(), g_config.port, cb)) {
+    ERROR("worker_threads Init failed. IP = {} Port = {}", g_config.ip, g_config.port);
     return false;
   }
 
-  auto num = g_config.GetWorkerThreadsNumber() + g_config.GetSlaveThreadsNumber();
+  auto num = g_config.worker_threads_num + g_config.slave_threads_num;
   auto kMaxWorkerNum = IOThreadPool::GetMaxWorkerNum();
   if (num > kMaxWorkerNum) {
     ERROR("number of threads can't exceeds {}, now is {}", kMaxWorkerNum, num);
     return false;
   }
-  worker_threads_.SetWorkerNum(static_cast<size_t>(g_config.GetWorkerThreadsNumber()));
-  slave_threads_.SetWorkerNum(static_cast<size_t>(g_config.GetSlaveThreadsNumber()));
+  worker_threads_.SetWorkerNum(static_cast<size_t>(g_config.worker_threads_num));
+  slave_threads_.SetWorkerNum(static_cast<size_t>(g_config.slave_threads_num));
 
   // now we only use fast cmd thread pool
   auto status = cmd_threads_.Init(g_config.GetFastCmdThreadsNumber(), 0, "pikiwidb-cmd");
@@ -222,7 +155,7 @@ bool PikiwiDB::Init() {
     return false;
   }
 
-  PSTORE.Init(g_config.GetDataBases());
+  PSTORE.Init(g_config.databases);
 
   std::printf("begin to init SlowlogTime\n");
   PSlowLog::Instance().SetThreshold(g_config.GetSlowlogTime());
@@ -232,7 +165,6 @@ bool PikiwiDB::Init() {
   // init base loop
   std::printf("begin to init worker threads\n");
   auto loop = worker_threads_.BaseLoop();
-  loop->ScheduleRepeatedly(1000 / pikiwidb::g_config.GetHZ(), PdbCron);
   loop->ScheduleRepeatedly(1000, &PReplication::Cron, &PREPL);
 
   // master ip
@@ -322,10 +254,10 @@ int main(int ac, char* av[]) {
   // output logo to console
   char logo[512] = "";
   snprintf(logo, sizeof logo - 1, pikiwidbLogo, KPIKIWIDB_VERSION, static_cast<int>(sizeof(void*)) * 8,
-           static_cast<int>(pikiwidb::g_config.GetPort()));
+           static_cast<int>(pikiwidb::g_config.port));
   std::cout << logo;
 
-  if (pikiwidb::g_config.GetDaemonize()) {
+  if (pikiwidb::g_config.daemonize) {
     daemonize();
   }
 
@@ -333,7 +265,7 @@ int main(int ac, char* av[]) {
   SignalSetup();
   InitLogs();
 
-  if (pikiwidb::g_config.GetDaemonize()) {
+  if (pikiwidb::g_config.daemonize) {
     closeStd();
   }
 

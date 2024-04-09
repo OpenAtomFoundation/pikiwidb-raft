@@ -78,6 +78,8 @@ PParseResult GetIntUntilCRLF(const char*& ptr, std::size_t nBytes, int& val);
 
 std::vector<PString> SplitString(const PString& str, char seperator);
 
+std::string MergeString(const std::vector<std::string*> values, char seperator);
+
 // The defer class for C++11
 class ExecuteOnScopeExit {
  public:

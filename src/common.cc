@@ -199,4 +199,13 @@ std::vector<PString> SplitString(const PString& str, char seperator) {
   return results;
 }
 
+std::string MergeString(const std::vector<std::string*> values, char seperator) {
+  std::string result(*values.at(0));
+  for (int i = 0; i < values.size() - 1; i++) {
+    result += seperator;
+    result += *values.at(i + 1);
+  }
+  return result;
+}
+
 }  // namespace pikiwidb

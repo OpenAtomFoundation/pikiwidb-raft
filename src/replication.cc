@@ -60,7 +60,7 @@ void PReplication::OnRdbSaveDone() {
     if (cli->GetSlaveInfo()->state == kPSlaveStateWaitBgsaveEnd) {
       cli->GetSlaveInfo()->state = kPSlaveStateOnline;
 
-      if (!rdb.IsOpen() && !rdb.Open(g_config.GetRDBFullName().c_str())) {
+      if (!rdb.IsOpen()) {
         ERROR("can not open rdb when replication\n");
         return;  // fatal error;
       }
@@ -175,7 +175,7 @@ void PReplication::Cron() {
   if (masterInfo_.addr.IsValid()) {
     switch (masterInfo_.state) {
       case kPReplStateNone: {
-        if (masterInfo_.addr.GetIP() == g_config.GetIp() && masterInfo_.addr.GetPort() == g_config.GetPort()) {
+        if (masterInfo_.addr.GetIP() == g_config.ip && masterInfo_.addr.GetPort() == g_config.port) {
           ERROR("Fix config, master addr is self addr!");
           assert(!!!"wrong config for master addr");
         }
@@ -232,11 +232,11 @@ void PReplication::Cron() {
         } else if (master->GetAuth()) {
           // send replconf
           char req[128];
-          auto len = snprintf(req, sizeof req - 1, "replconf listening-port %hu\r\n", g_config.GetPort());
+          auto len = snprintf(req, sizeof req - 1, "replconf listening-port %hu\r\n", g_config.port);
           master->SendPacket(req, len);
           masterInfo_.state = kPReplStateWaitReplconf;
 
-          INFO("Send replconf listening-port {}", g_config.GetPort());
+          INFO("Send replconf listening-port {}", g_config.port);
         } else {
           WARN("Haven't auth to master yet, or check masterauth password");
         }

@@ -20,17 +20,37 @@ constexpr const int DBNUMBER_MAX = 16;
 constexpr const int THREAD_MAX = 129;
 constexpr const int ROCKSDB_INSTANCE_NUMBER_MAX = 10;
 
-#define CONFIGADDSTRING(key, var, checkfun, prefun, rewritable, val_ptr) \
-  config_map_.emplace(key, std::make_unique<StringValue>(key, var, checkfun, prefun, rewritable, val_ptr));
+#define CONFIGADDSTRING(key, rewritable, val_ptr) \
+  config_map_.emplace(key, std::make_unique<StringValue>(key, nullptr, nullptr, rewritable, val_ptr));
 
-#define CONFIGADDBOOL(key, var, checkfun, prefun, rewritable, val_ptr) \
-  config_map_.emplace(key, std::make_unique<BoolValue>(key, var, checkfun, prefun, rewritable, val_ptr));
+//#define CONFIGADDSTRINGWITHSEP(key, rewritable, val_ptr, sep) \
+//  config_map_.emplace(key, std::make_unique<StringValue>(key, nullptr, nullptr, rewritable, val_ptr, sep));
 
-#define CONFIGADDNUMBER(type, key, var, checkfun, prefun, rewritable, val_ptr, min, max) \
-  config_map_.emplace(key,                                                               \
-                      std::make_unique<NumberValue<type>>(key, var, checkfun, prefun, rewritable, val_ptr, min, max));
+#define CONFIGADDSTRINGWITHFUNC(key, checkfun, prefun, rewritable, val_ptr) \
+  config_map_.emplace(key, std::make_unique<StringValue>(key, checkfun, prefun, rewritable, val_ptr));
 
-static void EraseQuotes(PString& str) {
+//#define CONFIGADDBOOL(key, rewritable, val_ptr) \
+//  config_map_.emplace(key, std::make_unique<BoolValue>(key, var, nullptr, nullptr, rewritable, val_ptr));
+
+#define CONFIGADDBOOLWITHFUNC(key, checkfun, prefun, rewritable, val_ptr) \
+  config_map_.emplace(key, std::make_unique<BoolValue>(key, checkfun, prefun, rewritable, val_ptr));
+
+#define CONFIGADDNUMBER(type, key, rewritable, val_ptr) \
+  config_map_.emplace(key, std::make_unique<NumberValue<type>>(key, nullptr, nullptr, rewritable, val_ptr));
+
+#define CONFIGADDNUMBERWITHLIMIT(type, key, rewritable, val_ptr, min, max) \
+  config_map_.emplace(key, std::make_unique<NumberValue<type>>(key, nullptr, nullptr, rewritable, val_ptr, min, max));
+
+//#define CONFIGADDNUMBERWITHFUNC(type, key, checkfun, prefun, rewritable, val_ptr) \
+//  config_map_.emplace(key,                                                               \
+//                      std::make_unique<NumberValue<type>>(key, checkfun, prefun, rewritable, val_ptr));
+//
+// #define CONFIGADDNUMBERWITHFUNCANDLIMIT(type, key, checkfun, prefun, rewritable, val_ptr, min, max) \
+//  config_map_.emplace(key,                                                               \
+//                      std::make_unique<NumberValue<type>>(key, checkfun, prefun, rewritable, val_ptr, min, max));
+
+// preprocess func
+static void EraseQuotes(std::string& str) {
   // convert "hello" to  hello
   if (str.size() < 2) {
     return;
@@ -41,7 +61,19 @@ static void EraseQuotes(PString& str) {
   }
 }
 
-extern std::vector<PString> SplitString(const PString& str, char seperator);
+// check func
+static bool CheckYesNo(const std::string& value) {
+  return pstd::StringEqualCaseInsensitive(value, "yes") || pstd::StringEqualCaseInsensitive(value, "no");
+}
+
+static bool CheckLogLevel(const std::string& value) {
+  return pstd::StringEqualCaseInsensitive(value, "debug") || pstd::StringEqualCaseInsensitive(value, "verbose") ||
+         pstd::StringEqualCaseInsensitive(value, "notice") || pstd::StringEqualCaseInsensitive(value, "warning");
+}
+
+extern std::vector<std::string> SplitString(const std::string& str, char seperator);
+
+extern std::string MergeString(const std::vector<std::string*> values, char seperator);
 
 PConfig g_config;
 
@@ -59,7 +91,13 @@ bool BaseValue::Set(std::string value, bool force) {
 }
 
 bool StringValue::SetValue(const std::string& value) {
-  *value_ = value;
+  auto values = SplitString(value, seperator_);
+  if (values.size() != values_.size()) {
+    return false;
+  }
+  for (int i = 0; i < values_.size(); i++) {
+    *values_[i] = std::move(values[i]);
+  }
   return true;
 }
 
@@ -91,68 +129,32 @@ bool NumberValue<T>::SetValue(const std::string& value) {
 }
 
 PConfig::PConfig() {
-  // preprocess func
-  auto EraseQuotes = [](std::string& value) {
-    if (value.size() < 2) {
-      return;
-    }
-    if (value[0] == '"' && value[value.size() - 1] == '"') {
-      value.erase(value.begin());
-      value.pop_back();
-    }
-  };
-
-  // check func
-  auto CheckYesNo = [](const std::string& value) -> bool {
-    if (pstd::StringEqualCaseInsensitive(value, "yes") || pstd::StringEqualCaseInsensitive(value, "no")) {
-      return true;
-    }
-    return false;
-  };
-  auto CheckLogLevel = [](const std::string& value) -> bool {
-    if (pstd::StringEqualCaseInsensitive(value, "debug") || pstd::StringEqualCaseInsensitive(value, "verbose") ||
-        pstd::StringEqualCaseInsensitive(value, "notice") || pstd::StringEqualCaseInsensitive(value, "warning")) {
-      return true;
-    }
-    return false;
-  };
-
   {
-    CONFIGADDBOOL("daemonize", daemonize_, CheckYesNo, EraseQuotes, false, &daemonize_);
-    CONFIGADDSTRING("ip", ip_, nullptr, nullptr, false, &ip_)
-    CONFIGADDNUMBER(uint16_t, "port", port_, nullptr, nullptr, false, &port_, PORT_LIMIT_MIN, PORT_LIMIT_MAX);
-    CONFIGADDNUMBER(int, "timeout", timeout_, nullptr, nullptr, true, &timeout_, -1, INT32_MAX);
-    CONFIGADDSTRING("db-path", dbpath_, nullptr, nullptr, false, &dbpath_);
-    CONFIGADDSTRING("loglevel", loglevel_, CheckLogLevel, nullptr, true, &loglevel_);
-    CONFIGADDSTRING("logfile", logdir_, nullptr, nullptr, true, &logdir_);
-    CONFIGADDNUMBER(int, "databases", databases_, nullptr, nullptr, false, &databases_, 0, DBNUMBER_MAX);
-    CONFIGADDSTRING("requirepass", password_, nullptr, nullptr, true, &password_)
-    CONFIGADDNUMBER(int, "maxclients", maxclients_, nullptr, nullptr, true, &maxclients_, 0, INT32_MAX);
-    CONFIGADDNUMBER(int, "worker-threads", worker_threads_num_, nullptr, nullptr, false, &worker_threads_num_, 0,
-                    THREAD_MAX);
-    CONFIGADDNUMBER(int, "slave-threads", worker_threads_num_, nullptr, nullptr, false, &worker_threads_num_, 0,
-                    THREAD_MAX);
-    CONFIGADDNUMBER(int, "slowlog-log-slower-than", slowlogtime_, nullptr, nullptr, true, &slowlogtime_, INT32_MIN,
-                    INT32_MAX);
-    CONFIGADDNUMBER(int, "slowlog-max-len", slowlogmaxlen_, nullptr, nullptr, true, &slowlogmaxlen_, 0, INT32_MAX);
-    CONFIGADDNUMBER(int, "db-instance-num", db_instance_num_, nullptr, nullptr, true, &db_instance_num_, 0,
-                    ROCKSDB_INSTANCE_NUMBER_MAX);
-    CONFIGADDNUMBER(int, "fast-cmd-threads-num", fast_cmd_threads_num_, nullptr, nullptr, false, &fast_cmd_threads_num_,
-                    0, THREAD_MAX);
-    CONFIGADDNUMBER(int, "slow-cmd-threads-num", slow_cmd_threads_num_, nullptr, nullptr, false, &slow_cmd_threads_num_,
-                    0, THREAD_MAX);
-    CONFIGADDNUMBER(int64_t, "max-client-response-size", max_client_response_size_, nullptr, nullptr, true,
-                    &max_client_response_size_, 0, INT64_MAX);
-    CONFIGADDSTRING("runid", runid_, nullptr, nullptr, false, &runid_)
+    CONFIGADDBOOLWITHFUNC("daemonize", &CheckYesNo, &EraseQuotes, false, &daemonize);
+    CONFIGADDSTRING("ip", false, std::vector<std::string*>{&ip})
+    CONFIGADDNUMBERWITHLIMIT(uint16_t, "port", false, &port, PORT_LIMIT_MIN, PORT_LIMIT_MAX);
+    CONFIGADDNUMBER(uint32_t, "timeout", true, &timeout_);
+    CONFIGADDSTRING("db-path", false, std::vector<std::string*>{&dbpath});
+    CONFIGADDSTRINGWITHFUNC("loglevel", &CheckLogLevel, nullptr, true, std::vector<std::string*>{&loglevel});
+    CONFIGADDSTRING("logfile", true, std::vector<std::string*>{&logdir});
+    CONFIGADDNUMBERWITHLIMIT(size_t, "databases", false, &databases, 1, DBNUMBER_MAX);
+    CONFIGADDSTRING("requirepass", true, std::vector<std::string*>{&password_})
+    CONFIGADDNUMBER(uint32_t, "maxclients", true, &maxclients_);
+    CONFIGADDNUMBERWITHLIMIT(uint32_t, "worker-threads", false, &worker_threads_num, 1, THREAD_MAX);
+    CONFIGADDNUMBERWITHLIMIT(uint32_t, "slave-threads", false, &worker_threads_num, 1, THREAD_MAX);
+    CONFIGADDNUMBER(uint32_t, "slowlog-log-slower-than", true, &slowlogtime_);
+    CONFIGADDNUMBER(uint32_t, "slowlog-max-len", true, &slowlogmaxlen_);
+    CONFIGADDNUMBERWITHLIMIT(size_t, "db-instance-num", true, &db_instance_num, 1, ROCKSDB_INSTANCE_NUMBER_MAX);
+    CONFIGADDNUMBERWITHLIMIT(int32_t, "fast-cmd-threads-num", false, &fast_cmd_threads_num_, 1, THREAD_MAX);
+    CONFIGADDNUMBERWITHLIMIT(int32_t, "slow-cmd-threads-num", false, &slow_cmd_threads_num_, 1, THREAD_MAX);
+    CONFIGADDNUMBER(uint64_t, "max-client-response-size", true, &max_client_response_size_);
+    CONFIGADDSTRING("runid", false, std::vector<std::string*>{&runid})
   }
 
   // rocksdb config
   {
-    CONFIGADDNUMBER(uint64_t, "rocksdb-ttl-second", rocksdb_ttl_second_, nullptr, nullptr, true, &rocksdb_ttl_second_,
-                    0, UINT64_MAX);
-    CONFIGADDNUMBER(uint64_t, "rocksdb-periodic-second", rocksdb_periodic_second_, nullptr, nullptr, true,
-                    &rocksdb_periodic_second_, 0, UINT64_MAX);
-    // ....
+    CONFIGADDNUMBER(uint64_t, "rocksdb-ttl-second", true, &rocksdb_ttl_second_);
+    CONFIGADDNUMBER(uint64_t, "rocksdb-periodic-second", true, &rocksdb_periodic_second_);
   }
 }
 
@@ -177,18 +179,6 @@ bool PConfig::LoadFromFile(const std::string& file_name) {
   if (master.size() == 2) {
     masterIp_ = master[0];
     masterPort_ = static_cast<uint16_t>(std::stoi(master[1]));
-  }
-
-  std::vector<PString> saveInfo(SplitString(parser_.GetData<PString>("save"), ' '));
-  if (!saveInfo.empty() && saveInfo.size() != 2) {
-    EraseQuotes(saveInfo[0]);
-    if (!(saveInfo.size() == 1 && saveInfo[0].empty())) {
-      std::cerr << "bad format save rdb interval, bad string " << parser_.GetData<PString>("save") << std::endl;
-      return false;
-    }
-  } else if (!saveInfo.empty()) {
-    saveseconds_ = std::stoi(saveInfo[0]);
-    savechanges_ = std::stoi(saveInfo[1]);
   }
 
   std::vector<PString> alias(SplitString(parser_.GetData<PString>("rename-command"), ' '));

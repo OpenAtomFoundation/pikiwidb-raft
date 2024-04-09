@@ -15,7 +15,7 @@ namespace pikiwidb {
 DB::DB(int db_id, const std::string &db_path) : db_id_(db_id), db_path_(db_path + std::to_string(db_id) + '/') {
   storage::StorageOptions storage_options;
   storage_options.options.create_if_missing = true;
-  storage_options.db_instance_num = g_config.GetDBInstanceNumber();
+  storage_options.db_instance_num = g_config.db_instance_num;
   storage_options.db_id = db_id;
 
   // options for CF
