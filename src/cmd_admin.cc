@@ -5,6 +5,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
+#include "fmt/format.h"
+
 #include "cmd_admin.h"
 #include "store.h"
 #include "braft/raft.h"
@@ -98,7 +100,7 @@ void InfoCmd::DoCmd(PClient* client) {
   } else if (!strcasecmp(cmd.c_str(), "data")) {
     InfoData(client);
   } else {
-    client->SetRes(CmdRes::kErrOther, "ERR the cmd is not supported");
+    client->SetRes(CmdRes::kErrOther, "the cmd is not supported");
   }
 }
 
@@ -131,19 +133,16 @@ void InfoCmd::InfoRaft(PClient* client) {
   }
 
   std::string message("");
-  message += "raft_group_id:" + PRAFT.GetGroupId() + "\r\n";
-  message += "raft_node_id:" + PRAFT.GetNodeId() + "\r\n";
+  message = fmt::format("{}raft_group_id:{}\r\n", message, PRAFT.GetGroupId());
+  message = fmt::format("{}raft_node_id:{}\r\n", message, PRAFT.GetNodeId());
   if (braft::is_active_state(node_status.state)) {
-    message += "raft_state:up\r\n";
+    message = fmt::format("{}raft_state:up\r\n", message);
   } else {
-    message += "raft_state:down\r\n";
-  }    
-  message += "raft_role:" + std::string(braft::state2str(node_status.state)) + "\r\n";
-  // message += "raft_is_voting:" + node_status.is_voting + "\r\n";
-  message += "raft_leader_id:" + node_status.leader_id.to_string() + "\r\n";
-  message += "raft_current_term:" + std::to_string(node_status.term) + "\r\n";
-  // message += "raft_num_nodes:" + std::to_string(node_status.num_nodes) + "\r\n";
-  // message += "raft_num_voting_nodes:" + std::to_string(node_status.num_voting_nodes) + "\r\n";
+    message = fmt::format("{}raft_state:down\r\n", message);
+  }
+  message = fmt::format("{}raft_role:{}\r\n", message, std::string(braft::state2str(node_status.state)));
+  message = fmt::format("{}raft_leader_id:{}\r\n", message, node_status.leader_id.to_string());
+  message = fmt::format("{}raft_current_term:{}\r\n", message, std::to_string(node_status.term));
 
   if (PRAFT.IsLeader()) {
     std::vector<braft::PeerId> peers;
@@ -153,7 +152,7 @@ void InfoCmd::InfoRaft(PClient* client) {
     }
     
     for (int i = 0; i < peers.size(); i++) {
-      message += "raft_node" + std::to_string(i) + ":addr=" + butil::ip2str(peers[i].addr.ip).c_str() + ",port=" + std::to_string(peers[i].addr.port) + "\r\n";
+      message = fmt::format("{}raft_node{}:addr={},port={}\r\n", message, std::to_string(i), butil::ip2str(peers[i].addr.ip).c_str(), std::to_string(peers[i].addr.port));
     }
   }
 
@@ -166,9 +165,9 @@ void InfoCmd::InfoData(PClient* client) {
   }
 
   std::string message("");
-  message += "databases_num:" + std::to_string(pikiwidb::g_config.databases) + "\r\n";
-  message += "rocksdb_num:" + std::to_string(pikiwidb::g_config.db_instance_num) + "\r\n";
-  message += "rockdb_version:" + ROCKSDB_NAMESPACE::GetRocksVersionAsString() + "\r\n";
+  message = fmt::format("{}databases_num:{}\r\n", message, std::to_string(pikiwidb::g_config.databases));
+  message = fmt::format("{}rocksdb_num:{}\r\n", message, std::to_string(pikiwidb::g_config.db_instance_num));
+  message = fmt::format("{}rockdb_version:{}\r\n", message, ROCKSDB_NAMESPACE::GetRocksVersionAsString());
 
   client->AppendString(message);
 }

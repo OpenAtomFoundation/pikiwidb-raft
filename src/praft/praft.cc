@@ -244,6 +244,7 @@ void PRaft::SendNodeRequest(PClient* client) {
       SendNodeRemoveRequest(client);
       break;
     default:
+      client->SetRes(CmdRes::kErrOther, "the command sent to the leader is incorrect");
       break;
   }
 }
