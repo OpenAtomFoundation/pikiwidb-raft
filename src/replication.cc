@@ -13,6 +13,7 @@
 #include "log.h"
 #include "net/util.h"
 #include "pikiwidb.h"
+#include "pstd/pstd_string.h"
 #include "replication.h"
 
 namespace pikiwidb {
@@ -338,7 +339,7 @@ PError replconf(const std::vector<PString>& params, UnboundedBuffer* reply) {
   for (size_t i = 1; i < params.size(); i += 2) {
     if (strncasecmp(params[i].c_str(), "listening-port", 14) == 0) {
       long port;
-      if (!TryStr2Long(params[i + 1].c_str(), params[i + 1].size(), port)) {
+      if (!pstd::String2int(params[i + 1].c_str(), params[i + 1].size(), &port)) {
         ReplyError(kPErrorParam, reply);
         return kPErrorParam;
       }
@@ -429,7 +430,7 @@ PError slaveof(const std::vector<PString>& params, UnboundedBuffer* reply) {
     PREPL.SetMasterAddr(nullptr, 0);
   } else {
     long tmpPort = 0;
-    Strtol(params[2].c_str(), params[2].size(), &tmpPort);
+    pstd::String2int(params[2].c_str(), params[2].size(), &tmpPort);
     unsigned short port = static_cast<unsigned short>(tmpPort);
 
     SocketAddr reqMaster(params[1].c_str(), port);

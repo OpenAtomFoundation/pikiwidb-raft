@@ -455,4 +455,27 @@ void HRandFieldCmd::DoCmd(PClient* client) {
   }
 }
 
+HExistsCmd::HExistsCmd(const std::string& name, int16_t arity)
+    : BaseCmd(name, arity, kCmdFlagsReadonly, kAclCategoryRead | kAclCategoryHash) {}
+
+bool HExistsCmd::DoInitial(PClient* client) {
+  client->SetKey(client->argv_[1]);
+  return true;
+}
+
+void HExistsCmd::DoCmd(PClient* client) {
+  // parse arguments
+  auto& field = client->argv_[2];
+
+  // execute command
+  std::vector<std::string> res;
+  auto s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->HExists(client->Key(), field);
+  if (!s.ok() && !s.IsNotFound()) {
+    return client->SetRes(CmdRes::kErrOther, s.ToString());
+  }
+
+  // reply
+  client->AppendInteger(s.IsNotFound() ? 0 : 1);
+}
+
 }  // namespace pikiwidb

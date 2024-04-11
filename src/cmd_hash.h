@@ -181,4 +181,15 @@ class HRandFieldCmd : public BaseCmd {
   static constexpr std::string_view kWithValueString = "withvalues";
 };
 
+class HExistsCmd : public BaseCmd {
+ public:
+  HExistsCmd(const std::string &name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient *client) override;
+
+ private:
+  void DoCmd(PClient *client) override;
+};
+
 }  // namespace pikiwidb

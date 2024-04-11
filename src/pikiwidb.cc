@@ -63,14 +63,16 @@ bool PikiwiDB::ParseArgs(int ac, char* av[]) {
       cfg_file_ = av[i];
       continue;
     } else if (strncasecmp(av[i], "-v", 2) == 0 || strncasecmp(av[i], "--version", 9) == 0) {
-      std::cerr << "PikiwiDB Server v=" << kPIKIWIDB_VERSION << " bits=" << (sizeof(void*) == 8 ? 64 : 32) << std::endl;
+      std::cerr << "PikiwiDB Server version: " << KPIKIWIDB_VERSION << " bits=" << (sizeof(void*) == 8 ? 64 : 32)
+                << std::endl;
+      std::cerr << "PikiwiDB Server Build Type: " << KPIKIWIDB_BUILD_TYPE << std::endl;
+      std::cerr << "PikiwiDB Server Build Date: " << KPIKIWIDB_BUILD_DATE << std::endl;
+      std::cerr << "PikiwiDB Server Build GIT SHA: " << KPIKIWIDB_GIT_COMMIT_ID << std::endl;
 
       exit(0);
-      return true;
     } else if (strncasecmp(av[i], "-h", 2) == 0 || strncasecmp(av[i], "--help", 6) == 0) {
       Usage();
       exit(0);
-      return true;
     } else if (strncasecmp(av[i], "--port", 6) == 0) {
       if (++i == ac) {
         return false;
@@ -164,7 +166,7 @@ static void LoadDBFromDisk() {
 }
 
 void PikiwiDB::OnNewConnection(pikiwidb::TcpConnection* obj) {
-  INFO("New connection from {}:{}", obj->GetPeerIp(), obj->GetPeerPort());
+  INFO("New connection from {}:{}", obj->GetPeerIP(), obj->GetPeerPort());
 
   auto client = std::make_shared<pikiwidb::PClient>(obj);
   obj->SetContext(client);
@@ -174,7 +176,10 @@ void PikiwiDB::OnNewConnection(pikiwidb::TcpConnection* obj) {
   auto msg_cb = std::bind(&pikiwidb::PClient::HandlePackets, client.get(), std::placeholders::_1, std::placeholders::_2,
                           std::placeholders::_3);
   obj->SetMessageCallback(msg_cb);
-  obj->SetOnDisconnect([](pikiwidb::TcpConnection* obj) { INFO("disconnect from {}", obj->GetPeerIp()); });
+  obj->SetOnDisconnect([](pikiwidb::TcpConnection* obj) {
+    INFO("disconnect from {}", obj->GetPeerIP());
+    obj->GetContext<pikiwidb::PClient>()->SetState(pikiwidb::ClientState::kClosed);
+  });
   obj->SetNodelay(true);
   obj->SetEventLoopSelector([this]() { return worker_threads_.ChooseNextWorkerEventLoop(); });
   obj->SetSlaveEventLoopSelector([this]() { return slave_threads_.ChooseNextWorkerEventLoop(); });
@@ -214,6 +219,13 @@ bool PikiwiDB::Init() {
   worker_threads_.SetWorkerNum(static_cast<size_t>(g_config.worker_threads_num));
   slave_threads_.SetWorkerNum(static_cast<size_t>(g_config.slave_threads_num));
 
+  // now we only use fast cmd thread pool
+  auto status = cmd_threads_.Init(g_config.fast_cmd_threads_num, 0, "pikiwidb-cmd");
+  if (!status.ok()) {
+    ERROR("init cmd thread pool failed: {}", status.ToString());
+    return false;
+  }
+
   PSTORE.Init(g_config.databases);
 
   // Only if there is no backend, load rdb
@@ -234,7 +246,7 @@ bool PikiwiDB::Init() {
     PREPL.SetMasterAddr(g_config.masterIp.c_str(), g_config.masterPort);
   }
 
-  cmd_table_manager_.InitCmdTable();
+  //  cmd_table_manager_.InitCmdTable();
 
   return true;
 }
@@ -242,6 +254,8 @@ bool PikiwiDB::Init() {
 void PikiwiDB::Run() {
   worker_threads_.SetName("pikiwi-main");
   slave_threads_.SetName("pikiwi-slave");
+
+  cmd_threads_.Start();
 
   std::thread t([this]() {
     auto slave_loop = slave_threads_.BaseLoop();
@@ -251,16 +265,19 @@ void PikiwiDB::Run() {
 
   worker_threads_.Run(0, nullptr);
 
-  t.join();  // wait for slave thread exit
+  if (t.joinable()) {
+    t.join();  // wait for slave thread exit
+  }
   INFO("server exit running");
 }
 
 void PikiwiDB::Stop() {
   slave_threads_.Exit();
   worker_threads_.Exit();
+  cmd_threads_.Stop();
 }
 
-pikiwidb::CmdTableManager& PikiwiDB::GetCmdTableManager() { return cmd_table_manager_; }
+// pikiwidb::CmdTableManager& PikiwiDB::GetCmdTableManager() { return cmd_table_manager_; }
 
 static void InitLogs() {
   logger::Init("logs/pikiwidb_server.log");
@@ -308,7 +325,7 @@ int main(int ac, char* av[]) {
 
   // output logo to console
   char logo[512] = "";
-  snprintf(logo, sizeof logo - 1, pikiwidbLogo, kPIKIWIDB_VERSION, static_cast<int>(sizeof(void*)) * 8,
+  snprintf(logo, sizeof logo - 1, pikiwidbLogo, KPIKIWIDB_VERSION, static_cast<int>(sizeof(void*)) * 8,
            static_cast<int>(pikiwidb::g_config.port));
   std::cout << logo;
 

@@ -316,4 +316,64 @@ void SDiffstoreCmd::DoCmd(PClient* client) {
   }
   client->AppendInteger(reply_num);
 }
+
+SScanCmd::SScanCmd(const std::string& name, int16_t arity)
+    : BaseCmd(name, arity, kCmdFlagsReadonly, kAclCategoryRead | kAclCategorySet) {}
+
+bool SScanCmd::DoInitial(PClient* client) {
+  if (auto size = client->argv_.size(); size != 3 && size != 5 && size != 7) {
+    client->SetRes(CmdRes::kSyntaxErr);
+    return false;
+  }
+  client->SetKey(client->argv_[1]);
+  return true;
+}
+
+void SScanCmd::DoCmd(PClient* client) {
+  const auto& argv = client->argv_;
+  // parse arguments
+  int64_t cursor = 0;
+  int64_t count = 10;
+  std::string pattern{"*"};
+  if (pstd::String2int(argv[2], &cursor) == 0) {
+    client->SetRes(CmdRes::kInvalidCursor, kCmdNameSScan);
+    return;
+  }
+  for (size_t i = 3; i < argv.size(); i += 2) {
+    if (auto lower = pstd::StringToLower(argv[i]); kMatchSymbol == lower) {
+      pattern = argv[i + 1];
+    } else if (kCountSymbol == lower) {
+      if (pstd::String2int(argv[i + 1], &count) == 0) {
+        client->SetRes(CmdRes::kInvalidInt, kCmdNameSScan);
+        return;
+      }
+      if (count < 0) {
+        client->SetRes(CmdRes::kSyntaxErr, kCmdNameSScan);
+        return;
+      }
+    } else {
+      client->SetRes(CmdRes::kSyntaxErr, kCmdNameSScan);
+      return;
+    }
+  }
+
+  // execute command
+  std::vector<std::string> members;
+  int64_t next_cursor{};
+  auto status = PSTORE.GetBackend(client->GetCurrentDB())
+                    ->GetStorage()
+                    ->SScan(client->Key(), cursor, pattern, count, &members, &next_cursor);
+  if (!status.ok() && !status.IsNotFound()) {
+    client->SetRes(CmdRes::kErrOther, status.ToString());
+    return;
+  }
+
+  // reply to client
+  client->AppendArrayLen(2);
+  client->AppendString(std::to_string(next_cursor));
+  client->AppendArrayLenUint64(members.size());
+  for (const auto& member : members) {
+    client->AppendString(member);
+  }
+}
 }  // namespace pikiwidb

@@ -229,7 +229,7 @@ var _ = Describe("Hash", Ordered, func() {
 		hGet := client.HGet(ctx, "hash", "key")
 		Expect(hGet.Err()).NotTo(HaveOccurred())
 		Expect(hGet.Val()).To(Equal("hello"))
-  })
+	})
 
 	It("should HIncrBy", func() {
 		hSet := client.HSet(ctx, "hash", "key", "5")
@@ -330,5 +330,18 @@ var _ = Describe("Hash", Ordered, func() {
 		// the key not exist
 		res1 := client.HRandField(ctx, "not_exist_key", 1).Val()
 		Expect(len(res1)).To(Equal(0))
+	})
+
+	It("should HExists", func() {
+		hSet := client.HSet(ctx, "hash", "key", "hello")
+		Expect(hSet.Err()).NotTo(HaveOccurred())
+
+		hExists := client.HExists(ctx, "hash", "key")
+		Expect(hExists.Err()).NotTo(HaveOccurred())
+		Expect(hExists.Val()).To(Equal(true))
+
+		hExists = client.HExists(ctx, "hash", "key1")
+		Expect(hExists.Err()).NotTo(HaveOccurred())
+		Expect(hExists.Val()).To(Equal(false))
 	})
 })

@@ -78,6 +78,7 @@ void CmdTableManager::InitCmdTable() {
   ADD_COMMAND(SetRange, 4);
   ADD_COMMAND(Decr, 2);
   ADD_COMMAND(SetBit, 4);
+  ADD_COMMAND(MSetnx, -3);
 
   // hash
   ADD_COMMAND(HSet, -4);
@@ -95,6 +96,7 @@ void CmdTableManager::InitCmdTable() {
   ADD_COMMAND(HSetNX, 4);
   ADD_COMMAND(HIncrby, 4);
   ADD_COMMAND(HRandField, -2);
+  ADD_COMMAND(HExists, 3);
 
   // set
   ADD_COMMAND(SIsMember, 3);
@@ -111,6 +113,7 @@ void CmdTableManager::InitCmdTable() {
   ADD_COMMAND(SMembers, 2);
   ADD_COMMAND(SDiff, -2);
   ADD_COMMAND(SDiffstore, -3);
+  ADD_COMMAND(SScan, -3);
 
   // list
   ADD_COMMAND(LPush, -3);
@@ -139,6 +142,10 @@ void CmdTableManager::InitCmdTable() {
   ADD_COMMAND(ZRange, -4);
   ADD_COMMAND(ZRangebylex, -3);
   ADD_COMMAND(ZRevrangebylex, -3);
+  ADD_COMMAND(ZRank, 3);
+  ADD_COMMAND(ZRevrank, 3);
+  ADD_COMMAND(ZRem, -3);
+  ADD_COMMAND(ZIncrby, 4);
 }
 
 std::pair<BaseCmd*, CmdRes::CmdRet> CmdTableManager::GetCommand(const std::string& cmdName, PClient* client) {

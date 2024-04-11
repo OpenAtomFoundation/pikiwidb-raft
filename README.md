@@ -2,11 +2,41 @@
 ![](docs/images/pikiwidb-logo.png)
 [中文](README_CN.md)
 
-A C++11 implementation of Redis Server, use RocksDB for persist storage.(not including cluster yet)
+A C++20 implementation of Redis Server, use RocksDB for persist storage.(not including cluster yet)
 
 ## Requirements
-* C++11
+
+* C++20
 * Linux or OS X
+
+## compile
+
+**It is recommended to use the latest version of Ubuntu or Debian for Linux systems**
+
+Execute compilation
+
+If the machine's GCC version is less than 11, especially on CentOS6 or CentOS7, you need to upgrade the gcc version firstly.
+
+Execute the following commands on CentOS:
+
+```bash
+sudo yum -y install centos-release-scl
+sudo yum -y install devtoolset-11-gcc devtoolset-11-gcc-c++
+scl enable devtoolset-11 bash
+```
+
+Execute this command to start compiling Pikiwidb:
+
+```bash
+./build.sh
+```
+
+Pikiwidb is compiled by default in release mode, which does not support debugging. If debugging is needed, compile in debug mode.
+
+```bash
+./clean.sh
+./build.sh --debug
+```
 
 ## Support module for write your own extensions
  PikiwiDB supports module now, still in progress, much work to do.

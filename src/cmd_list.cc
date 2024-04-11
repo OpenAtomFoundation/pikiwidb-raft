@@ -219,7 +219,7 @@ void LSetCmd::DoCmd(PClient* client) {
   // while strtol ensures that the string is within the range of long type
   const std::string index_str = client->argv_[2];
 
-  if (IsValidNumber(index_str)) {
+  if (pstd::IsValidNumber(index_str)) {
     int64_t val = 0;
     if (1 != pstd::String2int(index_str, &val)) {
       client->SetRes(CmdRes::kErrOther, "lset cmd error");  // this will not happend in normal case

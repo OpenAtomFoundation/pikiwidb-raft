@@ -3,13 +3,11 @@
 # LICENSE file in the root directory of this source tree. An additional grant
 # of patent rights can be found in the PATENTS file in the same directory.
 
-include_guard()
+INCLUDE_GUARD()
 
-include(cmake/utils.cmake)
-
-FetchContent_DeclareGitHubWithMirror(gflags
-  gflags/gflags v2.2.2
-  SHA256=19713a36c9f32b33df59d1c79b4958434cb005b5b47dc5400a7a4b078111d9b5
+FetchContent_Declare(gflags
+  URL https://github.com/gflags/gflags/archive/v2.2.2.zip
+  URL_HASH SHA256=19713a36c9f32b33df59d1c79b4958434cb005b5b47dc5400a7a4b078111d9b5
 )
 
 FetchContent_MakeAvailableWithArgs(gflags

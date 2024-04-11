@@ -4,6 +4,7 @@ Language:        Cpp
 AccessModifierOffset: -1
 AlignAfterOpenBracket: Align
 AlignConsecutiveMacros: None
+#InsertNewlineAtEOF: true # Requires clang-format-16 support
 AlignConsecutiveAssignments: None
 AlignConsecutiveBitFields: None
 AlignConsecutiveDeclarations: None

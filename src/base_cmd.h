@@ -57,6 +57,7 @@ const std::string kCmdNameGetRange = "getrange";
 const std::string kCmdNameSetRange = "setrange";
 const std::string kCmdNameDecr = "decr";
 const std::string kCmdNameIncr = "incr";
+const std::string kCmdNameMSetnx = "msetnx";
 
 // multi
 const std::string kCmdNameMulti = "multi";
@@ -88,6 +89,7 @@ const std::string kCmdNameHIncrbyFloat = "hincrbyfloat";
 const std::string kCmdNameHSetNX = "hsetnx";
 const std::string kCmdNameHIncrby = "hincrby";
 const std::string kCmdNameHRandField = "hrandfield";
+const std::string kCmdNameHExists = "hexists";
 
 // set cmd
 const std::string kCmdNameSIsMember = "sismember";
@@ -104,6 +106,7 @@ const std::string kCmdNameSPop = "spop";
 const std::string kCmdNameSMembers = "smembers";
 const std::string kCmdNameSDiff = "sdiff";
 const std::string kCmdNameSDiffstore = "sdiffstore";
+const std::string kCmdNameSScan = "sscan";
 
 // list cmd
 const std::string kCmdNameLPush = "lpush";
@@ -132,6 +135,10 @@ const std::string kCmdNameZScore = "zscore";
 const std::string kCmdNameZRange = "zrange";
 const std::string kCmdNameZRangebylex = "zrangebylex";
 const std::string kCmdNameZRevrangebylex = "zrevrangebylex";
+const std::string kCmdNameZRank = "zrank";
+const std::string kCmdNameZRevrank = "zrevrank";
+const std::string kCmdNameZRem = "zrem";
+const std::string kCmdNameZIncrby = "zincrby";
 
 enum CmdFlags {
   kCmdFlagsWrite = (1 << 0),             // May modify the dataset
@@ -283,7 +290,7 @@ class BaseCmd : public std::enable_shared_from_this<BaseCmd> {
   //  void SetResp(const std::shared_ptr<std::string>& resp);
   //  std::shared_ptr<std::string> GetResp();
 
-  uint32_t GetCmdId() const;
+  uint32_t GetCmdID() const;
 
   bool isExclusive() { return static_cast<bool>(flag_ & kCmdFlagsExclusive); }
 
@@ -301,8 +308,8 @@ class BaseCmd : public std::enable_shared_from_this<BaseCmd> {
   //  std::weak_ptr<std::string> resp_;
   //  uint64_t doDuration_ = 0;
 
-  uint32_t cmdId_ = 0;
-  uint32_t aclCategory_ = 0;
+  uint32_t cmd_id_ = 0;
+  uint32_t acl_category_ = 0;
 
  private:
   // The function to be executed first before executing `DoCmd`
