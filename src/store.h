@@ -37,8 +37,6 @@ struct TaskContext {
 
 using TasksVector = std::vector<TaskContext>;
 
-class DB;
-
 class PStore {
  public:
   friend class CheckpointManager;
@@ -51,7 +49,7 @@ class PStore {
 
   std::unique_ptr<DB>& GetBackend(int32_t index) { return backends_[index]; };
 
-  void DoSomeThingSpecificDB(const TasksVector task);
+  void DoSomeThingSpecificDB(const TasksVector& task);
 
   void WaitForCheckpointDone();
 

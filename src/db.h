@@ -13,10 +13,6 @@
 
 #include "storage/storage.h"
 
-namespace storage {
-class Storage;
-}  //  namespace storage
-
 namespace pikiwidb {
 
 class CheckpointManager;

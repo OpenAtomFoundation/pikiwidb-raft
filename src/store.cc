@@ -36,7 +36,7 @@ void PStore::Init() {
   }
 }
 
-void PStore::DoSomeThingSpecificDB(const TasksVector tasks) {
+void PStore::DoSomeThingSpecificDB(const TasksVector& tasks) {
   std::for_each(tasks.begin(), tasks.end(), [this](const auto& task) {
     switch (task.type) {
       case kCheckpoint: {
