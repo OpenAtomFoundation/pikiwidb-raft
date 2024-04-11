@@ -5,21 +5,17 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-//
-//  praft.cc
-
 #include <cassert>
 
-#include "praft.h"
+#include "binlog.pb.h"
 #include "braft/util.h"
 #include "brpc/server.h"
-#include "pstd/log.h"
-#include "pstd/pstd_string.h"
-#include "binlog.pb.h"
 #include "config.h"
 #include "pikiwidb.h"
+#include "praft.h"
 #include "praft_service.h"
-#include "pstd_string.h"
+#include "pstd/log.h"
+#include "pstd/pstd_string.h"
 #include "replication.h"
 #include "store.h"
 
@@ -31,13 +27,8 @@
 
 namespace pikiwidb {
 
-<<<<<<< HEAD
 bool ClusterCmdContext::Set(ClusterCmdType cluster_cmd_type, PClient* client, const std::string& peer_ip, int port,
-                            std::string node_id) {
-=======
-bool ClusterCmdContext::Set(ClusterCmdType cluster_cmd_type, PClient* client, const std::string& peer_ip, 
-      int port, std::string peer_id) {
->>>>>>> d80b170 (fix:the debugging of the deletion is complete)
+                            std::string peer_id) {
   std::unique_lock<std::mutex> lck(mtx_);
   if (client_ != nullptr) {
     return false;
@@ -74,16 +65,10 @@ void ClusterCmdContext::ConnectTargetNode() {
   }
 
   // reconnect
-<<<<<<< HEAD
-  TcpConnectionFailCallback cb = cb = std::bind(&PRaft::OnClusterCmdConnectionFailed, &PRAFT, std::placeholders::_1,
-                                                std::placeholders::_2, std::placeholders::_3);
-  PREPL.SetFailCallback(cb);
-=======
   auto fail_cb = [&](EventLoop*, const char* peer_ip, int port) {
     PRAFT.OnClusterCmdConnectionFailed(EventLoop::Self(), peer_ip, port);
   };
   PREPL.SetFailCallback(fail_cb);
->>>>>>> 3e222e7 (fix: debug raft.node remove cmd)
   PREPL.SetMasterState(kPReplStateNone);
   PREPL.SetMasterAddr(peer_ip_.c_str(), port_);
 }
@@ -92,8 +77,6 @@ PRaft& PRaft::Instance() {
   static PRaft store;
   return store;
 }
-
-
 
 butil::Status PRaft::Init(std::string& group_id, bool initial_conf_is_null) {
   if (node_ && server_) {
@@ -195,7 +178,6 @@ std::string PRaft::GetLeaderID() const {
   return node_->leader_id().to_string();
 }
 
-<<<<<<< HEAD
 std::string PRaft::GetLeaderAddress() const {
   if (!node_) {
     ERROR("Node is not initialized");
@@ -207,10 +189,7 @@ std::string PRaft::GetLeaderAddress() const {
   return addr.c_str();
 }
 
-std::string PRaft::GetNodeId() const {
-=======
 std::string PRaft::GetNodeID() const {
->>>>>>> d80b170 (fix:the debugging of the deletion is complete)
   if (!node_) {
     ERROR("Node is not initialized");
     return "Failed to get node id";
@@ -223,7 +202,7 @@ std::string PRaft::GetPeerID() const {
     ERROR("Node is not initialized");
     return "Failed to get node id";
   }
-  
+
   auto node_id = node_->node_id().to_string();
   auto pos = node_id.find(':');
   auto peer_id = node_id.substr(pos + 1, node_id.size());
@@ -549,7 +528,6 @@ void PRaft::Join() {
   }
 }
 
-<<<<<<< HEAD
 void PRaft::AppendLog(const Binlog& log, std::promise<rocksdb::Status>&& promise) {
   assert(node_);
   assert(node_->is_leader());
@@ -560,7 +538,14 @@ void PRaft::AppendLog(const Binlog& log, std::promise<rocksdb::Status>&& promise
     done->SetStatus(rocksdb::Status::Incomplete("Failed to serialize binlog"));
     done->Run();
     return;
-=======
+  }
+  DEBUG("append binlog: {}", log.ShortDebugString());
+  braft::Task task;
+  task.data = &data;
+  task.done = done;
+  node_->apply(task);
+}
+
 void PRaft::Clear() {
   if (node_) {
     node_.reset();
@@ -569,18 +554,6 @@ void PRaft::Clear() {
   if (server_) {
     server_.reset();
   }
-}
-
-void PRaft::Apply(braft::Task& task) {
-  if (node_) {
-    node_->apply(task);
->>>>>>> d80b170 (fix:the debugging of the deletion is complete)
-  }
-  DEBUG("append binlog: {}", log.ShortDebugString());
-  braft::Task task;
-  task.data = &data;
-  task.done = done;
-  node_->apply(task);
 }
 
 void PRaft::on_apply(braft::Iterator& iter) {

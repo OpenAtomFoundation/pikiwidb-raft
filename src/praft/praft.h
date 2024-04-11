@@ -10,11 +10,9 @@
 #include <future>
 
 #include "braft/raft.h"
-#include "rocksdb/status.h"
-#include "braft/util.h"
 #include "brpc/server.h"
-#include "butil/status.h"
 #include "client.h"
+#include "rocksdb/status.h"
 
 namespace pikiwidb {
 
@@ -29,7 +27,7 @@ class ClusterCmdContext {
   friend class PRaft;
 
  public:
-  enum ClusterCmdType{
+  enum ClusterCmdType {
     NONE,
     JOIN,
     REMOVE,
@@ -38,8 +36,8 @@ class ClusterCmdContext {
   ClusterCmdContext() = default;
   ~ClusterCmdContext() = default;
 
-  bool Set(ClusterCmdType cluster_cmd_type, PClient* client, const std::string& peer_ip, 
-        int port, std::string peer_id = "");
+  bool Set(ClusterCmdType cluster_cmd_type, PClient* client, const std::string& peer_ip, int port,
+           std::string peer_id = "");
 
   void Clear();
 
@@ -95,12 +93,8 @@ class PRaft : public braft::StateMachine {
 
   void ShutDown();
   void Join();
-<<<<<<< HEAD
   void AppendLog(const Binlog& log, std::promise<rocksdb::Status>&& promise);
-=======
   void Clear();
-  void Apply(braft::Task& task);
->>>>>>> d80b170 (fix:the debugging of the deletion is complete)
 
   //===--------------------------------------------------------------------===//
   // Cluster command
@@ -109,7 +103,7 @@ class PRaft : public braft::StateMachine {
   void SendNodeRequest(PClient* client);
   void SendNodeInfoRequest(PClient* client, const std::string info_type);
   void SendNodeAddRequest(PClient* client);
-  void SendNodeRemoveRequest(PClient* client); 
+  void SendNodeRemoveRequest(PClient* client);
 
   int ProcessClusterCmdResponse(PClient* client, const char* start, int len);
   int ProcessClusterJoinCmdResponse(PClient* client, const char* start, int len);
@@ -118,17 +112,11 @@ class PRaft : public braft::StateMachine {
   void OnClusterCmdConnectionFailed(EventLoop*, const char* peer_ip, int port);
 
   bool IsLeader() const;
-<<<<<<< HEAD
-  std::string GetLeaderId() const;
   std::string GetLeaderAddress() const;
-  std::string GetNodeId() const;
-  std::string GetGroupId() const;
-=======
   std::string GetLeaderID() const;
   std::string GetNodeID() const;
   std::string GetPeerID() const;
   std::string GetGroupID() const;
->>>>>>> d80b170 (fix:the debugging of the deletion is complete)
   braft::NodeStatus GetNodeStatus() const;
   butil::Status GetListPeers(std::vector<braft::PeerId>* peers);
 
@@ -155,7 +143,7 @@ class PRaft : public braft::StateMachine {
   std::string raw_addr_;             // ip:port of this node
 
   ClusterCmdContext cluster_cmd_ctx_;  // context for cluster join/remove command
-  std::string group_id_;         // group id
+  std::string group_id_;               // group id
 };
 
 }  // namespace pikiwidb
