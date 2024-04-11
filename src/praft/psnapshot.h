@@ -10,8 +10,11 @@
 #include <mutex>
 
 #include "braft/file_system_adaptor.h"
+#include "braft/macros.h"
 
 #define PBRAFT_SNAPSHOT_META_FILE "__raft_snapshot_meta"
+#define PBRAFT_SNAPSHOT_PATH "snapshot/snapshot_"
+#define IS_RDONLY 0x01
 
 namespace braft {
 class LocalSnapshotMetaTable;
@@ -30,7 +33,7 @@ class PPosixFileSystemAdaptor : public braft::PosixFileSystemAdaptor {
                      const std::string& path);
 
  private:
-  std::mutex mutex_;
+  braft::raft_mutex_t mutex_;
 };
 
 }  // namespace pikiwidb

@@ -364,7 +364,7 @@ void PRaft::AppendLog(const Binlog& log, std::promise<rocksdb::Status>&& promise
 
 void PRaft::recursive_copy(const std::filesystem::path& source, const std::filesystem::path& destination) {
   if (std::filesystem::is_regular_file(source)) {
-    if (source.filename() == "__raft_snapshot_meta") {
+    if (source.filename() == PBRAFT_SNAPSHOT_META_FILE) {
       return;
     } else if (source.extension() == ".sst") {
       // Create a hard link

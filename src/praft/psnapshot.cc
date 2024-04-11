@@ -13,6 +13,7 @@
 #include "braft/file_system_adaptor.h"
 #include "braft/local_file_meta.pb.h"
 #include "braft/snapshot.h"
+#include "butil/files/file_path.h"
 #include "config.h"
 #include "psnapshot.h"
 #include "store.h"
@@ -24,19 +25,29 @@ extern PConfig g_config;
 
 braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int oflag,
                                                   const ::google::protobuf::Message* file_meta, butil::File::Error* e) {
-  if ((oflag & 0x01) == 0) {  // This is a read operation
+  if ((oflag & IS_RDONLY) == 0) {  // This is a read operation
     bool found_other_files = false;
-    auto found_pos = path.find("snapshot/snapshot_");
     std::string snapshot_path;
 
     // parse snapshot path
-    if (found_pos != std::string::npos) {
-      std::size_t after_found_pos = found_pos + std::string("snapshot/snaphot_").length();
-      auto slash_pos = path.find('/', after_found_pos);
-      if (slash_pos != std::string::npos) {
-        snapshot_path = path.substr(0, slash_pos);
+    // auto found_pos = path.find("snapshot/snapshot_");
+    // if (found_pos != std::string::npos) {
+    //   std::size_t after_found_pos = found_pos + std::string("snapshot/snaphot_").length();
+    //     auto slash_pos = path.find('/', after_found_pos);
+    //     if (slash_pos != std::string::npos) {
+    //       snapshot_path = path.substr(0, slash_pos);
+    //     }
+    // }
+    butil::FilePath parse_snapshot_path(path);
+    std::vector<std::string> components;
+    parse_snapshot_path.GetComponents(&components);
+    for (auto component : components) {
+      snapshot_path += component + "/";
+      if (component.find("snapshot_") != std::string::npos) {
+        break;
       }
     }
+    INFO("self and butil path: {}, snapshot_path: {}", path, snapshot_path);
 
     // check whether snapshots have been created
     std::lock_guard guard(mutex_);
@@ -44,7 +55,7 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
       for (const auto& entry : std::filesystem::directory_iterator(snapshot_path)) {
         std::string filename = entry.path().filename().string();
         if (entry.is_regular_file() || entry.is_directory()) {
-          if (filename != "." && filename != ".." && filename.find("raft_snapshot_meta") == std::string::npos) {
+          if (filename != "." && filename != ".." && filename.find(PBRAFT_SNAPSHOT_META_FILE) == std::string::npos) {
             // If the path directory contains files other than raft_snapshot_meta, snapshots have been generated
             found_other_files = true;
             break;
@@ -70,7 +81,7 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
       PSTORE.DoSomeThingSpecificDB(tasks);
       PSTORE.WaitForCheckpointDone();
       add_all_files(snapshot_path, &snapshot_meta_memtable, snapshot_path);
-      const int rc = snapshot_meta_memtable.save_to_file(fs, snapshot_path + "/" PBRAFT_SNAPSHOT_META_FILE);
+      const int rc = snapshot_meta_memtable.save_to_file(fs, meta_path);
       if (rc == 0) {
         INFO("Succeed to save, path: {}", snapshot_path);
       } else {
