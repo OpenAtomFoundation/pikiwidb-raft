@@ -30,14 +30,6 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
     std::string snapshot_path;
 
     // parse snapshot path
-    // auto found_pos = path.find("snapshot/snapshot_");
-    // if (found_pos != std::string::npos) {
-    //   std::size_t after_found_pos = found_pos + std::string("snapshot/snaphot_").length();
-    //     auto slash_pos = path.find('/', after_found_pos);
-    //     if (slash_pos != std::string::npos) {
-    //       snapshot_path = path.substr(0, slash_pos);
-    //     }
-    // }
     butil::FilePath parse_snapshot_path(path);
     std::vector<std::string> components;
     parse_snapshot_path.GetComponents(&components);
@@ -47,10 +39,9 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
         break;
       }
     }
-    INFO("self and butil path: {}, snapshot_path: {}", path, snapshot_path);
 
     // check whether snapshots have been created
-    std::lock_guard guard(mutex_);
+    std::lock_guard<braft::raft_mutex_t> guard(mutex_);
     if (!snapshot_path.empty()) {
       for (const auto& entry : std::filesystem::directory_iterator(snapshot_path)) {
         std::string filename = entry.path().filename().string();
