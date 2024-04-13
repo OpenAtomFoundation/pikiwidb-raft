@@ -16,6 +16,8 @@
 
 namespace storage {
 
+constexpr int64_t kGapMax = 100;
+
 rocksdb::Status storage::LogIndexOfColumnFamilies::Init(Redis *db) {
   for (int i = 0; i < cf_.size(); i++) {
     rocksdb::TablePropertiesCollection collection;
@@ -32,13 +34,41 @@ rocksdb::Status storage::LogIndexOfColumnFamilies::Init(Redis *db) {
   return Status::OK();
 }
 
-LogIndex LogIndexOfColumnFamilies::GetSmallestLogIndex(std::function<LogIndex(const LogIndexPair &)> &&f) const {
-  auto smallest_log_index = std::numeric_limits<LogIndex>::max();
-  for (const auto &it : cf_) {
-    smallest_log_index = std::min(f(it), smallest_log_index);
+std::tuple<int, LogIndex, int, LogIndex> LogIndexOfColumnFamilies::GetSmallestLogIndex() const {
+  auto smallest_applied_log_index = std::numeric_limits<LogIndex>::max();
+  auto smallest_flushed_log_index = std::numeric_limits<LogIndex>::max();
+  auto smallest_applied_log_index_cf = -1;
+  auto smallest_flushed_log_index_cf = -1;
+  for (int i = 0; i < cf_.size(); i++) {
+    auto applied_log_index = cf_[i].applied_log_index.load();
+    auto flushed_log_index = cf_[i].flushed_log_index.load();
+    if (applied_log_index < smallest_applied_log_index) {
+      smallest_applied_log_index = applied_log_index;
+      smallest_applied_log_index_cf = i;
+    }
+    if (flushed_log_index < smallest_flushed_log_index) {
+      smallest_flushed_log_index = flushed_log_index;
+      smallest_flushed_log_index_cf = i;
+    }
   }
-  return smallest_log_index;
+  return {smallest_flushed_log_index_cf, smallest_flushed_log_index, smallest_applied_log_index_cf, smallest_applied_log_index};
 }
+
+bool LogIndexOfColumnFamilies::PendingFlush() const {
+    // assert(flushed index <= applied index)
+    std::set<int> s;
+    std::for_each(cf_.begin(), cf_.end(), [&s](auto& cf){
+      s.insert(cf.applied_log_index.load());
+      s.insert(cf.flushed_log_index.load());
+    });
+    assert(!s.empty());
+    if (s.size() == 1) {
+      return false;
+    }
+    auto iter_first = s.begin();
+    auto iter_last = s.end();
+    return *std::prev(iter_last) - *iter_first >= kGapMax;
+};
 
 std::optional<LogIndexAndSequencePair> storage::LogIndexTablePropertiesCollector::ReadStatsFromTableProps(
     const std::shared_ptr<const rocksdb::TableProperties> &table_props) {

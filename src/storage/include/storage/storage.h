@@ -63,7 +63,7 @@ class LRUCache;
 using AppendLogFunction = std::function<void(const pikiwidb::Binlog&, std::promise<Status>&&)>;
 
 struct StorageOptions {
-  rocksdb::Options options;
+  mutable rocksdb::Options options;
   rocksdb::BlockBasedTableOptions table_options;
   size_t block_cache_size = 0;
   bool share_block_cache = false;
