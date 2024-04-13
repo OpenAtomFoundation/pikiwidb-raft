@@ -163,12 +163,20 @@ class LogIndexAndSequenceCollectorPurger : public rocksdb::EventListener {
     collector_->Purge(smallest_applied_log_index);
 
     auto count = count_.fetch_add(1);
-    if (count % kColumnFamilyNum != 0 || !cf_->PendingFlush()) {
+    // 逻辑不一定正确, 一种尝试
+    auto is_flushing = maniul_flushing_.load();
+    if (is_flushing || count % kColumnFamilyNum != 0 || !cf_->PendingFlush()) {
       return;
     }
+    if (!maniul_flushing_.compare_exchange_strong(is_flushing, true)) {
+      // 如果替换失败, 那么说明已经有其他线程抢先一步将该值改为了 true
+      return;
+    }
+    // default: wait = true, allow_write_stall = false.
     rocksdb::FlushOptions flush_option;
-    flush_option.wait = false;
     db->Flush(flush_option, db_->GetColumnFamilyHandles().at(smallest_flushed_log_index_cf));
+    // 同步 flush 结束后, 将改值重新改回 false.
+    maniul_flushing_.store(false);
   }
 
  private:
@@ -176,6 +184,7 @@ class LogIndexAndSequenceCollectorPurger : public rocksdb::EventListener {
   LogIndexAndSequenceCollector *collector_ = nullptr;
   LogIndexOfColumnFamilies *cf_ = nullptr;
   std::atomic<uint64_t> count_ = 0;
+  std::atomic<bool> maniul_flushing_ = false;
 };
 
 }  // namespace storage
