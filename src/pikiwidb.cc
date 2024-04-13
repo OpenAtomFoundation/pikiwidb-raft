@@ -15,8 +15,8 @@
 #include <thread>
 
 #include "praft/praft.h"
-#include "pstd/pstd_util.h"
 #include "pstd/log.h"
+#include "pstd/pstd_util.h"
 
 #include "client.h"
 #include "config.h"
