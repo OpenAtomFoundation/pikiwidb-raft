@@ -8,6 +8,7 @@
 #include <fmt/core.h>
 #include "pstd/log.h"
 #include "src/base_data_value_format.h"
+#include "src/batch.h"
 #include "src/lists_filter.h"
 #include "src/redis.h"
 #include "src/scope_record_lock.h"
@@ -309,7 +310,7 @@ Status Redis::LPop(const Slice& key, int64_t count, std::vector<std::string>* el
 
 Status Redis::LPush(const Slice& key, const std::vector<std::string>& values, uint64_t* ret) {
   *ret = 0;
-  rocksdb::WriteBatch batch;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
 
   uint64_t index = 0;
@@ -331,9 +332,9 @@ Status Redis::LPush(const Slice& key, const std::vector<std::string>& values, ui
       parsed_lists_meta_value.ModifyCount(1);
       ListsDataKey lists_data_key(key, version, index);
       BaseDataValue i_val(value);
-      batch.Put(handles_[kListsDataCF], lists_data_key.Encode(), i_val.Encode());
+      batch->Put(kListsDataCF, lists_data_key.Encode(), i_val.Encode());
     }
-    batch.Put(handles_[kListsMetaCF], base_meta_key.Encode(), meta_value);
+    batch->Put(kListsMetaCF, base_meta_key.Encode(), meta_value);
     *ret = parsed_lists_meta_value.Count();
   } else if (s.IsNotFound()) {
     char str[8];
@@ -345,14 +346,14 @@ Status Redis::LPush(const Slice& key, const std::vector<std::string>& values, ui
       lists_meta_value.ModifyLeftIndex(1);
       ListsDataKey lists_data_key(key, version, index);
       BaseDataValue i_val(value);
-      batch.Put(handles_[kListsDataCF], lists_data_key.Encode(), i_val.Encode());
+      batch->Put(kListsDataCF, lists_data_key.Encode(), i_val.Encode());
     }
-    batch.Put(handles_[kListsMetaCF], base_meta_key.Encode(), lists_meta_value.Encode());
+    batch->Put(kListsMetaCF, base_meta_key.Encode(), lists_meta_value.Encode());
     *ret = lists_meta_value.RightIndex() - lists_meta_value.LeftIndex() - 1;
   } else {
     return s;
   }
-  return db_->Write(default_write_options_, &batch);
+  return batch->Commit();
 }
 
 Status Redis::LPushx(const Slice& key, const std::vector<std::string>& values, uint64_t* len) {
