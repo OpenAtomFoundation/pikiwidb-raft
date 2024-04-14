@@ -28,6 +28,9 @@ jobs:
 
       - name: Build
         run: |
+          echo 'export PATH="/usr/local/opt/openssl/bin:$PATH"' >> $GITHUB_ENV
+          echo 'export LDFLAGS="-L/usr/local/opt/openssl/lib"' >> $GITHUB_ENV
+          echo 'export CPPFLAGS="-I/usr/local/opt/openssl/include"' >> $GITHUB_ENV
           sh build.sh
 
       - name: Run Go E2E Tests
