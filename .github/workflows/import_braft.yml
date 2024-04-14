@@ -26,12 +26,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: List contents of /usr/local/opt/openssl/include directory
-        run: ls /usr/local/opt/openssl/include
-
-      - name: Find ssl.h file
-        run: find /usr/local/opt/openssl/include -name "ssl.h"
-
       - name: Build
         env: 
           CPLUS_INCLUDE_PATH: /opt/homebrew/include
