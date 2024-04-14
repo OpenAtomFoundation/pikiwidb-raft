@@ -51,23 +51,24 @@ std::tuple<int, LogIndex, int, LogIndex> LogIndexOfColumnFamilies::GetSmallestLo
       smallest_flushed_log_index_cf = i;
     }
   }
-  return {smallest_flushed_log_index_cf, smallest_flushed_log_index, smallest_applied_log_index_cf, smallest_applied_log_index};
+  return {smallest_flushed_log_index_cf, smallest_flushed_log_index, smallest_applied_log_index_cf,
+          smallest_applied_log_index};
 }
 
-bool LogIndexOfColumnFamilies::PendingFlush() const {
-    // assert(flushed index <= applied index)
-    std::set<int> s;
-    std::for_each(cf_.begin(), cf_.end(), [&s](auto& cf){
-      s.insert(cf.applied_log_index.load());
-      s.insert(cf.flushed_log_index.load());
-    });
-    assert(!s.empty());
-    if (s.size() == 1) {
-      return false;
-    }
-    auto iter_first = s.begin();
-    auto iter_last = s.end();
-    return *std::prev(iter_last) - *iter_first >= kGapMax;
+bool LogIndexOfColumnFamilies::IsPendingFlush() const {
+  // assert(flushed index <= applied index)
+  std::set<int> s;
+  std::for_each(cf_.begin(), cf_.end(), [&s](auto &cf) {
+    s.insert(cf.applied_log_index.load());
+    s.insert(cf.flushed_log_index.load());
+  });
+  assert(!s.empty());
+  if (s.size() == 1) {
+    return false;
+  }
+  auto iter_first = s.begin();
+  auto iter_last = s.end();
+  return *std::prev(iter_last) - *iter_first >= kGapMax;
 };
 
 std::optional<LogIndexAndSequencePair> storage::LogIndexTablePropertiesCollector::ReadStatsFromTableProps(

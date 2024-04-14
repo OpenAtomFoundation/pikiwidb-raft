@@ -85,9 +85,9 @@ static std::string AppendSubDirectory(const std::string& db_path, int index) {
 Status Storage::Open(const StorageOptions& storage_options, const std::string& db_path) {
   mkpath(db_path.c_str(), 0755);
   db_instance_num_ = storage_options.db_instance_num;
+  // Temporarily set to 100000
+  storage_options.options.write_buffer_manager = std::make_shared<rocksdb::WriteBufferManager>(100000);
   for (size_t index = 0; index < db_instance_num_; index++) {
-    // Temporarily set to 100000
-    storage_options.options.write_buffer_manager = std::make_shared<rocksdb::WriteBufferManager>(100000);
     insts_.emplace_back(std::make_unique<Redis>(this, index));
     Status s = insts_.back()->Open(storage_options, AppendSubDirectory(db_path, index));
     if (!s.ok()) {
