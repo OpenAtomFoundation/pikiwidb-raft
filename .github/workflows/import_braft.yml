@@ -26,8 +26,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: List contents of /usr/local/opt/openssl/include directory
+        run: ls /usr/local/opt/openssl/include
+
+      - name: Find ssl.h file
+        run: find /usr/local/opt/openssl/include -name "ssl.h"
+
       - name: Build
         run: |
+          brew install openssl
           echo 'export PATH="/usr/local/opt/openssl/bin:$PATH"' >> $GITHUB_ENV
           echo 'export LDFLAGS="-L/usr/local/opt/openssl/lib"' >> $GITHUB_ENV
           echo 'export CPPFLAGS="-I/usr/local/opt/openssl/include"' >> $GITHUB_ENV
