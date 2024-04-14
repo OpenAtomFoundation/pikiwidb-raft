@@ -23,10 +23,6 @@ var _ = Describe("Consistency", Ordered, func() {
 		leader    *redis.Client
 	)
 
-	const (
-		testKey = "consistency-test"
-	)
-
 	BeforeAll(func() {
 		for i := 0; i < 3; i++ {
 			config := util.GetConfPath(false, int64(i))
@@ -104,7 +100,9 @@ var _ = Describe("Consistency", Ordered, func() {
 		followers = nil
 	})
 
-	It("SimpleWriteConsistencyTest", func() {
+	It("HSet & HDel Consistency Test", func() {
+		const testKey = "HashConsistencyTest"
+		// write on leader
 		set, err := leader.HSet(ctx, testKey, map[string]string{
 			"fa": "va",
 			"fb": "vb",
@@ -113,6 +111,7 @@ var _ = Describe("Consistency", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(set).To(Equal(int64(3)))
 
+		// read on leader
 		getall, err := leader.HGetAll(ctx, testKey).Result()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(getall).To(Equal(map[string]string{
@@ -120,8 +119,11 @@ var _ = Describe("Consistency", Ordered, func() {
 			"fb": "vb",
 			"fc": "vc",
 		}))
+
 		time.Sleep(10000 * time.Millisecond)
-		for _, f := range followers {
+
+		// read on followers
+		followerChecker(followers, func(f *redis.Client) {
 			getall, err := f.HGetAll(ctx, testKey).Result()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(getall).To(Equal(map[string]string{
@@ -129,27 +131,56 @@ var _ = Describe("Consistency", Ordered, func() {
 				"fb": "vb",
 				"fc": "vc",
 			}))
-		}
+		})
 
+		// write on leader
 		del, err := leader.HDel(ctx, testKey, "fb").Result()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(del).To(Equal(int64(1)))
 
+		// read on leader
 		getall, err = leader.HGetAll(ctx, testKey).Result()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(getall).To(Equal(map[string]string{
 			"fa": "va",
 			"fc": "vc",
 		}))
+
 		time.Sleep(10000 * time.Millisecond)
-		for _, f := range followers {
+
+		// read on followers
+		followerChecker(followers, func(f *redis.Client) {
 			getall, err := f.HGetAll(ctx, testKey).Result()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(getall).To(Equal(map[string]string{
 				"fa": "va",
 				"fc": "vc",
 			}))
-		}
+		})
+	})
+
+	It("SAdd Consistency Test", func() {
+		const testKey = "SetsConsistencyTestKey"
+		testValues := []string{"sa", "sb", "sc"}
+		// write on leader
+		sadd, err := leader.SAdd(ctx, testKey, testValues).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sadd).To(Equal(int64(3)))
+
+		// read on leader
+		smembers, err := leader.SMembers(ctx, testKey).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(smembers).To(Equal(testValues))
+
+		time.Sleep(10000 * time.Millisecond)
+
+		// read on followers
+		followerChecker(followers, func(f *redis.Client) {
+			smembers, err := leader.SMembers(ctx, testKey).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(smembers).To(Equal(testValues))
+		})
+
 	})
 
 	It("ThreeNodesClusterConstructionTest", func() {
@@ -180,3 +211,9 @@ var _ = Describe("Consistency", Ordered, func() {
 		}
 	})
 })
+
+func followerChecker(fs []*redis.Client, check func(*redis.Client)) {
+	for _, f := range fs {
+		check(f)
+	}
+}
