@@ -283,6 +283,40 @@ var _ = Describe("Consistency", Ordered, func() {
 			}
 		}
 	})
+
+	It("ZAdd Consistency Test", func() {
+		const testKey = "ZSetsConsistencyTestKey"
+		testData := []redis.Z{
+			{Score: 4, Member: "z4"},
+			{Score: 8, Member: "z8"},
+			{Score: 5, Member: "z5"},
+		}
+		expectData := []redis.Z{
+			{Score: 8, Member: "z8"},
+			{Score: 5, Member: "z5"},
+			{Score: 4, Member: "z4"},
+		}
+		{
+			// write on leader
+			zadd, err := leader.ZAdd(ctx, testKey, testData...).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(zadd).To(Equal(int64(len(testData))))
+
+			// read on leader
+			zrange, err := leader.ZRevRangeWithScores(ctx, testKey, 0, -1).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(zrange).To(Equal(expectData))
+
+			time.Sleep(10000 * time.Millisecond)
+
+			// read on followers
+			followerChecker(followers, func(f *redis.Client) {
+				zrange, err := leader.ZRevRangeWithScores(ctx, testKey, 0, -1).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(zrange).To(Equal(expectData))
+			})
+		}
+	})
 })
 
 func followerChecker(fs []*redis.Client, check func(*redis.Client)) {
