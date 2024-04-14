@@ -206,7 +206,7 @@ var _ = Describe("Consistency", Ordered, func() {
 		}
 	})
 
-	It("LPush Consistency Test", func() {
+	It("LPush & LPop Consistency Test", func() {
 		const testKey = "ListsConsistencyTestKey"
 		testValues := []string{"la", "lb", "lc", "ld"}
 
@@ -217,10 +217,7 @@ var _ = Describe("Consistency", Ordered, func() {
 			Expect(lpush).To(Equal(int64(len(testValues))))
 
 			// read on leader
-			llen, err := leader.LLen(ctx, testKey).Result()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(llen).To(Equal(int64(len(testValues))))
-			lrange, err := leader.LRange(ctx, testKey, 0, llen).Result()
+			lrange, err := leader.LRange(ctx, testKey, 0, 10).Result()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(lrange).To(Equal(reverse(testValues)))
 
@@ -228,35 +225,35 @@ var _ = Describe("Consistency", Ordered, func() {
 
 			// read on followers
 			followerChecker(followers, func(f *redis.Client) {
-				llen, err := leader.LLen(ctx, testKey).Result()
-				Expect(err).NotTo(HaveOccurred())
-				Expect(llen).To(Equal(int64(len(testValues))))
-				lrange, err := leader.LRange(ctx, testKey, 0, llen).Result()
+				lrange, err := leader.LRange(ctx, testKey, 0, 10).Result()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(lrange).To(Equal(reverse(testValues)))
 			})
 		}
 
-		// {
-		// 	// write on leader
-		// 	srem, err := leader.SRem(ctx, testKey, []string{"sb", "sd"}).Result()
-		// 	Expect(err).NotTo(HaveOccurred())
-		// 	Expect(srem).To(Equal(int64(2)))
+		{
+			// write on leader
+			lpop, err := leader.LPop(ctx, testKey).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lpop).To(Equal("ld"))
+			lpop, err = leader.LPop(ctx, testKey).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lpop).To(Equal("lc"))
 
-		// 	// read on leader
-		// 	smembers, err := leader.SMembers(ctx, testKey).Result()
-		// 	Expect(err).NotTo(HaveOccurred())
-		// 	Expect(smembers).To(Equal([]string{"sa", "sc"}))
+			// read on leader
+			lrange, err := leader.LRange(ctx, testKey, 0, 10).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lrange).To(Equal([]string{"lb", "la"}))
 
-		// 	time.Sleep(10000 * time.Millisecond)
+			time.Sleep(10000 * time.Millisecond)
 
-		// 	// read on followers
-		// 	followerChecker(followers, func(f *redis.Client) {
-		// 		smembers, err := leader.SMembers(ctx, testKey).Result()
-		// 		Expect(err).NotTo(HaveOccurred())
-		// 		Expect(smembers).To(Equal([]string{"sa", "sc"}))
-		// 	})
-		// }
+			// read on followers
+			followerChecker(followers, func(f *redis.Client) {
+				lrange, err := leader.LRange(ctx, testKey, 0, 10).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(lrange).To(Equal([]string{"lb", "la"}))
+			})
+		}
 	})
 
 	It("ThreeNodesClusterConstructionTest", func() {

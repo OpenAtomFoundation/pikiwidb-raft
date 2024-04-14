@@ -264,7 +264,7 @@ Status Redis::LPop(const Slice& key, int64_t count, std::vector<std::string>* el
   uint32_t statistic = 0;
   elements->clear();
 
-  rocksdb::WriteBatch batch;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
 
   std::string meta_value;
@@ -289,20 +289,17 @@ Status Redis::LPop(const Slice& key, int64_t count, std::vector<std::string>* el
         statistic++;
         ParsedBaseDataValue parsed_base_data_value(iter->value());
         elements->push_back(parsed_base_data_value.UserValue().ToString());
-        batch.Delete(handles_[kListsDataCF], iter->key());
+        batch->Delete(kListsDataCF, iter->key());
 
         parsed_lists_meta_value.ModifyCount(-1);
         parsed_lists_meta_value.ModifyLeftIndex(-1);
       }
-      batch.Put(handles_[kListsMetaCF], base_meta_key.Encode(), meta_value);
+      batch->Put(kListsMetaCF, base_meta_key.Encode(), meta_value);
       delete iter;
     }
   }
-  if (batch.Count() != 0U) {
-    s = db_->Write(default_write_options_, &batch);
-    if (s.ok()) {
-      batch.Clear();
-    }
+  if (batch->Count() != 0U) {
+    s = batch->Commit();
     UpdateSpecificKeyStatistics(DataType::kLists, key.ToString(), statistic);
   }
   return s;
