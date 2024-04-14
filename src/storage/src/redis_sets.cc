@@ -940,7 +940,7 @@ rocksdb::Status Redis::SRandmember(const Slice& key, int32_t count, std::vector<
 
 rocksdb::Status Redis::SRem(const Slice& key, const std::vector<std::string>& members, int32_t* ret) {
   *ret = 0;
-  rocksdb::WriteBatch batch;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
 
   uint64_t version = 0;
@@ -965,7 +965,7 @@ rocksdb::Status Redis::SRem(const Slice& key, const std::vector<std::string>& me
         if (s.ok()) {
           cnt++;
           statistic++;
-          batch.Delete(handles_[kSetsDataCF], sets_member_key.Encode());
+          batch->Delete(kSetsDataCF, sets_member_key.Encode());
         } else if (s.IsNotFound()) {
         } else {
           return s;
@@ -976,7 +976,7 @@ rocksdb::Status Redis::SRem(const Slice& key, const std::vector<std::string>& me
         return Status::InvalidArgument("set size overflow");
       }
       parsed_sets_meta_value.ModifyCount(-cnt);
-      batch.Put(handles_[kSetsMetaCF], base_meta_key.Encode(), meta_value);
+      batch->Put(kSetsMetaCF, base_meta_key.Encode(), meta_value);
     }
   } else if (s.IsNotFound()) {
     *ret = 0;
@@ -984,7 +984,7 @@ rocksdb::Status Redis::SRem(const Slice& key, const std::vector<std::string>& me
   } else {
     return s;
   }
-  s = db_->Write(default_write_options_, &batch);
+  s = batch->Commit();
   UpdateSpecificKeyStatistics(DataType::kSets, key.ToString(), statistic);
   return s;
 }

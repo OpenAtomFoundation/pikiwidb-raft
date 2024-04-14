@@ -161,25 +161,49 @@ var _ = Describe("Consistency", Ordered, func() {
 
 	It("SAdd Consistency Test", func() {
 		const testKey = "SetsConsistencyTestKey"
-		testValues := []string{"sa", "sb", "sc"}
-		// write on leader
-		sadd, err := leader.SAdd(ctx, testKey, testValues).Result()
-		Expect(err).NotTo(HaveOccurred())
-		Expect(sadd).To(Equal(int64(3)))
+		testValues := []string{"sa", "sb", "sc", "sd"}
 
-		// read on leader
-		smembers, err := leader.SMembers(ctx, testKey).Result()
-		Expect(err).NotTo(HaveOccurred())
-		Expect(smembers).To(Equal(testValues))
+		{
+			// write on leader
+			sadd, err := leader.SAdd(ctx, testKey, testValues).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sadd).To(Equal(int64(len(testValues))))
 
-		time.Sleep(10000 * time.Millisecond)
-
-		// read on followers
-		followerChecker(followers, func(f *redis.Client) {
+			// read on leader
 			smembers, err := leader.SMembers(ctx, testKey).Result()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(smembers).To(Equal(testValues))
-		})
+
+			time.Sleep(10000 * time.Millisecond)
+
+			// read on followers
+			followerChecker(followers, func(f *redis.Client) {
+				smembers, err := leader.SMembers(ctx, testKey).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(smembers).To(Equal(testValues))
+			})
+		}
+
+		{
+			// write on leader
+			srem, err := leader.SRem(ctx, testKey, []string{"sb", "sd"}).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(srem).To(Equal(int64(2)))
+
+			// read on leader
+			smembers, err := leader.SMembers(ctx, testKey).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(smembers).To(Equal([]string{"sa", "sc"}))
+
+			time.Sleep(10000 * time.Millisecond)
+
+			// read on followers
+			followerChecker(followers, func(f *redis.Client) {
+				smembers, err := leader.SMembers(ctx, testKey).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(smembers).To(Equal([]string{"sa", "sc"}))
+			})
+		}
 
 	})
 
