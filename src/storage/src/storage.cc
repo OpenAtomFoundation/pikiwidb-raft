@@ -4,13 +4,14 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 
 #include <algorithm>
+#include <string_view>
 #include <utility>
 
-#include "rocksdb/utilities/checkpoint.h"
-
+#include "binlog.pb.h"
 #include "config.h"
 #include "pstd/log.h"
 #include "pstd/pikiwidb_slot.h"
+#include "rocksdb/utilities/checkpoint.h"
 #include "scope_snapshot.h"
 #include "src/lru_cache.h"
 #include "src/mutex_impl.h"
@@ -2248,6 +2249,51 @@ void Storage::DisableWal(const bool is_wal_disable) {
   for (const auto& inst : insts_) {
     inst->SetWriteWalOptions(is_wal_disable);
   }
+}
+
+Status Storage::OnBinlogWrite(const pikiwidb::Binlog& log, LogIndex log_idx) {
+  auto& inst = insts_[log.slot_idx()];
+
+  rocksdb::WriteBatch batch;
+  bool is_finished_start = true;
+  for (const auto& entry : log.entries()) {
+    if (inst->IsRestarting() && inst->IsApplied(entry.cf_idx(), log_idx)) [[unlikely]] {
+      // If the starting phase is over, the log must not have been applied
+      // If the starting phase is not over and the log has been applied, skip it.
+      WARN("Log {} has been applied", log_idx);
+      is_finished_start = false;
+      continue;
+    }
+
+    switch (entry.op_type()) {
+      case pikiwidb::OperateType::kPut: {
+        assert(entry.has_value());
+        batch.Put(inst->GetColumnFamilyHandles()[entry.cf_idx()], entry.key(), entry.value());
+      } break;
+      case pikiwidb::OperateType::kDelete: {
+        assert(!entry.has_value());
+        batch.Delete(inst->GetColumnFamilyHandles()[entry.cf_idx()], entry.key());
+      } break;
+      default:
+        static constexpr std::string_view msg = "Unknown operate type in binlog";
+        ERROR(msg);
+        return Status::Incomplete(msg);
+    }
+
+    inst->UpdateAppliedLogIndexOfColumnFamily(entry.cf_idx(), log_idx);
+  }
+  if (inst->IsRestarting() && is_finished_start) [[unlikely]] {
+    INFO("Redis {} finished start phase", inst->GetIndex());
+    inst->StartingPhaseEnd();
+  }
+  auto first_seqno = inst->GetDB()->GetLatestSequenceNumber() + 1;
+  auto s = inst->GetDB()->Write(inst->GetWriteOptions(), &batch);
+  if (!s.ok()) {
+    // TODO(longfar): What we should do if the write operation failed ? 💥
+    return s;
+  }
+  inst->UpdateLogIndex(log_idx, first_seqno);
+  return s;
 }
 
 }  //  namespace storage

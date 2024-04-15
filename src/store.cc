@@ -7,8 +7,8 @@
 
 #include <string>
 
+#include "checkpoint_manager.h"
 #include "config.h"
-#include "db.h"
 #include "log.h"
 #include "store.h"
 
@@ -24,8 +24,6 @@ void PStore::Init() {
     return;
   }
 
-  backends_.reserve(dbNum_);
-
   dbNum_ = g_config.databases;
   backends_.reserve(dbNum_);
   if (g_config.backend == kBackEndRocksDB) {
@@ -40,10 +38,10 @@ void PStore::Init() {
 
 void PStore::Clear() { backends_.clear(); }
 
-void PStore::DoSomeThingSpecificDB(const TasksVector tasks) {
+void PStore::DoSomeThingSpecificDB(const TasksVector& tasks) {
   std::for_each(tasks.begin(), tasks.end(), [this](const auto& task) {
     switch (task.type) {
-      case kCheckpoint:
+      case kCheckpoint: {
         if (task.db < 0 || task.db >= dbNum_) {
           WARN("The database index is out of range.");
           return;
@@ -57,7 +55,11 @@ void PStore::DoSomeThingSpecificDB(const TasksVector tasks) {
         trimSlash(path);
         db->CreateCheckpoint(path);
         break;
-    };
+      }
+
+      default:
+        break;
+    }
   });
 }
 

@@ -5,16 +5,13 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-#ifndef PIKIWIDB_DB_H
-#define PIKIWIDB_DB_H
+#pragma once
 
-#include <string>
-
-#include "checkpoint_manager.h"
-#include "log.h"
-#include "pstd/noncopyable.h"
 #include "storage/storage.h"
+
 namespace pikiwidb {
+
+class CheckpointManager;
 
 class DB {
  public:
@@ -32,14 +29,14 @@ class DB {
 
   void CreateCheckpoint(const std::string& path);
 
-  [[maybe_unused]] void DoBgSave(CheckpointInfo&, const std::string&, int i);
+  [[maybe_unused]] void DoBgSave(const std::string&, int i);
 
   void WaitForCheckpointDone();
 
   int GetDbIndex() { return db_index_; }
 
  private:
-  const int db_index_;
+  const int db_index_ = 0;
   const std::string db_path_;
   const std::string dump_parent_path_;
   const std::string dump_path_;
@@ -56,6 +53,5 @@ class DB {
 
   std::unique_ptr<CheckpointManager> checkpoint_manager_;
 };
-}  // namespace pikiwidb
 
-#endif  // PIKIWIDB_DB_H
+}  // namespace pikiwidb

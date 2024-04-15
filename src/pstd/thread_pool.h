@@ -27,7 +27,7 @@ class ThreadPool final {
   void operator=(const ThreadPool&) = delete;
 
   template <typename F, typename... Args>
-  auto ExecuteTask(F&& f, Args&&... args) -> std::future<typename std::invoke_result<F(Args...)>::type>;
+  auto ExecuteTask(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>>;
 
   void JoinAll();
   void SetMaxIdleThread(unsigned int m);
@@ -48,17 +48,17 @@ class ThreadPool final {
   std::condition_variable cond_;
   unsigned waiters_;
   bool shutdown_;
-  std::deque<std::function<void()> > tasks_;
+  std::deque<std::function<void()>> tasks_;
 
   static const int kMaxThreads = 256;
 };
 
 template <typename F, typename... Args>
-auto ThreadPool::ExecuteTask(F&& f, Args&&... args) -> std::future<typename std::invoke_result<F(Args...)>::type> {
-  using resultType = typename std::invoke_result<F(Args...)>::type;
+auto ThreadPool::ExecuteTask(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>> {
+  using resultType = std::invoke_result_t<F, Args...>;
 
   auto task =
-      std::make_shared<std::packaged_task<resultType()> >(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+      std::make_shared<std::packaged_task<resultType()>>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
 
   {
     std::unique_lock<std::mutex> guard(mutex_);

@@ -14,19 +14,17 @@
 #include <iostream>
 #include <thread>
 
-#include "log.h"
-#include "rocksdb/db.h"
+#include "praft/praft.h"
+#include "pstd/log.h"
+#include "pstd/pstd_util.h"
 
 #include "client.h"
-#include "store.h"
-
 #include "config.h"
-#include "slow_log.h"
-
 #include "helper.h"
 #include "pikiwidb.h"
 #include "pikiwidb_logo.h"
-#include "pstd_util.h"
+#include "slow_log.h"
+#include "store.h"
 
 std::unique_ptr<PikiwiDB> g_pikiwidb;
 
@@ -293,7 +291,6 @@ static void closeStd() {
 }
 
 int main(int ac, char* av[]) {
-  [[maybe_unused]] rocksdb::DB* db;
   g_pikiwidb = std::make_unique<PikiwiDB>();
   if (!g_pikiwidb->ParseArgs(ac - 1, av + 1)) {
     Usage();
