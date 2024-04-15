@@ -10,9 +10,9 @@
 #define GLOG_NO_ABBREVIATED_SEVERITIES
 
 #include <map>
-#include <memory>
 #include <shared_mutex>
 #include <vector>
+
 #include "db.h"
 
 namespace pikiwidb {

@@ -5,9 +5,10 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-#include "cmd_admin.h"
 #include "braft/raft.h"
-#include "praft.h"
+
+#include "cmd_admin.h"
+#include "praft/praft.h"
 #include "store.h"
 
 namespace pikiwidb {

@@ -102,7 +102,6 @@ enum ClientFlag {
   kClientFlagMaster = (1 << 3),
 };
 
-class DB;
 struct PSlaveInfo;
 
 class PClient : public std::enable_shared_from_this<PClient>, public CmdRes {

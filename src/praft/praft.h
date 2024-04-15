@@ -9,7 +9,6 @@
 
 #include <filesystem>
 #include <future>
-#include <memory>
 #include <mutex>
 #include <string>
 #include <tuple>
