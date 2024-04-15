@@ -1,18 +1,20 @@
 /*
- * Copyright (c) 2023-present, Qihoo, Inc.  All rights reserved.
+ * Copyright (c) 2024-present, Qihoo, Inc.  All rights reserved.
  * This source code is licensed under the BSD-style license found in the
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
+#include "praft.h"
+
 #include <cassert>
 
-#include "binlog.pb.h"
 #include "braft/util.h"
 #include "brpc/server.h"
+
+#include "binlog.pb.h"
 #include "config.h"
 #include "pikiwidb.h"
-#include "praft.h"
 #include "praft_service.h"
 #include "pstd/log.h"
 #include "pstd/pstd_string.h"

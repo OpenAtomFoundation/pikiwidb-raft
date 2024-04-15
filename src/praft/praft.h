@@ -11,8 +11,9 @@
 
 #include "braft/raft.h"
 #include "brpc/server.h"
-#include "client.h"
 #include "rocksdb/status.h"
+
+#include "client.h"
 
 namespace pikiwidb {
 
