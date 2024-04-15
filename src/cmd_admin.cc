@@ -7,7 +7,7 @@
 
 #include "cmd_admin.h"
 
-#include "praft.h"
+#include "praft/praft.h"
 
 namespace pikiwidb {
 
