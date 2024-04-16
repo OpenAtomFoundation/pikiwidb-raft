@@ -317,6 +317,31 @@ var _ = Describe("Consistency", Ordered, func() {
 			})
 		}
 	})
+
+	It("Set Consistency Test", func() {
+		const testKey = "StringsConsistencyTestKey"
+		const testValue = "StringsConsistencyTestKey"
+		{
+			// write on leader
+			set, err := leader.Set(ctx, testKey, testValue, 0).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(set).To(Equal("OK"))
+
+			// read on leader
+			get, err := leader.Get(ctx, testKey).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(get).To(Equal(testValue))
+
+			time.Sleep(10000 * time.Millisecond)
+
+			// read on followers
+			followerChecker(followers, func(f *redis.Client) {
+			get, err := leader.Get(ctx, testKey).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(get).To(Equal(testValue))
+			})
+		}
+	})
 })
 
 func followerChecker(fs []*redis.Client, check func(*redis.Client)) {

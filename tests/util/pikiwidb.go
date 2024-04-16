@@ -62,9 +62,8 @@ func GetConfPath(copy bool, t int64) string {
 
 func checkCondition(c *redis.Client) bool {
 	ctx := context.TODO()
-	//TODO(dingxiaoshuai) use Cmd PING
-	r, e := c.Set(ctx, "key", "value", 0).Result()
-	return r == "OK" && e == nil
+	_, err := c.Get(ctx, "pikiwidb-go-test-check-key").Result()
+	return err == nil || err.Error() == "redis: nil"
 }
 
 type Server struct {
