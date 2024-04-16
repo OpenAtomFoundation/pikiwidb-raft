@@ -24,16 +24,16 @@ namespace pikiwidb {
 class EventLoop;
 class Binlog;
 
+enum ClusterCmdType {
+  NONE,
+  JOIN,
+  REMOVE,
+};
+
 class ClusterCmdContext {
   friend class PRaft;
 
  public:
-  enum ClusterCmdType {
-    NONE,
-    JOIN,
-    REMOVE,
-  };
-
   ClusterCmdContext() = default;
   ~ClusterCmdContext() = default;
 

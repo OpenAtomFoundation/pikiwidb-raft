@@ -242,10 +242,10 @@ void PRaft::SendNodeRequest(PClient* client) {
 
   auto cluster_cmd_type = cluster_cmd_ctx_.GetClusterCmdType();
   switch (cluster_cmd_type) {
-    case ClusterCmdContext::ClusterCmdType::JOIN:
+    case ClusterCmdType::JOIN:
       SendNodeInfoRequest(client, "DATA");
       break;
-    case ClusterCmdContext::ClusterCmdType::REMOVE:
+    case ClusterCmdType::REMOVE:
       SendNodeRemoveRequest(client);
       break;
     default:
@@ -298,10 +298,10 @@ int PRaft::ProcessClusterCmdResponse(PClient* client, const char* start, int len
   auto cluster_cmd_type = cluster_cmd_ctx_.GetClusterCmdType();
   int ret = 0;
   switch (cluster_cmd_type) {
-    case ClusterCmdContext::ClusterCmdType::JOIN:
+    case ClusterCmdType::JOIN:
       ret = PRAFT.ProcessClusterJoinCmdResponse(client, start, len);
       break;
-    case ClusterCmdContext::ClusterCmdType::REMOVE:
+    case ClusterCmdType::REMOVE:
       ret = PRAFT.ProcessClusterRemoveCmdResponse(client, start, len);
       break;
     default:
@@ -374,7 +374,7 @@ int PRaft::ProcessClusterJoinCmdResponse(PClient* client, const char* start, int
 
     // Reset the target of the connection
     cluster_cmd_ctx_.Clear();
-    auto ret = PRAFT.GetClusterCmdCtx().Set(ClusterCmdContext::ClusterCmdType::JOIN, join_client, peer_ip, port);
+    auto ret = PRAFT.GetClusterCmdCtx().Set(ClusterCmdType::JOIN, join_client, peer_ip, port);
     if (!ret) {  // other clients have joined
       join_client->SetRes(CmdRes::kErrOther, "Other clients have joined");
       join_client->SendPacket(join_client->Message());
