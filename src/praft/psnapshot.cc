@@ -86,8 +86,8 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
 }
 
 void PPosixFileSystemAdaptor::AddAllFiles(const std::filesystem::path& dir,
-                                            braft::LocalSnapshotMetaTable* snapshot_meta_memtable,
-                                            const std::string& path) {
+                                          braft::LocalSnapshotMetaTable* snapshot_meta_memtable,
+                                          const std::string& path) {
   for (const auto& entry : std::filesystem::directory_iterator(dir)) {
     if (entry.is_directory()) {
       if (entry.path() != "." && entry.path() != "..") {
