@@ -269,7 +269,7 @@ int PClient::handlePacket(const char* start, int bytes) {
   if (isPeerMaster()) {
     if (isClusterCmdTarget()) {
       // Proccees the packet at one turn.
-      int len = PRAFT.ProcessClusterCmdResponse(this, start, bytes); // @todo
+      int len = PRAFT.ProcessClusterCmdResponse(this, start, bytes);  // @todo
       if (len > 0) {
         return len;
       }

@@ -7,11 +7,11 @@
 
 #include "fmt/format.h"
 
-#include "cmd_admin.h"
-#include "store.h"
 #include "braft/raft.h"
+#include "cmd_admin.h"
 #include "praft/praft.h"
 #include "rocksdb/version.h"
+#include "store.h"
 
 namespace pikiwidb {
 
@@ -151,9 +151,10 @@ void InfoCmd::InfoRaft(PClient* client) {
     if (!status.ok()) {
       return client->SetRes(CmdRes::kErrOther, status.error_str());
     }
-    
+
     for (int i = 0; i < peers.size(); i++) {
-      message = fmt::format("{}raft_node{}:addr={},port={}\r\n", message, std::to_string(i), butil::ip2str(peers[i].addr.ip).c_str(), std::to_string(peers[i].addr.port));
+      message = fmt::format("{}raft_node{}:addr={},port={}\r\n", message, std::to_string(i),
+                            butil::ip2str(peers[i].addr.ip).c_str(), std::to_string(peers[i].addr.port));
     }
   }
 
