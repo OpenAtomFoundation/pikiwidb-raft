@@ -20,6 +20,7 @@
 namespace pikiwidb {
 
 #define RAFT_DBID_LEN 32
+#define PBRAFT_SNAPSHOT_META_FILE "__raft_snapshot_meta"
 
 #define PRAFT PRaft::Instance()
 
@@ -139,9 +140,9 @@ class PRaft : public braft::StateMachine {
   void on_start_following(const ::braft::LeaderChangeContext& ctx) override;
 
  private:
-  void add_all_files(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path);
+  void AddAllFiles(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path);
 
-  void recursive_copy(const std::filesystem::path& source, const std::filesystem::path& destination);
+  void RecursiveCopy(const std::filesystem::path& source, const std::filesystem::path& destination);
 
  private:
   std::unique_ptr<brpc::Server> server_{nullptr};  // brpc

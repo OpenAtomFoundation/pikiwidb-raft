@@ -54,8 +54,9 @@ void DB::DoBgSave(const std::string& path, int i) {
 }
 
 void DB::CreateCheckpoint(const std::string& path) {
-  if (0 != pstd::CreatePath(path + '/' + std::to_string(db_index_))) {
-    WARN("Create dir {} fail !", path + '/' + std::to_string(db_index_));
+  auto tmp_path = path + '/' + std::to_string(db_index_);
+  if (0 != pstd::CreatePath(tmp_path)) {
+    WARN("Create dir {} fail !", tmp_path);
     return;
   }
   checkpoint_manager_->CreateCheckpoint(path);

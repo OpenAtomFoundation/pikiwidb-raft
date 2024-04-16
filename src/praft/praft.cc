@@ -372,12 +372,13 @@ void PRaft::AppendLog(const Binlog& log, std::promise<rocksdb::Status>&& promise
   node_->apply(task);
 }
 
-void PRaft::add_all_files(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path) {
+void PRaft::AddAllFiles(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path) {
+  assert(writer);
   for (const auto& entry : std::filesystem::directory_iterator(dir)) {
     if (entry.is_directory()) {
       if (entry.path() != "." && entry.path() != "..") {
         INFO("dir_path = {}", entry.path().string());
-        add_all_files(entry.path(), writer, path);
+        AddAllFiles(entry.path(), writer, path);
       }
     } else {
       INFO("file_path = {}", std::filesystem::relative(entry.path(), path).string());
@@ -388,9 +389,9 @@ void PRaft::add_all_files(const std::filesystem::path& dir, braft::SnapshotWrite
   }
 }
 
-void PRaft::recursive_copy(const std::filesystem::path& source, const std::filesystem::path& destination) {
+void PRaft::RecursiveCopy(const std::filesystem::path& source, const std::filesystem::path& destination) {
   if (std::filesystem::is_regular_file(source)) {
-    if (source.filename() == "__raft_snapshot_meta") {
+    if (source.filename() == PBRAFT_SNAPSHOT_META_FILE) {
       return;
     } else if (source.extension() == ".sst") {
       // Create a hard link
@@ -407,7 +408,7 @@ void PRaft::recursive_copy(const std::filesystem::path& source, const std::files
     }
 
     for (const auto& entry : std::filesystem::directory_iterator(source)) {
-      recursive_copy(entry.path(), destination / entry.path().filename());
+      RecursiveCopy(entry.path(), destination / entry.path().filename());
     }
   }
 }
@@ -453,7 +454,7 @@ void PRaft::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done
   PSTORE.DoSomeThingSpecificDB(tasks);
   PSTORE.WaitForCheckpointDone();
   auto writer_path = writer->get_path();
-  add_all_files(writer_path, writer, writer_path);
+  AddAllFiles(writer_path, writer, writer_path);
 }
 
 int PRaft::on_snapshot_load(braft::SnapshotReader* reader) {
@@ -466,7 +467,7 @@ int PRaft::on_snapshot_load(braft::SnapshotReader* reader) {
     pstd::DeleteDirIfExist(sub_path);
   }
   db_path.pop_back();
-  recursive_copy(reader_path, db_path);
+  RecursiveCopy(reader_path, db_path);
   PSTORE.Init();
   return 0;
 }
