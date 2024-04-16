@@ -321,6 +321,11 @@ int main(int ac, char* av[]) {
       std::cerr << "Load config file [" << g_pikiwidb->GetConfigName() << "] failed!\n";
       return -1;
     }
+  } else {
+    pikiwidb::g_config.fast_cmd_threads_num = int(1);
+    pikiwidb::g_config.slow_cmd_threads_num = int(1);
+    pikiwidb::g_config.worker_threads_num = int(2);
+    pikiwidb::g_config.slave_threads_num = int(2);
   }
 
   // output logo to console
