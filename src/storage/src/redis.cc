@@ -7,12 +7,15 @@
 
 #include "rocksdb/env.h"
 
-#include "config.h"
 #include "src/base_filter.h"
 #include "src/lists_filter.h"
 #include "src/redis.h"
 #include "src/strings_filter.h"
 #include "src/zsets_filter.h"
+
+#define ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(type)              \
+  type##_cf_ops.table_properties_collector_factories.push_back( \
+      std::make_shared<LogIndexTablePropertiesCollectorFactory>(log_index_collector_));
 
 namespace storage {
 const rocksdb::Comparator* ListsDataKeyComparator() {
@@ -138,6 +141,26 @@ Status Redis::Open(const StorageOptions& storage_options, const std::string& db_
   zset_data_cf_ops.table_factory.reset(rocksdb::NewBlockBasedTableFactory(zset_data_cf_table_ops));
   zset_score_cf_ops.table_factory.reset(rocksdb::NewBlockBasedTableFactory(zset_score_cf_table_ops));
 
+  if (append_log_function_) {
+    // Add log index table property collector factory to each column family
+    ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(string);
+    ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(hash_meta);
+    ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(hash_data);
+    ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(list_meta);
+    ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(list_data);
+    ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(set_meta);
+    ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(set_data);
+    ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(zset_meta);
+    ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(zset_data);
+    ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(zset_score);
+
+    // Add a listener on flush to purge log index collector
+    db_ops.listeners.push_back(
+        std::make_shared<LogIndexAndSequenceCollectorPurger>(&log_index_collector_, &log_index_of_all_cfs_));
+
+    // TODO(longfar): Add snapshot caller
+  }
+
   std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
   column_families.emplace_back(rocksdb::kDefaultColumnFamilyName, string_cf_ops);
   // hash CF
@@ -153,7 +176,12 @@ Status Redis::Open(const StorageOptions& storage_options, const std::string& db_
   column_families.emplace_back("zset_meta_cf", zset_meta_cf_ops);
   column_families.emplace_back("zset_data_cf", zset_data_cf_ops);
   column_families.emplace_back("zset_score_cf", zset_score_cf_ops);
-  return rocksdb::DB::Open(db_ops, db_path, column_families, &handles_, &db_);
+
+  auto s = rocksdb::DB::Open(db_ops, db_path, column_families, &handles_, &db_);
+  if (!s.ok()) {
+    return s;
+  }
+  return log_index_of_all_cfs_.Init(this);
 }
 
 Status Redis::GetScanStartPoint(const DataType& type, const Slice& key, const Slice& pattern, int64_t cursor,

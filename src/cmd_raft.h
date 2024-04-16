@@ -25,7 +25,7 @@ namespace pikiwidb {
  *   :<new node id>
  *   :<group_id>
  *
- * RAFT.NODE REMOVE [id] 
+ * RAFT.NODE REMOVE [id]
  *   Remove an existing node from the cluster.
  * Reply:
  *   -NOCLUSTER ||

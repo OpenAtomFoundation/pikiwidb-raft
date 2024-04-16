@@ -9,22 +9,12 @@
 
 #define GLOG_NO_ABBREVIATED_SEVERITIES
 
-#include "common.h"
-#include "db.h"
-#include "storage/storage.h"
-
 #include <map>
 #include <memory>
-#include <mutex>
-#include <set>
 #include <shared_mutex>
 #include <vector>
 
-#include "checkpoint_manager.h"
-#include "common.h"
 #include "db.h"
-#include "storage/storage.h"
-#include "braft/raft.h"
 
 namespace pikiwidb {
 
@@ -47,8 +37,6 @@ struct TaskContext {
 
 using TasksVector = std::vector<TaskContext>;
 
-class CheckpointManager;
-
 class PStore {
  public:
   friend class CheckpointManager;
@@ -61,10 +49,9 @@ class PStore {
 
   std::unique_ptr<DB>& GetBackend(int32_t index) { return backends_[index]; };
 
-  void DoSomeThingSpecificDB(const TasksVector task);
+  void DoSomeThingSpecificDB(const TasksVector& task);
 
   void WaitForCheckpointDone();
-
 
   std::shared_mutex& SharedMutex() { return dbs_mutex_; }
 

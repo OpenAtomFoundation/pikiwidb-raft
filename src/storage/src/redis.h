@@ -14,6 +14,7 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 
+#include "log_index.h"
 #include "pstd/env.h"
 #include "pstd/log.h"
 #include "src/custom_comparator.h"
@@ -103,6 +104,12 @@ class Redis {
                               const ColumnFamilyType& type = kMetaAndData);
 
   virtual Status GetProperty(const std::string& property, uint64_t* out);
+  bool IsApplied(size_t cf_idx, LogIndex logidx) const { return log_index_of_all_cfs_.IsApplied(cf_idx, logidx); }
+  void UpdateAppliedLogIndexOfColumnFamily(size_t cf_idx, LogIndex logidx) {
+    log_index_of_all_cfs_.Update(cf_idx, logidx);
+  }
+  bool IsRestarting() const { return is_starting_; }
+  void StartingPhaseEnd() { is_starting_ = false; }
 
   Status ScanKeyNum(std::vector<KeyInfo>* key_info);
   Status ScanStringsKeyNum(KeyInfo* key_info);
@@ -299,6 +306,10 @@ class Redis {
   void ScanZsets();
   void ScanSets();
 
+  void UpdateLogIndex(LogIndex applied_log_index, SequenceNumber seqno) {
+    log_index_collector_.Update(applied_log_index, seqno);
+  }
+
   TypeIterator* CreateIterator(const DataType& type, const std::string& pattern, const Slice* lower_bound,
                                const Slice* upper_bound) {
     return CreateIterator(DataTypeTag[type], pattern, lower_bound, upper_bound);
@@ -361,6 +372,9 @@ class Redis {
   // For raft
   uint32_t raft_timeout_s_ = 10;
   AppendLogFunction append_log_function_;
+  LogIndexAndSequenceCollector log_index_collector_;
+  LogIndexOfColumnFamilies log_index_of_all_cfs_;
+  bool is_starting_{true};
 
   Status UpdateSpecificKeyStatistics(const DataType& dtype, const std::string& key, uint64_t count);
   Status UpdateSpecificKeyDuration(const DataType& dtype, const std::string& key, uint64_t duration);

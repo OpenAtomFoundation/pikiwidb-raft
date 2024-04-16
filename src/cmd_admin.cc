@@ -10,7 +10,7 @@
 #include "cmd_admin.h"
 #include "store.h"
 #include "braft/raft.h"
-#include "praft.h"
+#include "praft/praft.h"
 #include "rocksdb/version.h"
 
 namespace pikiwidb {
@@ -83,7 +83,7 @@ void SelectCmd::DoCmd(PClient* client) {
   client->SetRes(CmdRes::kOK);
 }
 
-InfoCmd::InfoCmd(const std::string& name, int16_t arity) 
+InfoCmd::InfoCmd(const std::string& name, int16_t arity)
     : BaseCmd(name, arity, kCmdFlagsAdmin | kCmdFlagsReadonly, kAclCategoryAdmin) {}
 
 bool InfoCmd::DoInitial(PClient* client) { return true; }

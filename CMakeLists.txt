@@ -128,6 +128,24 @@ SET(EXTERNAL_PROJECT_LOG_ARGS
         LOG_TEST 1
         LOG_INSTALL 0)
 
+IF(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    SET(LIB rt)
+ELSEIF(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    SET(LIB
+            pthread
+            "-framework CoreFoundation"
+            "-framework CoreGraphics"
+            "-framework CoreData"
+            "-framework CoreText"
+            "-framework Security"
+            "-framework Foundation"
+            "-Wl,-U,_MallocExtension_ReleaseFreeMemory"
+            "-Wl,-U,_ProfilerStart"
+            "-Wl,-U,_ProfilerStop"
+            "-Wl,-U,__Z13GetStackTracePPvii")
+ENDIF()
+SET(LIB ${LIB} CACHE INTERNAL "libs which should be linked for executable target")
+
 INCLUDE(FetchContent)
 
 INCLUDE(gflags)

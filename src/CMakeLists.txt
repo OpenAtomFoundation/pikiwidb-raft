@@ -22,23 +22,6 @@ TARGET_INCLUDE_DIRECTORIES(pikiwidb
         )
 
 
-IF(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    SET(LIB rt)
-ELSEIF(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    SET(LIB
-            pthread
-            "-framework CoreFoundation"
-            "-framework CoreGraphics"
-            "-framework CoreData"
-            "-framework CoreText"
-            "-framework Security"
-            "-framework Foundation"
-            "-Wl,-U,_MallocExtension_ReleaseFreeMemory"
-            "-Wl,-U,_ProfilerStart"
-            "-Wl,-U,_ProfilerStop"
-            "-Wl,-U,__Z13GetStackTracePPvii")
-ENDIF()
-
 TARGET_LINK_LIBRARIES(pikiwidb net; dl; fmt; storage; rocksdb; pstd braft brpc ssl crypto zlib protobuf leveldb gflags  z praft praft_pb "${LIB}")
 
 SET_TARGET_PROPERTIES(pikiwidb PROPERTIES LINKER_LANGUAGE CXX)

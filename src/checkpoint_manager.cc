@@ -12,11 +12,8 @@
 
 namespace pikiwidb {
 
-class DB;
-
 void CheckpointManager::Init(int instNum, DB* db) {
   checkpoint_num_ = instNum;
-  checkpoint_infoes_.resize(checkpoint_num_);
   res_.reserve(checkpoint_num_);
   db_ = db;
 }
@@ -34,8 +31,7 @@ void CheckpointManager::CreateCheckpoint(const std::string& path) {
 
   std::lock_guard Lock(shared_mutex_);
   for (int i = 0; i < checkpoint_num_; ++i) {
-    checkpoint_infoes_[i].checkpoint_in_process = true;
-    auto res = std::async(std::launch::async, &DB::DoBgSave, db_, std::ref(checkpoint_infoes_[i]), path, i);
+    auto res = std::async(std::launch::async, &DB::DoBgSave, db_, path, i);
     res_.push_back(std::move(res));
   }
 }
