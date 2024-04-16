@@ -213,22 +213,7 @@ void PReplication::Cron() {
       } break;
 
       case kPReplStateConnected:
-        // @todo
         break;
-        // if (!g_config.masterauth.empty()) {
-        //   if (auto master = master_.lock()) {
-        //     UnboundedBuffer req;
-        //     req.PushData("auth ", 5);
-        //     req.PushData(g_config.masterauth.data(), g_config.masterauth.size());
-        //     req.PushData("\r\n", 2);
-        //     master->SendPacket(req);
-        //     INFO("send auth with password {}", g_config.masterauth);
-
-        //     masterInfo_.state = kPReplStateWaitAuth;
-        //     break;
-        //   }
-        // }
-        // fall through to next case.
 
       case kPReplStateWaitAuth: {
         auto master = master_.lock();
