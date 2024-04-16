@@ -10,13 +10,12 @@
 #include <algorithm>
 #include <cinttypes>
 #include <mutex>
+#include <set>
 #include <shared_mutex>
 
 #include "redis.h"
 
 namespace storage {
-
-constexpr int64_t kGapMax = 100;
 
 rocksdb::Status storage::LogIndexOfColumnFamilies::Init(Redis *db) {
   for (int i = 0; i < cf_.size(); i++) {
@@ -27,41 +26,55 @@ rocksdb::Status storage::LogIndexOfColumnFamilies::Init(Redis *db) {
     }
     auto res = LogIndexTablePropertiesCollector::GetLargestLogIndexFromTableCollection(collection);
     if (res.has_value()) {
-      cf_[i].applied_log_index.store(res->GetAppliedLogIndex());
-      cf_[i].flushed_log_index.store(res->GetAppliedLogIndex());
+      cf_[i].applied_log_index.log_index.store(res->GetAppliedLogIndex());
+      cf_[i].applied_log_index.seqno.store(res->GetSequenceNumber());
+      cf_[i].flushed_log_index.log_index.store(res->GetAppliedLogIndex());
+      cf_[i].flushed_log_index.seqno.store(res->GetSequenceNumber());
     }
   }
   return Status::OK();
 }
 
-std::tuple<int, LogIndex, int, LogIndex> LogIndexOfColumnFamilies::GetSmallestLogIndex() const {
+std::tuple<int, LogIndex, SequenceNumber, int, LogIndex> LogIndexOfColumnFamilies::GetSmallestLogIndex() const {
   auto smallest_applied_log_index = std::numeric_limits<LogIndex>::max();
   auto smallest_flushed_log_index = std::numeric_limits<LogIndex>::max();
+  auto smallest_flushed_seqno = std::numeric_limits<SequenceNumber>::max();
   auto smallest_applied_log_index_cf = -1;
   auto smallest_flushed_log_index_cf = -1;
   for (int i = 0; i < cf_.size(); i++) {
-    auto applied_log_index = cf_[i].applied_log_index.load();
-    auto flushed_log_index = cf_[i].flushed_log_index.load();
+    // 同一个 CF 以及不同的 CF 的 Flush 事件可能并发, 所有每一个 CF 的 Flushed LogIndex 和 Applied Flushed LogIndex
+    // 还可能向前推进.故最后找出的 min 值可能小于真正的 min 值, 但是不影响正确性. 考虑一种情况:某一个 cf
+    // 刚好把所有的数据 flush, 此时 Flushed LogIndex == Applied LogIndex, 但是不能将当前 cf 跳过. 所以还需要判断当前 cf
+    // 的 Flushed seq 与 last min flushed seq 的大小.
+    if (cf_[i].flushed_log_index.seqno <= last_min_flushed_seqno_.load() &&
+        cf_[i].flushed_log_index == cf_[i].flushed_log_index) {
+      continue;
+    }
+    auto applied_log_index = cf_[i].applied_log_index.log_index.load();
+    auto flushed_log_index = cf_[i].flushed_log_index.log_index.load();
+    auto flushed_seqno = cf_[i].flushed_log_index.seqno.load();
+    // 此时会读到中间状态, 导致读到到 LogIndex 和 Seq 并不是真正的对应关系.
     if (applied_log_index < smallest_applied_log_index) {
       smallest_applied_log_index = applied_log_index;
       smallest_applied_log_index_cf = i;
     }
     if (flushed_log_index < smallest_flushed_log_index) {
       smallest_flushed_log_index = flushed_log_index;
+      smallest_flushed_seqno = flushed_seqno;
       smallest_flushed_log_index_cf = i;
     }
   }
-  return {smallest_flushed_log_index_cf, smallest_flushed_log_index, smallest_applied_log_index_cf,
-          smallest_applied_log_index};
+  return {smallest_flushed_log_index_cf, smallest_flushed_log_index, smallest_flushed_seqno,
+          smallest_applied_log_index_cf, smallest_applied_log_index};
 }
 
 bool LogIndexOfColumnFamilies::IsPendingFlush() const {
   // assert(flushed index <= applied index)
   std::set<int> s;
-  std::for_each(cf_.begin(), cf_.end(), [&s](auto &cf) {
-    s.insert(cf.applied_log_index.load());
-    s.insert(cf.flushed_log_index.load());
-  });
+  for (int i = 0; i < kColumnFamilyNum; i++) {
+    s.insert(cf_[i].applied_log_index.log_index);
+    s.insert(cf_[i].flushed_log_index.log_index);
+  }
   assert(!s.empty());
   if (s.size() == 1) {
     return false;

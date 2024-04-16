@@ -2290,7 +2290,8 @@ Status Storage::OnBinlogWrite(const pikiwidb::Binlog& log, LogIndex log_idx) {
         return Status::Incomplete(msg);
     }
 
-    inst->UpdateAppliedLogIndexOfColumnFamily(entry.cf_idx(), log_idx);
+    auto seqno = inst->GetDB()->GetLatestSequenceNumber() + 1;
+    inst->UpdateAppliedLogIndexOfColumnFamily(entry.cf_idx(), log_idx, seqno);
   }
   if (inst->IsRestarting() && is_finished_start) [[unlikely]] {
     INFO("Redis {} finished start phase", inst->GetIndex());

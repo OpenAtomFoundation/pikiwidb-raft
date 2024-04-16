@@ -105,8 +105,8 @@ class Redis {
 
   virtual Status GetProperty(const std::string& property, uint64_t* out);
   bool IsApplied(size_t cf_idx, LogIndex logidx) const { return log_index_of_all_cfs_.IsApplied(cf_idx, logidx); }
-  void UpdateAppliedLogIndexOfColumnFamily(size_t cf_idx, LogIndex logidx) {
-    log_index_of_all_cfs_.Update(cf_idx, logidx);
+  void UpdateAppliedLogIndexOfColumnFamily(size_t cf_idx, LogIndex logidx, SequenceNumber seqno) {
+    log_index_of_all_cfs_.Update(cf_idx, logidx, seqno);
   }
   bool IsRestarting() const { return is_starting_; }
   void StartingPhaseEnd() { is_starting_ = false; }
