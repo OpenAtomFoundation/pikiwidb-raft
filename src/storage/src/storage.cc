@@ -125,7 +125,7 @@ Status Storage::CreateCheckpoint(const std::string& dump_path, int i) {
 
   // 3) Create a checkpoint
   std::unique_ptr<rocksdb::Checkpoint> checkpoint_guard(checkpoint);
-  s = checkpoint->CreateCheckpoint(tmp_dir, kFlush, nullptr);
+  s = checkpoint->CreateCheckpoint(tmp_dir, kNoFlush, nullptr);
   if (!s.ok()) {
     WARN("DB{}'s RocksDB {} create checkpoint failed!. Error: {}", db_id_, i, s.ToString());
     return s;

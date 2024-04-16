@@ -129,7 +129,7 @@ class PRaft : public braft::StateMachine {
   bool IsInitialized() const { return node_ != nullptr && server_ != nullptr; }
 
  private:
-  void recursive_copy(const std::filesystem::path& source, const std::filesystem::path& destination);
+  void RecursiveCopy(const std::filesystem::path& source, const std::filesystem::path& destination);
 
   void on_apply(braft::Iterator& iter) override;
   void on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) override;

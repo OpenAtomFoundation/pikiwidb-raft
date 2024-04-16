@@ -71,7 +71,7 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
 
       PSTORE.DoSomeThingSpecificDB(tasks);
       PSTORE.WaitForCheckpointDone();
-      add_all_files(snapshot_path, &snapshot_meta_memtable, snapshot_path);
+      AddAllFiles(snapshot_path, &snapshot_meta_memtable, snapshot_path);
       const int rc = snapshot_meta_memtable.save_to_file(fs, meta_path);
       if (rc == 0) {
         INFO("Succeed to save, path: {}", snapshot_path);
@@ -85,14 +85,14 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
   return braft::PosixFileSystemAdaptor::open(path, oflag, file_meta, e);
 }
 
-void PPosixFileSystemAdaptor::add_all_files(const std::filesystem::path& dir,
+void PPosixFileSystemAdaptor::AddAllFiles(const std::filesystem::path& dir,
                                             braft::LocalSnapshotMetaTable* snapshot_meta_memtable,
                                             const std::string& path) {
   for (const auto& entry : std::filesystem::directory_iterator(dir)) {
     if (entry.is_directory()) {
       if (entry.path() != "." && entry.path() != "..") {
         INFO("dir_path = {}", entry.path().string());
-        add_all_files(entry.path(), snapshot_meta_memtable, path);
+        AddAllFiles(entry.path(), snapshot_meta_memtable, path);
       }
     } else {
       INFO("file_path = {}", std::filesystem::relative(entry.path(), path).string());

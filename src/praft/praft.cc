@@ -378,7 +378,7 @@ void PRaft::AppendLog(const Binlog& log, std::promise<rocksdb::Status>&& promise
   node_->apply(task);
 }
 
-void PRaft::recursive_copy(const std::filesystem::path& source, const std::filesystem::path& destination) {
+void PRaft::RecursiveCopy(const std::filesystem::path& source, const std::filesystem::path& destination) {
   if (std::filesystem::is_regular_file(source)) {
     if (source.filename() == PBRAFT_SNAPSHOT_META_FILE) {
       return;
@@ -397,7 +397,7 @@ void PRaft::recursive_copy(const std::filesystem::path& source, const std::files
     }
 
     for (const auto& entry : std::filesystem::directory_iterator(source)) {
-      recursive_copy(entry.path(), destination / entry.path().filename());
+      RecursiveCopy(entry.path(), destination / entry.path().filename());
     }
   }
 }
@@ -446,7 +446,7 @@ int PRaft::on_snapshot_load(braft::SnapshotReader* reader) {
     pstd::DeleteDirIfExist(sub_path);
   }
   db_path.pop_back();
-  recursive_copy(reader_path, db_path);
+  RecursiveCopy(reader_path, db_path);
   PSTORE.Init();
   return 0;
 }

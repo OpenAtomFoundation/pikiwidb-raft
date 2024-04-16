@@ -29,7 +29,7 @@ class PPosixFileSystemAdaptor : public braft::PosixFileSystemAdaptor {
 
   braft::FileAdaptor* open(const std::string& path, int oflag, const ::google::protobuf::Message* file_meta,
                            butil::File::Error* e) override;
-  void add_all_files(const std::filesystem::path& dir, braft::LocalSnapshotMetaTable* snapshot_meta_memtable,
+  void AddAllFiles(const std::filesystem::path& dir, braft::LocalSnapshotMetaTable* snapshot_meta_memtable,
                      const std::string& path);
 
  private:
