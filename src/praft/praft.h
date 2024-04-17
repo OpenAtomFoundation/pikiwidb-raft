@@ -19,15 +19,23 @@ namespace pikiwidb {
 
 #define RAFT_GROUPID_LEN 32
 
+#define OK "+OK"
+#define DATABASES_NUM "databases_num"
+#define ROCKSDB_NUM "rocksdb_num"
+#define ROCKSDB_VERSION "rockdb_version"
+#define WRONG_LEADER "-ERR wrong leader"
+#define RAFT_GROUP_ID "raft_group_id:"
+#define NOT_LEADER "Not leader"
+
 #define PRAFT PRaft::Instance()
 
 class EventLoop;
 class Binlog;
 
 enum ClusterCmdType {
-  NONE,
-  JOIN,
-  REMOVE,
+  kNONE,
+  kJOIN,
+  kREMOVE,
 };
 
 class ClusterCmdContext {
@@ -37,8 +45,8 @@ class ClusterCmdContext {
   ClusterCmdContext() = default;
   ~ClusterCmdContext() = default;
 
-  bool Set(ClusterCmdType cluster_cmd_type, PClient* client, const std::string& peer_ip, int port,
-           std::string peer_id = "");
+  bool Set(ClusterCmdType cluster_cmd_type, PClient* client, const std::string&& peer_ip, int port,
+           const std::string&& peer_id = "");
 
   void Clear();
 
@@ -54,7 +62,7 @@ class ClusterCmdContext {
   void ConnectTargetNode();
 
  private:
-  ClusterCmdType cluster_cmd_type_ = ClusterCmdType::NONE;
+  ClusterCmdType cluster_cmd_type_ = ClusterCmdType::kNONE;
   std::mutex mtx_;
   PClient* client_ = nullptr;
   std::string peer_ip_;
@@ -102,11 +110,14 @@ class PRaft : public braft::StateMachine {
   //===--------------------------------------------------------------------===//
   ClusterCmdContext& GetClusterCmdCtx() { return cluster_cmd_ctx_; }
   void SendNodeRequest(PClient* client);
-  void SendNodeInfoRequest(PClient* client, const std::string info_type);
+  void SendNodeInfoRequest(PClient* client, const std::string& info_type);
   void SendNodeAddRequest(PClient* client);
   void SendNodeRemoveRequest(PClient* client);
 
   int ProcessClusterCmdResponse(PClient* client, const char* start, int len);
+  void CheckRocksDBConfiguration(PClient* client, PClient* join_client, const std::string& reply);
+  void LeaderRedirection(PClient* join_client, const std::string& reply);
+  void InitializeNodeBeforeAdd(PClient* client, PClient* join_client, const std::string& reply);
   int ProcessClusterJoinCmdResponse(PClient* client, const char* start, int len);
   int ProcessClusterRemoveCmdResponse(PClient* client, const char* start, int len);
 

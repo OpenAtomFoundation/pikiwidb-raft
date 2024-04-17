@@ -29,8 +29,8 @@
 
 namespace pikiwidb {
 
-bool ClusterCmdContext::Set(ClusterCmdType cluster_cmd_type, PClient* client, const std::string& peer_ip, int port,
-                            std::string peer_id) {
+bool ClusterCmdContext::Set(ClusterCmdType cluster_cmd_type, PClient* client, const std::string&& peer_ip, int port,
+                            const std::string&& peer_id) {
   std::unique_lock<std::mutex> lck(mtx_);
   if (client_ != nullptr) {
     return false;
@@ -38,15 +38,15 @@ bool ClusterCmdContext::Set(ClusterCmdType cluster_cmd_type, PClient* client, co
   assert(client);
   cluster_cmd_type_ = cluster_cmd_type;
   client_ = client;
-  peer_ip_ = peer_ip;
+  peer_ip_ = std::move(peer_ip);
   port_ = port;
-  peer_id_ = peer_id;
+  peer_id_ = std::move(peer_id);
   return true;
 }
 
 void ClusterCmdContext::Clear() {
   std::unique_lock<std::mutex> lck(mtx_);
-  cluster_cmd_type_ = ClusterCmdType::NONE;
+  cluster_cmd_type_ = ClusterCmdType::kNONE;
   client_ = nullptr;
   peer_ip_.clear();
   port_ = 0;
@@ -242,10 +242,10 @@ void PRaft::SendNodeRequest(PClient* client) {
 
   auto cluster_cmd_type = cluster_cmd_ctx_.GetClusterCmdType();
   switch (cluster_cmd_type) {
-    case ClusterCmdType::JOIN:
+    case ClusterCmdType::kJOIN:
       SendNodeInfoRequest(client, "DATA");
       break;
-    case ClusterCmdType::REMOVE:
+    case ClusterCmdType::kREMOVE:
       SendNodeRemoveRequest(client);
       break;
     default:
@@ -255,14 +255,11 @@ void PRaft::SendNodeRequest(PClient* client) {
 }
 
 // Gets the cluster id, which is used to initialize node
-void PRaft::SendNodeInfoRequest(PClient* client, const std::string info_type) {
+void PRaft::SendNodeInfoRequest(PClient* client, const std::string& info_type) {
   assert(client);
 
-  UnboundedBuffer req;
-  const std::string cmd_str = "INFO " + info_type;
-  req.PushData(cmd_str.c_str(), cmd_str.size());
-  req.PushData("\r\n", 2);
-  client->SendPacket(req);
+  const std::string cmd_str = "INFO " + info_type + "\r\n";
+  client->SendPacket(cmd_str);
   client->Clear();
 }
 
@@ -298,17 +295,118 @@ int PRaft::ProcessClusterCmdResponse(PClient* client, const char* start, int len
   auto cluster_cmd_type = cluster_cmd_ctx_.GetClusterCmdType();
   int ret = 0;
   switch (cluster_cmd_type) {
-    case ClusterCmdType::JOIN:
+    case ClusterCmdType::kJOIN:
       ret = PRAFT.ProcessClusterJoinCmdResponse(client, start, len);
       break;
-    case ClusterCmdType::REMOVE:
+    case ClusterCmdType::kREMOVE:
       ret = PRAFT.ProcessClusterRemoveCmdResponse(client, start, len);
       break;
     default:
+      client->SetRes(CmdRes::kErrOther, "RAFT.CLUSTER response supports JOIN/REMOVE only");
       break;
   }
 
   return ret;
+}
+
+void PRaft::CheckRocksDBConfiguration(PClient* client, PClient* join_client, const std::string& reply) {
+  int databases_num = 0;
+  int rocksdb_num = 0;
+  std::string rockdb_version;
+  std::string line;
+  std::istringstream iss(reply);
+
+  while (std::getline(iss, line)) {
+    std::string::size_type pos = line.find(':');
+    if (pos != std::string::npos) {
+      std::string key = line.substr(0, pos);
+      std::string value = line.substr(pos + 1);
+
+      if (key == DATABASES_NUM && pstd::String2int(value, &databases_num) == 0) {
+        join_client->SetRes(CmdRes::kErrOther, "Config of databases_num invalid");
+        join_client->SendPacket(join_client->Message());
+        join_client->Clear();
+        // If the join fails, clear clusterContext and set it again by using the join command
+        cluster_cmd_ctx_.Clear();
+      } else if (key == ROCKSDB_NUM && pstd::String2int(value, &rocksdb_num) == 0) {
+        join_client->SetRes(CmdRes::kErrOther, "Config of rocksdb_num invalid");
+        join_client->SendPacket(join_client->Message());
+        join_client->Clear();
+        // If the join fails, clear clusterContext and set it again by using the join command
+        cluster_cmd_ctx_.Clear();
+      } else if (key == ROCKSDB_VERSION) {
+        rockdb_version = pstd::StringTrimRight(value, "\r");
+      }
+    }
+  }
+
+  int current_databases_num = pikiwidb::g_config.databases;
+  int current_rocksdb_num = pikiwidb::g_config.db_instance_num;
+  std::string current_rocksdb_version = ROCKSDB_NAMESPACE::GetRocksVersionAsString();
+  if (current_databases_num != databases_num || current_rocksdb_num != rocksdb_num ||
+      current_rocksdb_version != rockdb_version) {
+    join_client->SetRes(CmdRes::kErrOther, "Config of databases_num, rocksdb_num or rocksdb_version mismatch");
+    join_client->SendPacket(join_client->Message());
+    join_client->Clear();
+    // If the join fails, clear clusterContext and set it again by using the join command
+    cluster_cmd_ctx_.Clear();
+  } else {
+    SendNodeInfoRequest(client, "RAFT");
+  }
+}
+
+void PRaft::LeaderRedirection(PClient* join_client, const std::string& reply) {
+  // Resolve the ip address of the leader
+  pstd::StringTrimLeft(reply, WRONG_LEADER);
+  pstd::StringTrim(reply);
+  braft::PeerId peerId;
+  peerId.parse(reply);
+  auto peer_ip = std::string(butil::ip2str(peerId.addr.ip).c_str());
+  auto port = peerId.addr.port;
+
+  // Reset the target of the connection
+  cluster_cmd_ctx_.Clear();
+  auto ret = PRAFT.GetClusterCmdCtx().Set(ClusterCmdType::kJOIN, join_client, std::move(peer_ip), port);
+  if (!ret) {  // other clients have joined
+    join_client->SetRes(CmdRes::kErrOther, "Other clients have joined");
+    join_client->SendPacket(join_client->Message());
+    join_client->Clear();
+    return;
+  }
+  PRAFT.GetClusterCmdCtx().ConnectTargetNode();
+
+  // Not reply any message here, we will reply after the connection is established.
+  join_client->Clear();
+}
+
+void PRaft::InitializeNodeBeforeAdd(PClient* client, PClient* join_client, const std::string& reply) {
+  std::string prefix = RAFT_GROUP_ID;
+  std::string::size_type prefix_length = prefix.length();
+  std::string::size_type group_id_start = reply.find(prefix);
+  group_id_start += prefix_length;  // 定位到raft_group_id的起始位置
+  std::string::size_type group_id_end = reply.find("\r\n", group_id_start);
+  if (group_id_end != std::string::npos) {
+    std::string raft_group_id = reply.substr(group_id_start, group_id_end - group_id_start);
+    // initialize the slave node
+    auto s = PRAFT.Init(raft_group_id, true);
+    if (!s.ok()) {
+      join_client->SetRes(CmdRes::kErrOther, s.error_str());
+      join_client->SendPacket(join_client->Message());
+      join_client->Clear();
+      // If the join fails, clear clusterContext and set it again by using the join command
+      cluster_cmd_ctx_.Clear();
+      return;
+    }
+
+    PRAFT.SendNodeAddRequest(client);
+  } else {
+    ERROR("Joined Raft cluster fail, because of invalid raft_group_id");
+    join_client->SetRes(CmdRes::kErrOther, "Invalid raft_group_id");
+    join_client->SendPacket(join_client->Message());
+    join_client->Clear();
+    // If the join fails, clear clusterContext and set it again by using the join command
+    cluster_cmd_ctx_.Clear();
+  }
 }
 
 int PRaft::ProcessClusterJoinCmdResponse(PClient* client, const char* start, int len) {
@@ -320,101 +418,21 @@ int PRaft::ProcessClusterJoinCmdResponse(PClient* client, const char* start, int
   }
 
   std::string reply(start, len);
-  if (reply.find("+OK") != std::string::npos) {
+  if (reply.find(OK) != std::string::npos) {
     INFO("Joined Raft cluster, node id: {}, group_id: {}", PRAFT.GetNodeID(), PRAFT.group_id_);
     join_client->SetRes(CmdRes::kOK);
     join_client->SendPacket(join_client->Message());
     join_client->Clear();
     // If the join fails, clear clusterContext and set it again by using the join command
     cluster_cmd_ctx_.Clear();
-  } else if (reply.find("databases_num") != std::string::npos) {
-    int databases_num = 0;
-    int rocksdb_num = 0;
-    std::string rockdb_version;
-    std::string line;
-    std::istringstream iss(reply);
-
-    while (std::getline(iss, line)) {
-      std::string::size_type pos = line.find(':');
-      if (pos != std::string::npos) {
-        std::string key = line.substr(0, pos);
-        std::string value = line.substr(pos + 1);
-
-        if (key == "databases_num") {
-          databases_num = std::stoi(value);
-        } else if (key == "rocksdb_num") {
-          rocksdb_num = std::stoi(value);
-        } else if (key == "rockdb_version") {
-          rockdb_version = pstd::StringTrimRight(value, "\r");
-        }
-      }
-    }
-
-    int current_databases_num = pikiwidb::g_config.databases;
-    int current_rocksdb_num = pikiwidb::g_config.db_instance_num;
-    std::string current_rocksdb_version = ROCKSDB_NAMESPACE::GetRocksVersionAsString();
-    if (current_databases_num != databases_num || current_rocksdb_num != rocksdb_num ||
-        current_rocksdb_version != rockdb_version) {
-      join_client->SetRes(CmdRes::kErrOther, "Config of databases_num, rocksdb_num or rocksdb_version mismatch");
-      join_client->SendPacket(join_client->Message());
-      join_client->Clear();
-      // If the join fails, clear clusterContext and set it again by using the join command
-      cluster_cmd_ctx_.Clear();
-    } else {
-      SendNodeInfoRequest(client, "RAFT");
-    }
-  } else if (reply.find("-ERR wrong leader") != std::string::npos) {
-    // Resolve the ip address of the leader
-    pstd::StringTrimLeft(reply, "-ERR wrong leader");
-    pstd::StringTrim(reply);
-    braft::PeerId peerId;
-    peerId.parse(reply);
-    auto peer_ip = std::string(butil::ip2str(peerId.addr.ip).c_str());
-    auto port = peerId.addr.port;
-
-    // Reset the target of the connection
-    cluster_cmd_ctx_.Clear();
-    auto ret = PRAFT.GetClusterCmdCtx().Set(ClusterCmdType::JOIN, join_client, peer_ip, port);
-    if (!ret) {  // other clients have joined
-      join_client->SetRes(CmdRes::kErrOther, "Other clients have joined");
-      join_client->SendPacket(join_client->Message());
-      join_client->Clear();
-      return len;
-    }
-    PRAFT.GetClusterCmdCtx().ConnectTargetNode();
-
-    // Not reply any message here, we will reply after the connection is established.
-    join_client->Clear();
-  } else if (reply.find("raft_group_id") != std::string::npos) {
-    std::string prefix = "raft_group_id:";
-    std::string::size_type prefix_length = prefix.length();
-    std::string::size_type group_id_start = reply.find(prefix);
-    group_id_start += prefix_length;  // 定位到raft_group_id的起始位置
-    std::string::size_type group_id_end = reply.find("\r\n", group_id_start);
-    if (group_id_end != std::string::npos) {
-      std::string raft_group_id = reply.substr(group_id_start, group_id_end - group_id_start);
-      // initialize the slave node
-      auto s = PRAFT.Init(raft_group_id, true);
-      if (!s.ok()) {
-        join_client->SetRes(CmdRes::kErrOther, s.error_str());
-        join_client->SendPacket(join_client->Message());
-        join_client->Clear();
-        // If the join fails, clear clusterContext and set it again by using the join command
-        cluster_cmd_ctx_.Clear();
-        return len;
-      }
-
-      PRAFT.SendNodeAddRequest(client);
-    } else {
-      ERROR("Joined Raft cluster fail, because of invalid raft_group_id");
-      join_client->SetRes(CmdRes::kErrOther, "Invalid raft_group_id");
-      join_client->SendPacket(join_client->Message());
-      join_client->Clear();
-      // If the join fails, clear clusterContext and set it again by using the join command
-      cluster_cmd_ctx_.Clear();
-    }
+  } else if (reply.find(DATABASES_NUM) != std::string::npos) {
+    CheckRocksDBConfiguration(client, join_client, reply);
+  } else if (reply.find(WRONG_LEADER) != std::string::npos) {
+    LeaderRedirection(join_client, reply);
+  } else if (reply.find(RAFT_GROUP_ID) != std::string::npos) {
+    InitializeNodeBeforeAdd(client, join_client, reply);
   } else {
-    ERROR("Joined Raft cluster fail, str: {}", start);
+    ERROR("Joined Raft cluster fail, str: {}", reply);
     join_client->SetRes(CmdRes::kErrOther, std::string(start, len));
     join_client->SendPacket(join_client->Message());
     join_client->Clear();
@@ -434,7 +452,7 @@ int PRaft::ProcessClusterRemoveCmdResponse(PClient* client, const char* start, i
   }
 
   std::string reply(start, len);
-  if (reply.find("+OK") != std::string::npos) {
+  if (reply.find(OK) != std::string::npos) {
     INFO("Removed Raft cluster, node id: {}, group_id: {}", PRAFT.GetNodeID(), PRAFT.group_id_);
     ShutDown();
     Join();
@@ -443,12 +461,12 @@ int PRaft::ProcessClusterRemoveCmdResponse(PClient* client, const char* start, i
     remove_client->SetRes(CmdRes::kOK);
     remove_client->SendPacket(remove_client->Message());
     remove_client->Clear();
-  } else if (reply.find("Not leader") != std::string::npos) {
+  } else if (reply.find(NOT_LEADER) != std::string::npos) {
     auto remove_client = cluster_cmd_ctx_.GetClient();
     remove_client->Clear();
     remove_client->Reexecutecommand();
   } else {
-    ERROR("Removed Raft cluster fail, str: {}", start);
+    ERROR("Removed Raft cluster fail, str: {}", reply);
     remove_client->SetRes(CmdRes::kErrOther, std::string(start, len));
     remove_client->SendPacket(remove_client->Message());
     remove_client->Clear();
@@ -498,7 +516,7 @@ butil::Status PRaft::RemovePeer(const std::string& peer) {
 void PRaft::OnClusterCmdConnectionFailed([[maybe_unused]] EventLoop* loop, const char* peer_ip, int port) {
   auto cli = cluster_cmd_ctx_.GetClient();
   if (cli) {
-    cli->SetRes(CmdRes::kErrOther, "ERR failed to connect to cluster for join or remove, please check logs " +
+    cli->SetRes(CmdRes::kErrOther, "Failed to connect to cluster for join or remove, please check logs " +
                                        std::string(peer_ip) + ":" + std::to_string(port));
     cli->SendPacket(cli->Message());
     cli->Clear();

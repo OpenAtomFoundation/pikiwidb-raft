@@ -26,7 +26,8 @@ RaftNodeCmd::RaftNodeCmd(const std::string& name, int16_t arity)
 
 bool RaftNodeCmd::DoInitial(PClient* client) {
   auto cmd = client->argv_[1];
-  if (strcasecmp(cmd.c_str(), "ADD") && strcasecmp(cmd.c_str(), "REMOVE")) {
+  pstd::StringToUpper(cmd);
+  if (cmd != kAddCmd && cmd != kRemoveCmd) {
     client->SetRes(CmdRes::kErrOther, "RAFT.NODE supports ADD / REMOVE only");
     return false;
   }
@@ -36,9 +37,9 @@ bool RaftNodeCmd::DoInitial(PClient* client) {
 void RaftNodeCmd::DoCmd(PClient* client) {
   auto cmd = client->argv_[1];
   pstd::StringToUpper(cmd);
-  if (!strcasecmp(cmd.c_str(), "ADD")) {
+  if (cmd == kAddCmd) {
     DoCmdAdd(client);
-  } else if (!strcasecmp(cmd.c_str(), "REMOVE")) {
+  } else {
     DoCmdRemove(client);
   }
 }
@@ -89,10 +90,12 @@ void RaftNodeCmd::DoCmdRemove(PClient* client) {
     }
 
     // Connect target
+    auto peer_ip = butil::ip2str(leader_peer_id.addr.ip).c_str();
+    auto port = leader_peer_id.addr.port - pikiwidb::g_config.raft_port_offset;
+    auto peer_id = client->argv_[2];
     auto ret =
-        PRAFT.GetClusterCmdCtx().Set(ClusterCmdType::REMOVE, client, butil::ip2str(leader_peer_id.addr.ip).c_str(),
-                                     leader_peer_id.addr.port - pikiwidb::g_config.raft_port_offset, client->argv_[2]);
-    if (!ret) {  // other clients have joined
+        PRAFT.GetClusterCmdCtx().Set(ClusterCmdType::kREMOVE, client, std::move(peer_ip), port, std::move(peer_id));
+    if (!ret) {  // other clients have removed
       return client->SetRes(CmdRes::kErrOther, "Other clients have removed");
     }
     PRAFT.GetClusterCmdCtx().ConnectTargetNode();
@@ -138,7 +141,7 @@ void RaftClusterCmd::DoCmd(PClient* client) {
   pstd::StringToUpper(cmd);
   if (cmd == kInitCmd) {
     DoCmdInit(client);
-  } else if (cmd == kJoinCmd) {
+  } else {
     DoCmdJoin(client);
   }
 }
@@ -205,7 +208,7 @@ void RaftClusterCmd::DoCmdJoin(PClient* client) {
   auto& [peer_ip, port] = *ip_port;
 
   // Connect target
-  auto ret = PRAFT.GetClusterCmdCtx().Set(ClusterCmdType::JOIN, client, peer_ip, port);
+  auto ret = PRAFT.GetClusterCmdCtx().Set(ClusterCmdType::kJOIN, client, std::move(peer_ip), port);
   if (!ret) {  // other clients have joined
     return client->SetRes(CmdRes::kErrOther, "Other clients have joined");
   }

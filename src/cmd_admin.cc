@@ -141,9 +141,9 @@ void InfoCmd::InfoRaft(PClient* client) {
   } else {
     message = fmt::format("{}raft_state:down\r\n", message);
   }
-  message = fmt::format("{}raft_role:{}\r\n", message, std::string(braft::state2str(node_status.state)));
+  message = fmt::format("{}raft_role:{}\r\n", message, braft::state2str(node_status.state));
   message = fmt::format("{}raft_leader_id:{}\r\n", message, node_status.leader_id.to_string());
-  message = fmt::format("{}raft_current_term:{}\r\n", message, std::to_string(node_status.term));
+  message = fmt::format("{}raft_current_term:{}\r\n", message, node_status.term);
 
   if (PRAFT.IsLeader()) {
     std::vector<braft::PeerId> peers;
@@ -153,8 +153,8 @@ void InfoCmd::InfoRaft(PClient* client) {
     }
 
     for (int i = 0; i < peers.size(); i++) {
-      message = fmt::format("{}raft_node{}:addr={},port={}\r\n", message, std::to_string(i),
-                            butil::ip2str(peers[i].addr.ip).c_str(), std::to_string(peers[i].addr.port));
+      message = fmt::format("{}raft_node{}:addr={},port={}\r\n", message, i, butil::ip2str(peers[i].addr.ip).c_str(),
+                            peers[i].addr.port);
     }
   }
 
@@ -167,8 +167,8 @@ void InfoCmd::InfoData(PClient* client) {
   }
 
   std::string message("");
-  message = fmt::format("{}databases_num:{}\r\n", message, std::to_string(pikiwidb::g_config.databases));
-  message = fmt::format("{}rocksdb_num:{}\r\n", message, std::to_string(pikiwidb::g_config.db_instance_num));
+  message = fmt::format("{}databases_num:{}\r\n", message, pikiwidb::g_config.databases);
+  message = fmt::format("{}rocksdb_num:{}\r\n", message, pikiwidb::g_config.db_instance_num);
   message = fmt::format("{}rockdb_version:{}\r\n", message, ROCKSDB_NAMESPACE::GetRocksVersionAsString());
 
   client->AppendString(message);
