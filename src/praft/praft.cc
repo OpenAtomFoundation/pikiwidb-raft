@@ -383,7 +383,7 @@ void PRaft::InitializeNodeBeforeAdd(PClient* client, PClient* join_client, const
   std::string prefix = RAFT_GROUP_ID;
   std::string::size_type prefix_length = prefix.length();
   std::string::size_type group_id_start = reply.find(prefix);
-  group_id_start += prefix_length;  // 定位到raft_group_id的起始位置
+  group_id_start += prefix_length;  // locate the start location of "raft_group_id"
   std::string::size_type group_id_end = reply.find("\r\n", group_id_start);
   if (group_id_end != std::string::npos) {
     std::string raft_group_id = reply.substr(group_id_start, group_id_end - group_id_start);
@@ -433,7 +433,7 @@ int PRaft::ProcessClusterJoinCmdResponse(PClient* client, const char* start, int
     InitializeNodeBeforeAdd(client, join_client, reply);
   } else {
     ERROR("Joined Raft cluster fail, str: {}", reply);
-    join_client->SetRes(CmdRes::kErrOther, std::string(start, len));
+    join_client->SetRes(CmdRes::kErrOther, reply);
     join_client->SendPacket(join_client->Message());
     join_client->Clear();
     // If the join fails, clear clusterContext and set it again by using the join command
@@ -467,7 +467,7 @@ int PRaft::ProcessClusterRemoveCmdResponse(PClient* client, const char* start, i
     remove_client->Reexecutecommand();
   } else {
     ERROR("Removed Raft cluster fail, str: {}", reply);
-    remove_client->SetRes(CmdRes::kErrOther, std::string(start, len));
+    remove_client->SetRes(CmdRes::kErrOther, reply);
     remove_client->SendPacket(remove_client->Message());
     remove_client->Clear();
   }

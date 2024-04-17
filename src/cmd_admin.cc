@@ -132,18 +132,18 @@ void InfoCmd::InfoRaft(PClient* client) {
     return client->SetRes(CmdRes::kErrOther, "Node is not initialized");
   }
 
-  std::string message("");
-  message = fmt::format("{}raft_group_id:{}\r\n", message, PRAFT.GetGroupID());
-  message = fmt::format("{}raft_node_id:{}\r\n", message, PRAFT.GetNodeID());
-  message = fmt::format("{}raft_peer_id:{}\r\n", message, PRAFT.GetPeerID());
+  std::string message;
+  message += "raft_group_id:" + PRAFT.GetGroupID() + "\r\n";
+  message += "raft_node_id:" + PRAFT.GetNodeID() + "\r\n";
+  message += "raft_peer_id:" + PRAFT.GetPeerID() + "\r\n";
   if (braft::is_active_state(node_status.state)) {
-    message = fmt::format("{}raft_state:up\r\n", message);
+    message += "raft_state:up\r\n";
   } else {
-    message = fmt::format("{}raft_state:down\r\n", message);
+    message += "raft_state:down\r\n";
   }
-  message = fmt::format("{}raft_role:{}\r\n", message, braft::state2str(node_status.state));
-  message = fmt::format("{}raft_leader_id:{}\r\n", message, node_status.leader_id.to_string());
-  message = fmt::format("{}raft_current_term:{}\r\n", message, node_status.term);
+  message += "raft_role:" + std::string(braft::state2str(node_status.state)) + "\r\n";
+  message += "raft_leader_id:" + node_status.leader_id.to_string() + "\r\n";
+  message += "raft_current_term:" + std::to_string(node_status.term) + "\r\n";
 
   if (PRAFT.IsLeader()) {
     std::vector<braft::PeerId> peers;
@@ -153,8 +153,8 @@ void InfoCmd::InfoRaft(PClient* client) {
     }
 
     for (int i = 0; i < peers.size(); i++) {
-      message = fmt::format("{}raft_node{}:addr={},port={}\r\n", message, i, butil::ip2str(peers[i].addr.ip).c_str(),
-                            peers[i].addr.port);
+      message += "raft_node" + std::to_string(i) + ":addr=" + butil::ip2str(peers[i].addr.ip).c_str() +
+                 ",port=" + std::to_string(peers[i].addr.port) + "\r\n";
     }
   }
 
@@ -166,10 +166,10 @@ void InfoCmd::InfoData(PClient* client) {
     return client->SetRes(CmdRes::kWrongNum, client->CmdName());
   }
 
-  std::string message("");
-  message = fmt::format("{}databases_num:{}\r\n", message, pikiwidb::g_config.databases);
-  message = fmt::format("{}rocksdb_num:{}\r\n", message, pikiwidb::g_config.db_instance_num);
-  message = fmt::format("{}rockdb_version:{}\r\n", message, ROCKSDB_NAMESPACE::GetRocksVersionAsString());
+  std::string message;
+  message += "databases_num:" + std::to_string(pikiwidb::g_config.databases) + "\r\n";
+  message += "rocksdb_num:" + std::to_string(pikiwidb::g_config.db_instance_num) + "\r\n";
+  message += "rockdb_version:" + ROCKSDB_NAMESPACE::GetRocksVersionAsString() + "\r\n";
 
   client->AppendString(message);
 }
