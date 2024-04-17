@@ -4,7 +4,6 @@
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  */
-
 #include "cmd_hash.h"
 
 #include <config.h>
@@ -255,7 +254,7 @@ HScanCmd::HScanCmd(const std::string& name, int16_t arity)
 
 bool HScanCmd::DoInitial(PClient* client) {
   if (auto size = client->argv_.size(); size != 3 && size != 5 && size != 7) {
-    client->SetRes(CmdRes::kSyntaxErr);
+    client->SetRes(CmdRes::kSyntaxErr, kCmdNameHScan);
     return false;
   }
   client->SetKey(client->argv_[1]);
@@ -269,7 +268,7 @@ void HScanCmd::DoCmd(PClient* client) {
   int64_t count{10};
   std::string pattern{"*"};
   if (pstd::String2int(argv[2], &cursor) == 0) {
-    client->SetRes(CmdRes::kInvalidCursor);
+    client->SetRes(CmdRes::kInvalidCursor, kCmdNameHScan);
     return;
   }
   for (size_t i = 3; i < argv.size(); i += 2) {
@@ -280,8 +279,12 @@ void HScanCmd::DoCmd(PClient* client) {
         client->SetRes(CmdRes::kInvalidInt, kCmdNameHScan);
         return;
       }
+      if (count < 0) {
+        client->SetRes(CmdRes::kSyntaxErr, kCmdNameHScan);
+        return;
+      }
     } else {
-      client->SetRes(CmdRes::kErrOther, kCmdNameHScan);
+      client->SetRes(CmdRes::kSyntaxErr, kCmdNameHScan);
       return;
     }
   }

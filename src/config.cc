@@ -7,11 +7,14 @@
 
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
 #include "config.h"
+#include "log.h"
 #include "pstd/pstd_string.h"
+#include "store.h"
 
 namespace pikiwidb {
 
@@ -20,6 +23,7 @@ constexpr uint16_t PORT_LIMIT_MIN = 1;
 constexpr int DBNUMBER_MAX = 16;
 constexpr int THREAD_MAX = 129;
 constexpr int ROCKSDB_INSTANCE_NUMBER_MAX = 10;
+const std::string ROCKSDB_PREF = "rocksdb";
 
 // preprocess func
 static void EraseQuotes(std::string& str) {
@@ -32,9 +36,6 @@ static void EraseQuotes(std::string& str) {
     str.pop_back();
   }
 }
-
-// 这里最好全部变成状态 + message. 这样就可以返回具体的信息
-// check func
 
 static Status CheckYesNo(const std::string& value) {
   if (!pstd::StringEqualCaseInsensitive(value, "yes") && !pstd::StringEqualCaseInsensitive(value, "no")) {
@@ -53,8 +54,8 @@ static Status CheckLogLevel(const std::string& value) {
 
 PConfig g_config;
 
-Status BaseValue::Set(const std::string& value, bool force) {
-  if (!force && !rewritable_) {
+Status BaseValue::Set(const std::string& value, bool init_stage) {
+  if (!init_stage && !rewritable_) {
     return Status::NotSupported("Dynamic modification is not supported.");
   }
   auto value_copy = value;
@@ -63,6 +64,7 @@ Status BaseValue::Set(const std::string& value, bool force) {
   if (!s.ok()) {
     return s;
   }
+  // TODO(dingxiaoshuai) Support RocksDB config change Dynamically
   return SetValue(value_copy);
 }
 
@@ -104,40 +106,40 @@ Status NumberValue<T>::SetValue(const std::string& value) {
 }
 
 PConfig::PConfig() {
-  {
-    AddBool("daemonize", &CheckYesNo, false, &daemonize);
-    AddString("ip", false, {&ip});
-    AddNumberWihLimit<uint16_t>("port", false, &port, PORT_LIMIT_MIN, PORT_LIMIT_MAX);
-    AddNumber("timeout", true, &timeout_);
-    AddString("db-path", false, std::vector<std::string*>{&dbpath});
-    AddStrinWithFunc("loglevel", &CheckLogLevel, true, {&loglevel});
-    AddString("logfile", true, {&logdir});
-    AddNumberWihLimit<size_t>("databases", false, &databases, 1, DBNUMBER_MAX);
-    AddString("requirepass", true, {&password_});
-    AddNumber("maxclients", true, &maxclients_);
-    AddNumberWihLimit<uint32_t>("worker-threads", false, &worker_threads_num, 1, THREAD_MAX);
-    AddNumberWihLimit<uint32_t>("slave-threads", false, &worker_threads_num, 1, THREAD_MAX);
-    AddNumber("slowlog-log-slower-than", true, &slowlogtime_);
-    AddNumber("slowlog-max-len", true, &slowlogmaxlen_);
-    AddNumberWihLimit<size_t>("db-instance-num", true, &db_instance_num, 1, ROCKSDB_INSTANCE_NUMBER_MAX);
-    AddNumberWihLimit<int32_t>("fast-cmd-threads-num", false, &fast_cmd_threads_num_, 1, THREAD_MAX);
-    AddNumberWihLimit<int32_t>("slow-cmd-threads-num", false, &slow_cmd_threads_num_, 1, THREAD_MAX);
-    AddNumber("max-client-response-size", true, &max_client_response_size_);
-    AddString("runid", false, {&runid});
-  }
+  AddBool("daemonize", &CheckYesNo, false, &daemonize);
+  AddString("ip", false, {&ip});
+  AddNumberWihLimit<uint16_t>("port", false, &port, PORT_LIMIT_MIN, PORT_LIMIT_MAX);
+  AddNumber("timeout", true, &timeout_);
+  AddString("db-path", false, std::vector<std::string*>{&dbpath});
+  AddStrinWithFunc("loglevel", &CheckLogLevel, true, {&loglevel});
+  AddString("logfile", true, {&logdir});
+  AddNumberWihLimit<size_t>("databases", false, &databases, 1, DBNUMBER_MAX);
+  AddString("requirepass", true, {&password_});
+  AddNumber("maxclients", true, &maxclients_);
+  AddNumberWihLimit<uint32_t>("worker-threads", false, &worker_threads_num, 1, THREAD_MAX);
+  AddNumberWihLimit<uint32_t>("slave-threads", false, &worker_threads_num, 1, THREAD_MAX);
+  AddNumber("slowlog-log-slower-than", true, &slowlogtime_);
+  AddNumber("slowlog-max-len", true, &slowlogmaxlen_);
+  AddNumberWihLimit<size_t>("db-instance-num", true, &db_instance_num, 1, ROCKSDB_INSTANCE_NUMBER_MAX);
+  AddNumberWihLimit<int32_t>("fast-cmd-threads-num", false, &fast_cmd_threads_num_, 1, THREAD_MAX);
+  AddNumberWihLimit<int32_t>("slow-cmd-threads-num", false, &slow_cmd_threads_num_, 1, THREAD_MAX);
+  AddNumber("max-client-response-size", true, &max_client_response_size_);
+  AddString("runid", false, {&runid});
+  AddNumber("small-compaction-threshold", true, &small_compaction_threshold_);
+  AddNumber("small-compaction-duration-threshold", true, &small_compaction_duration_threshold_);
 
   // rocksdb config
-  {
-    AddNumber("rocksdb-max-subcompactions", true, &rocksdb_max_subcompactions);
-    AddNumber("rocksdb-max-background-jobs", true, &rocksdb_max_background_jobs);
-    AddNumber("rocksdb-max-write-buffer-number", true, &rocksdb_max_write_buffer_number);
-    AddNumber("rocksdb-min-write-buffer-number-to-merge", true, &rocksdb_min_write_buffer_number_to_merge);
-    AddNumber("rocksdb-write-buffer-size", true, &rocksdb_write_buffer_size);
-    AddNumber("rocksdb-number-levels", true, &rocksdb_num_levels);
-
-    AddNumber("small-compaction-threshold", true, &small_compaction_threshold_);
-    AddNumber("small-compaction-duration-threshold", true, &small_compaction_duration_threshold_);
-  }
+  AddNumber("rocksdb-max-subcompactions", false, &rocksdb_max_subcompactions);
+  AddNumber("rocksdb-max-background-jobs", false, &rocksdb_max_background_jobs);
+  AddNumber("rocksdb-max-write-buffer-number", false, &rocksdb_max_write_buffer_number);
+  AddNumber("rocksdb-min-write-buffer-number-to-merge", false, &rocksdb_min_write_buffer_number_to_merge);
+  AddNumber("rocksdb-write-buffer-size", false, &rocksdb_write_buffer_size);
+  AddNumber("rocksdb-level0-file-num-compaction-trigger", false, &rocksdb_level0_file_num_compaction_trigger);
+  AddNumber("rocksdb-number-levels", true, &rocksdb_num_levels);
+  AddBool("rocksdb-enable-pipelined-write", CheckYesNo, false, &rocksdb_enable_pipelined_write);
+  AddNumber("rocksdb-level0-slowdown-writes-trigger", false, &rocksdb_level0_slowdown_writes_trigger);
+  AddNumber("rocksdb-level0-stop-writes-trigger", false, &rocksdb_level0_stop_writes_trigger);
+  AddNumber("rocksdb-level0-slowdown-writes-trigger", false, &rocksdb_level0_slowdown_writes_trigger);
 }
 
 bool PConfig::LoadFromFile(const std::string& file_name) {
@@ -199,13 +201,17 @@ Status PConfig::Set(std::string key, const std::string& value, bool force) {
 rocksdb::Options PConfig::GetRocksDBOptions() {
   rocksdb::Options options;
   options.create_if_missing = true;
-  options.create_if_missing = true;
+  options.create_missing_column_families = true;
   options.max_subcompactions = rocksdb_max_subcompactions;
   options.max_background_jobs = rocksdb_max_background_jobs;
   options.max_write_buffer_number = rocksdb_max_write_buffer_number;
   options.min_write_buffer_number_to_merge = rocksdb_min_write_buffer_number_to_merge;
   options.write_buffer_size = rocksdb_write_buffer_size;
+  options.level0_file_num_compaction_trigger = rocksdb_level0_file_num_compaction_trigger;
   options.num_levels = rocksdb_num_levels;
+  options.enable_pipelined_write = rocksdb_enable_pipelined_write;
+  options.level0_slowdown_writes_trigger = rocksdb_level0_slowdown_writes_trigger;
+  options.level0_stop_writes_trigger = rocksdb_level0_stop_writes_trigger;
   return options;
 }
 

@@ -25,6 +25,9 @@ namespace pikiwidb {
 // key cmd
 const std::string kCmdNameDel = "del";
 const std::string kCmdNameExists = "exists";
+const std::string kCmdNameType = "type";
+const std::string kCmdNameExpire = "expire";
+const std::string kCmdNameTtl = "ttl";
 const std::string kCmdNamePExpire = "pexpire";
 const std::string kCmdNameExpireat = "expireat";
 const std::string kCmdNamePExpireat = "pexpireat";
@@ -69,6 +72,7 @@ const std::string kCmdNameFlushdb = "flushdb";
 const std::string kCmdNameFlushall = "flushall";
 const std::string kCmdNameAuth = "auth";
 const std::string kCmdNameSelect = "select";
+const std::string kCmdNameShutdown = "shutdown";
 
 // hash cmd
 const std::string kCmdNameHSet = "hset";
@@ -103,6 +107,7 @@ const std::string kCmdNameSPop = "spop";
 const std::string kCmdNameSMembers = "smembers";
 const std::string kCmdNameSDiff = "sdiff";
 const std::string kCmdNameSDiffstore = "sdiffstore";
+const std::string kCmdNameSScan = "sscan";
 
 // list cmd
 const std::string kCmdNameLPush = "lpush";

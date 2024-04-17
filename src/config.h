@@ -206,7 +206,6 @@ class PConfig {
   }
 
  public:
-  // read only
   bool daemonize = false;
   std::string pidfile = "./pikiwidb.pid";
   std::string ip = "127.0.0.1";
@@ -219,6 +218,7 @@ class PConfig {
   uint32_t worker_threads_num = 2;
   uint32_t slave_threads_num = 2;
   size_t db_instance_num = 3;
+
   uint32_t rocksdb_max_subcompactions = 0;
   // default 2
   int rocksdb_max_background_jobs = 4;
@@ -228,10 +228,13 @@ class PConfig {
   int rocksdb_min_write_buffer_number_to_merge = 2;
   // default 64M
   size_t rocksdb_write_buffer_size = 64 << 20;
+  int rocksdb_level0_file_num_compaction_trigger = 4;
   int rocksdb_num_levels = 7;
+  bool rocksdb_enable_pipelined_write = false;
+  int rocksdb_level0_slowdown_writes_trigger = 20;
+  int rocksdb_level0_stop_writes_trigger = 36;
 
  private:
-  // rewritable
   mutable std::shared_mutex mutex_;
   uint32_t timeout_ = 0;
   // auth

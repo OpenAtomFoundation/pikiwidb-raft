@@ -6,6 +6,7 @@
  */
 
 #include "cmd_admin.h"
+#include "pikiwidb.h"
 #include "store.h"
 
 namespace pikiwidb {
@@ -90,6 +91,26 @@ void SelectCmd::DoCmd(PClient* client) {
   }
   client->SetCurrentDB(index);
   client->SetRes(CmdRes::kOK);
+}
+
+ShutdownCmd::ShutdownCmd(const std::string& name, int16_t arity)
+    : BaseCmd(name, arity, kCmdFlagsAdmin | kCmdFlagsWrite, kAclCategoryAdmin | kAclCategoryWrite) {}
+
+bool ShutdownCmd::DoInitial(PClient* client) {
+  // For now, only shutdown need check local
+  if (client->PeerIP().find("127.0.0.1") == std::string::npos &&
+      client->PeerIP().find(g_config.ip.c_str()) == std::string::npos) {
+    client->SetRes(CmdRes::kErrOther, kCmdNameShutdown + " should be localhost");
+    return false;
+  }
+  return true;
+}
+
+void ShutdownCmd::DoCmd(PClient* client) {
+  PSTORE.GetBackend(client->GetCurrentDB())->UnLockShared();
+  g_pikiwidb->Stop();
+  PSTORE.GetBackend(client->GetCurrentDB())->LockShared();
+  client->SetRes(CmdRes::kNone);
 }
 
 }  // namespace pikiwidb

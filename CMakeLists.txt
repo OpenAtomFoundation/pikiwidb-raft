@@ -129,12 +129,14 @@ ADD_SUBDIRECTORY(src)
 #############################################################################
 ###			custom target
 #############################################################################
-SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# Add files which should be ignored while formatting
+LIST(APPEND CLANG_FORMAT_IGNORE_FILES "${PROJECT_SOURCE_DIR}/src/storage/src/storage_murmur3.h")
+FILE(WRITE ${BUILD_SUPPORT_DIR}/clang_format_exclusions.txt "")
+FOREACH(IGNORE_FILE ${CLANG_FORMAT_IGNORE_FILES})
+  FILE(APPEND ${BUILD_SUPPORT_DIR}/clang_format_exclusions.txt "${IGNORE_FILE}\n")
+ENDFOREACH()
 
 STRING(CONCAT FORMAT_DIRS "${PROJECT_SOURCE_DIR}/src,")
-FILE(WRITE
-  ${BUILD_SUPPORT_DIR}/clang_format_exclusions.txt
-  "${PROJECT_SOURCE_DIR}/src/redis_intset.c\n${PROJECT_SOURCE_DIR}/src/redis_zip_list.c")
 ADD_CUSTOM_TARGET(format
   COMMAND ${BUILD_SUPPORT_DIR}/run_clang_format.py
   ${CLANG_FORMAT_BIN}

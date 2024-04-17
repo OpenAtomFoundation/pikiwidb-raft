@@ -165,4 +165,17 @@ class SDiffstoreCmd : public BaseCmd {
   void DoCmd(PClient *client) override;
 };
 
+class SScanCmd : public BaseCmd {
+ public:
+  SScanCmd(const std::string &name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient *client) override;
+
+ private:
+  void DoCmd(PClient *client) override;
+
+  static constexpr const char *kMatchSymbol = "match";
+  static constexpr const char *kCountSymbol = "count";
+};
 }  // namespace pikiwidb

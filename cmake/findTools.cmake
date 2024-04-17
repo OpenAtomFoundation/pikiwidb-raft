@@ -4,11 +4,8 @@ IF(${AUTOCONF} MATCHES AUTOCONF-NOTFOUND)
     MESSAGE(FATAL_ERROR "not find autoconf on localhost")
 ENDIF()
 
-#set(CLANG_SEARCH_PATH "/usr/local/bin" "/usr/bin" "/usr/local/opt/llvm/bin"
-#                      "/usr/local/opt/llvm@12/bin")
 FIND_PROGRAM(CLANG_FORMAT_BIN
-        NAMES clang-format
-        HINTS ${CLANG_SEARCH_PATH})
+        NAMES clang-format)
 IF("${CLANG_FORMAT_BIN}" STREQUAL "CLANG_FORMAT_BIN-NOTFOUND")
     MESSAGE(WARNING "couldn't find clang-format.")
 ELSE()
@@ -16,8 +13,7 @@ ELSE()
 ENDIF()
 
 FIND_PROGRAM(CLANG_TIDY_BIN
-        NAMES clang-tidy clang-tidy-12
-        HINTS ${CLANG_SEARCH_PATH})
+        NAMES clang-tidy clang-tidy-12 clang-tidy-14)
 IF("${CLANG_TIDY_BIN}" STREQUAL "CLANG_TIDY_BIN-NOTFOUND")
     MESSAGE(WARNING "couldn't find clang-tidy.")
 ELSE()
@@ -34,9 +30,7 @@ ELSE()
 ENDIF()
 
 FIND_PROGRAM(CLANG_APPLY_REPLACEMENTS_BIN
-        NAMES clang-apply-replacements clang-apply-replacements-12
-        HINTS ${CLANG_SEARCH_PATH})
-
+        NAMES clang-apply-replacements clang-apply-replacements-12 clang-apply-replacements-14)
 IF("${CLANG_APPLY_REPLACEMENTS_BIN}" STREQUAL "CLANG_APPLY_REPLACEMENTS_BIN-NOTFOUND")
     MESSAGE(WARNING "couldn't find clang-apply-replacements.")
 ELSE()

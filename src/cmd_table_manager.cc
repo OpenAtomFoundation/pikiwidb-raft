@@ -42,10 +42,14 @@ void CmdTableManager::InitCmdTable() {
   ADD_COMMAND(Flushdb, 1);
   ADD_COMMAND(Flushall, 1);
   ADD_COMMAND(Select, 2);
+  ADD_COMMAND(Shutdown, 1);
 
   // keyspace
   ADD_COMMAND(Del, -2);
   ADD_COMMAND(Exists, -2);
+  ADD_COMMAND(Type, 2);
+  ADD_COMMAND(Expire, 3);
+  ADD_COMMAND(Ttl, 2);
   ADD_COMMAND(PExpire, 3);
   ADD_COMMAND(Expireat, 3);
   ADD_COMMAND(PExpireat, 3);
@@ -110,6 +114,7 @@ void CmdTableManager::InitCmdTable() {
   ADD_COMMAND(SMembers, 2);
   ADD_COMMAND(SDiff, -2);
   ADD_COMMAND(SDiffstore, -3);
+  ADD_COMMAND(SScan, -3);
 
   // list
   ADD_COMMAND(LPush, -3);
