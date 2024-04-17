@@ -33,8 +33,10 @@ CmdConfigSet::CmdConfigSet(const std::string& name, int16_t arity)
 bool CmdConfigSet::DoInitial(PClient* client) { return true; }
 
 void CmdConfigSet::DoCmd(PClient* client) {
-  if (!g_config.Set(client->argv_[2], client->argv_[3])) {
+  auto s = g_config.Set(client->argv_[2], client->argv_[3]);
+  if (!s.ok()) {
     client->SetRes(CmdRes::kInvalidParameter);
+    //    client->AppendString(s.ToString());
   } else {
     client->SetRes(CmdRes::kOK);
   }

@@ -33,64 +33,65 @@ static void EraseQuotes(std::string& str) {
   }
 }
 
+// 这里最好全部变成状态 + message. 这样就可以返回具体的信息
 // check func
-static bool CheckYesNo(const std::string& value) {
-  return pstd::StringEqualCaseInsensitive(value, "yes") || pstd::StringEqualCaseInsensitive(value, "no");
+
+static Status CheckYesNo(const std::string& value) {
+  if (!pstd::StringEqualCaseInsensitive(value, "yes") && !pstd::StringEqualCaseInsensitive(value, "no")) {
+    return Status::InvalidArgument("The value must be yes or no.");
+  }
+  return Status::OK();
 }
 
-static bool CheckLogLevel(const std::string& value) {
-  return pstd::StringEqualCaseInsensitive(value, "debug") || pstd::StringEqualCaseInsensitive(value, "verbose") ||
-         pstd::StringEqualCaseInsensitive(value, "notice") || pstd::StringEqualCaseInsensitive(value, "warning");
+static Status CheckLogLevel(const std::string& value) {
+  if (!pstd::StringEqualCaseInsensitive(value, "debug") && !pstd::StringEqualCaseInsensitive(value, "verbose") &&
+      !pstd::StringEqualCaseInsensitive(value, "notice") && !pstd::StringEqualCaseInsensitive(value, "warning")) {
+    return Status::InvalidArgument("The value must be debug / verbose / notice / warning.");
+  }
+  return Status::OK();
 }
-
-extern std::vector<std::string> SplitString(const std::string& str, char seperator);
-
-extern std::string MergeString(const std::vector<std::string*> values, char seperator);
 
 PConfig g_config;
 
-bool BaseValue::Set(std::string value, bool force) {
+Status BaseValue::Set(const std::string& value, bool force) {
   if (!force && !rewritable_) {
-    return false;
+    return Status::NotSupported("Dynamic modification is not supported.");
   }
-  if (custom_process_func_ptr_) {
-    custom_process_func_ptr_(value);
+  auto value_copy = value;
+  EraseQuotes(value_copy);
+  auto s = check(value_copy);
+  if (!s.ok()) {
+    return s;
   }
-  if (!check(value)) {
-    return false;
-  }
-  return SetValue(value);
+  return SetValue(value_copy);
 }
 
-bool StringValue::SetValue(const std::string& value) {
-  auto values = SplitString(value, seperator_);
+Status StringValue::SetValue(const std::string& value) {
+  auto values = SplitString(value, delimiter_);
   if (values.size() != values_.size()) {
-    return false;
+    return Status::InvalidArgument("The number of parameters does not match.");
   }
   for (int i = 0; i < values_.size(); i++) {
     *values_[i] = std::move(values[i]);
   }
-  return true;
+  return Status::OK();
 }
 
-bool BoolValue::SetValue(const std::string& value) {
+Status BoolValue::SetValue(const std::string& value) {
   if (pstd::StringEqualCaseInsensitive(value, "yes")) {
     *value_ = true;
-    return true;
-  } else if (pstd::StringEqualCaseInsensitive(value, "no")) {
+  } else {
     *value_ = false;
-    return true;
   }
-
-  return false;
+  return Status::OK();
 }
 
 template <typename T>
-bool NumberValue<T>::SetValue(const std::string& value) {
+Status NumberValue<T>::SetValue(const std::string& value) {
   T v;
   auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.length(), v);
   if (ec != std::errc()) {
-    return false;
+    return Status::InvalidArgument("Failed to convert to a number.");
   }
   if (v < value_min_) {
     v = value_min_;
@@ -99,20 +100,20 @@ bool NumberValue<T>::SetValue(const std::string& value) {
     v = value_max_;
   }
   *value_ = v;
-  return true;
+  return Status::OK();
 }
 
 PConfig::PConfig() {
   {
-    AddBool("daemonize", &CheckYesNo, &EraseQuotes, false, &daemonize);
+    AddBool("daemonize", &CheckYesNo, false, &daemonize);
     AddString("ip", false, {&ip});
     AddNumberWihLimit<uint16_t>("port", false, &port, PORT_LIMIT_MIN, PORT_LIMIT_MAX);
     AddNumber("timeout", true, &timeout_);
     AddString("db-path", false, std::vector<std::string*>{&dbpath});
-    AddStrinWithFunc("loglevel", &CheckLogLevel, nullptr, true, std::vector<std::string*>{&loglevel});
-    AddString("logfile", true, std::vector<std::string*>{&logdir});
+    AddStrinWithFunc("loglevel", &CheckLogLevel, true, {&loglevel});
+    AddString("logfile", true, {&logdir});
     AddNumberWihLimit<size_t>("databases", false, &databases, 1, DBNUMBER_MAX);
-    AddString("requirepass", true, std::vector<std::string*>{&password_});
+    AddString("requirepass", true, {&password_});
     AddNumber("maxclients", true, &maxclients_);
     AddNumberWihLimit<uint32_t>("worker-threads", false, &worker_threads_num, 1, THREAD_MAX);
     AddNumberWihLimit<uint32_t>("slave-threads", false, &worker_threads_num, 1, THREAD_MAX);
@@ -122,13 +123,20 @@ PConfig::PConfig() {
     AddNumberWihLimit<int32_t>("fast-cmd-threads-num", false, &fast_cmd_threads_num_, 1, THREAD_MAX);
     AddNumberWihLimit<int32_t>("slow-cmd-threads-num", false, &slow_cmd_threads_num_, 1, THREAD_MAX);
     AddNumber("max-client-response-size", true, &max_client_response_size_);
-    AddString("runid", false, std::vector<std::string*>{&runid});
+    AddString("runid", false, {&runid});
   }
 
   // rocksdb config
   {
-    AddNumber("rocksdb-ttl-second", true, &rocksdb_ttl_second_);
-    AddNumber("rocksdb-periodic-second", true, &rocksdb_periodic_second_);
+    AddNumber("rocksdb-max-subcompactions", true, &rocksdb_max_subcompactions);
+    AddNumber("rocksdb-max-background-jobs", true, &rocksdb_max_background_jobs);
+    AddNumber("rocksdb-max-write-buffer-number", true, &rocksdb_max_write_buffer_number);
+    AddNumber("rocksdb-min-write-buffer-number-to-merge", true, &rocksdb_min_write_buffer_number_to_merge);
+    AddNumber("rocksdb-write-buffer-size", true, &rocksdb_write_buffer_size);
+    AddNumber("rocksdb-number-levels", true, &rocksdb_num_levels);
+
+    AddNumber("small-compaction-threshold", true, &small_compaction_threshold_);
+    AddNumber("small-compaction-duration-threshold", true, &small_compaction_duration_threshold_);
   }
 }
 
@@ -139,12 +147,12 @@ bool PConfig::LoadFromFile(const std::string& file_name) {
   }
 
   for (auto& [key, value] : parser_.GetMap()) {
-    if (auto iter = config_map_.find(key); iter == config_map_.end() || value.size() > 1) {
-      continue;
-    }
-    assert(value.size() == 1);
-    if (auto& v = config_map_[key]; !v->Set(value.at(0), true)) {
-      return false;
+    if (auto iter = config_map_.find(key); iter != config_map_.end()) {
+      auto& v = config_map_[key];
+      auto s = v->Set(value.at(0), true);
+      if (!s.ok()) {
+        return false;
+      }
     }
   }
 
@@ -178,14 +186,32 @@ void PConfig::Get(const std::string& key, std::vector<std::string>* values) cons
   }
 }
 
-bool PConfig::Set(std::string key, const std::string& value, bool force) {
+Status PConfig::Set(std::string key, const std::string& value, bool force) {
   std::transform(key.begin(), key.end(), key.begin(), ::tolower);
   auto iter = config_map_.find(key);
-  if (iter == config_map_.end() || (!force && !iter->second->ReWritable())) {
-    return false;
+  if (iter == config_map_.end()) {
+    return Status::NotFound("Non-existent configuration items.");
   }
   std::lock_guard<std::shared_mutex> Lock(mutex_);
   return iter->second->Set(value, force);
+}
+
+rocksdb::Options PConfig::GetRocksDBOptions() {
+  rocksdb::Options options;
+  options.create_if_missing = true;
+  options.create_if_missing = true;
+  options.max_subcompactions = rocksdb_max_subcompactions;
+  options.max_background_jobs = rocksdb_max_background_jobs;
+  options.max_write_buffer_number = rocksdb_max_write_buffer_number;
+  options.min_write_buffer_number_to_merge = rocksdb_min_write_buffer_number_to_merge;
+  options.write_buffer_size = rocksdb_write_buffer_size;
+  options.num_levels = rocksdb_num_levels;
+  return options;
+}
+
+rocksdb::BlockBasedTableOptions PConfig::GetRocksDBBlockBasedTableOptions() {
+  rocksdb::BlockBasedTableOptions options;
+  return options;
 }
 
 }  // namespace pikiwidb

@@ -58,8 +58,8 @@ Status Redis::Open(const StorageOptions& storage_options, const std::string& db_
   rocksdb::BlockBasedTableOptions table_ops(storage_options.table_options);
   table_ops.filter_policy.reset(rocksdb::NewBloomFilterPolicy(10, true));
 
+  // Set up separate configuration for RocksDB
   rocksdb::DBOptions db_ops(storage_options.options);
-  db_ops.create_missing_column_families = true;
 
   // string column-family options
   rocksdb::ColumnFamilyOptions string_cf_ops(storage_options.options);

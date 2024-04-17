@@ -15,22 +15,21 @@
 #include <unordered_map>
 #include <vector>
 
+#include "rocksdb/options.h"
+#include "rocksdb/table.h"
+
 #include "common.h"
 #include "net/config_parser.h"
 
 namespace pikiwidb {
 
-using CheckFunc = std::function<bool(const std::string&)>;
-using PreProcessFunc = std::function<void(std::string&)>;
+using Status = rocksdb::Status;
+using CheckFunc = std::function<Status(const std::string&)>;
 
 class BaseValue {
  public:
-  BaseValue(const std::string& key, CheckFunc check_func_ptr, PreProcessFunc preprocess_func_ptr,
-            bool rewritable = false)
-      : key_(key),
-        custom_check_func_ptr_(check_func_ptr),
-        custom_process_func_ptr_(preprocess_func_ptr),
-        rewritable_(rewritable) {}
+  BaseValue(const std::string& key, CheckFunc check_func_ptr, bool rewritable = false)
+      : key_(key), custom_check_func_ptr_(check_func_ptr), rewritable_(rewritable) {}
 
   virtual ~BaseValue() = default;
 
@@ -38,61 +37,57 @@ class BaseValue {
 
   virtual std::string Value() const = 0;
 
-  bool Set(std::string value, bool force);
+  Status Set(const std::string& value, bool force);
 
   bool ReWritable() { return rewritable_; }
 
  protected:
-  virtual bool SetValue(const std::string&) = 0;
-  bool check(const std::string& value) {
-    if (custom_check_func_ptr_ && !custom_check_func_ptr_(value)) {
-      return false;
+  virtual Status SetValue(const std::string&) = 0;
+  Status check(const std::string& value) {
+    if (!custom_check_func_ptr_) {
+      return Status::OK();
     }
-    return true;
+    return custom_check_func_ptr_(value);
   }
 
  protected:
   std::string key_;
   CheckFunc custom_check_func_ptr_ = nullptr;
-  PreProcessFunc custom_process_func_ptr_ = nullptr;
   bool rewritable_ = false;
 };
 
 class StringValue : public BaseValue {
  public:
-  StringValue(const std::string& key, CheckFunc check_func_ptr, PreProcessFunc preprocess_func_ptr, bool rewritable,
-              const std::vector<std::string*>& value_ptr_vec, char seperator = ' ')
-      : BaseValue(key, check_func_ptr, preprocess_func_ptr, rewritable), values_(value_ptr_vec), seperator_(seperator) {
-    assert(values_.size() >= 1);
+  StringValue(const std::string& key, CheckFunc check_func_ptr, bool rewritable,
+              const std::vector<std::string*>& value_ptr_vec, char delimiter = ' ')
+      : BaseValue(key, check_func_ptr, rewritable), values_(value_ptr_vec), delimiter_(delimiter) {
+    assert(!values_.empty());
   }
-  virtual ~StringValue() = default;
+  ~StringValue() override = default;
 
-  virtual std::string Value() const override { return MergeString(values_, seperator_); };
+  std::string Value() const override { return MergeString(values_, delimiter_); };
 
  private:
-  virtual bool SetValue(const std::string&) override;
+  Status SetValue(const std::string& value) override;
 
   std::vector<std::string*> values_;
-  char seperator_;
+  char delimiter_;
 };
 
 template <typename T>
 class NumberValue : public BaseValue {
  public:
-  NumberValue(const std::string& key, CheckFunc check_func_ptr, PreProcessFunc preprocess_func_ptr, bool rewritable,
-              T* value_ptr, T min = std::numeric_limits<T>::min(), T max = std::numeric_limits<T>::max())
-      : BaseValue(key, check_func_ptr, preprocess_func_ptr, rewritable),
-        value_(value_ptr),
-        value_min_(min),
-        value_max_(max) {
+  NumberValue(const std::string& key, CheckFunc check_func_ptr, bool rewritable, T* value_ptr,
+              T min = std::numeric_limits<T>::min(), T max = std::numeric_limits<T>::max())
+      : BaseValue(key, check_func_ptr, rewritable), value_(value_ptr), value_min_(min), value_max_(max) {
     assert(value_ != nullptr);
     assert(value_min_ <= value_max_);
   };
 
-  virtual std::string Value() const override { return std::to_string(*value_); }
+  std::string Value() const override { return std::to_string(*value_); }
 
  private:
-  virtual bool SetValue(const std::string&) override;
+  Status SetValue(const std::string& value) override;
 
   T* value_;
   T value_min_;
@@ -101,16 +96,15 @@ class NumberValue : public BaseValue {
 
 class BoolValue : public BaseValue {
  public:
-  BoolValue(const std::string& key, CheckFunc check_func_ptr, PreProcessFunc preprocess_func_ptr, bool rewritable,
-            bool* value_ptr)
-      : BaseValue(key, check_func_ptr, preprocess_func_ptr, rewritable), value_(value_ptr) {
+  BoolValue(const std::string& key, CheckFunc check_func_ptr, bool rewritable, bool* value_ptr)
+      : BaseValue(key, check_func_ptr, rewritable), value_(value_ptr) {
     assert(value_ != nullptr);
   };
 
-  virtual std::string Value() const override { return *value_ ? "yes" : "no"; };
+  std::string Value() const override { return *value_ ? "yes" : "no"; };
 
  private:
-  virtual bool SetValue(const std::string&) override;
+  Status SetValue(const std::string& value) override;
   bool* value_;
 };
 
@@ -124,7 +118,7 @@ class PConfig {
   bool LoadFromFile(const std::string& file_name);
   const std::string& ConfigFileName() const { return config_file_name_; }
   void Get(const std::string&, std::vector<std::string>*) const;
-  bool Set(std::string, const std::string&, bool force = false);
+  Status Set(std::string, const std::string&, bool force = false);
 
  public:
   int GetTimeout() const {
@@ -162,14 +156,14 @@ class PConfig {
     return max_client_response_size_;
   }
 
-  uint64_t GetRocksDBTTLSeconds() const {
+  uint64_t GetSmallCompactionThreshold() const {
     std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return rocksdb_ttl_second_;
+    return small_compaction_threshold_;
   }
 
-  uint64_t GetRocksDBPeriodicSeconds() const {
+  uint64_t GetSmallCompactionDurationThreshold() const {
     std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return rocksdb_periodic_second_;
+    return small_compaction_duration_threshold_;
   }
 
   std::string GetMasterAuth() const {
@@ -187,25 +181,28 @@ class PConfig {
     return masterPort_;
   }
 
+  rocksdb::Options GetRocksDBOptions();
+
+  rocksdb::BlockBasedTableOptions GetRocksDBBlockBasedTableOptions();
+
  private:
   inline void AddString(const std::string& key, bool rewritable, std::vector<std::string*> values_ptr_vector) {
-    config_map_.emplace(key, std::make_unique<StringValue>(key, nullptr, nullptr, rewritable, values_ptr_vector));
+    config_map_.emplace(key, std::make_unique<StringValue>(key, nullptr, rewritable, values_ptr_vector));
   }
-  inline void AddStrinWithFunc(const std::string& key, CheckFunc checkfunc, PreProcessFunc prefunc, bool rewritable,
+  inline void AddStrinWithFunc(const std::string& key, const CheckFunc& checkfunc, bool rewritable,
                                std::vector<std::string*> values_ptr_vector) {
-    config_map_.emplace(key, std::make_unique<StringValue>(key, checkfunc, prefunc, rewritable, values_ptr_vector));
+    config_map_.emplace(key, std::make_unique<StringValue>(key, checkfunc, rewritable, values_ptr_vector));
   }
-  inline void AddBool(const std::string& key, CheckFunc checkfunc, PreProcessFunc prefunc, bool rewritable,
-                      bool* value_ptr) {
-    config_map_.emplace(key, std::make_unique<BoolValue>(key, checkfunc, prefunc, rewritable, value_ptr));
+  inline void AddBool(const std::string& key, const CheckFunc& checkfunc, bool rewritable, bool* value_ptr) {
+    config_map_.emplace(key, std::make_unique<BoolValue>(key, checkfunc, rewritable, value_ptr));
   }
   template <typename T>
   inline void AddNumber(const std::string& key, bool rewritable, T* value_ptr) {
-    config_map_.emplace(key, std::make_unique<NumberValue<T>>(key, nullptr, nullptr, rewritable, value_ptr));
+    config_map_.emplace(key, std::make_unique<NumberValue<T>>(key, nullptr, rewritable, value_ptr));
   }
   template <typename T>
   inline void AddNumberWihLimit(const std::string& key, bool rewritable, T* value_ptr, T min, T max) {
-    config_map_.emplace(key, std::make_unique<NumberValue<T>>(key, nullptr, nullptr, rewritable, value_ptr, min, max));
+    config_map_.emplace(key, std::make_unique<NumberValue<T>>(key, nullptr, rewritable, value_ptr, min, max));
   }
 
  public:
@@ -222,13 +219,23 @@ class PConfig {
   uint32_t worker_threads_num = 2;
   uint32_t slave_threads_num = 2;
   size_t db_instance_num = 3;
+  uint32_t rocksdb_max_subcompactions = 0;
+  // default 2
+  int rocksdb_max_background_jobs = 4;
+  // default 2
+  size_t rocksdb_max_write_buffer_number = 2;
+  // default 2
+  int rocksdb_min_write_buffer_number_to_merge = 2;
+  // default 64M
+  size_t rocksdb_write_buffer_size = 64 << 20;
+  int rocksdb_num_levels = 7;
 
  private:
   // rewritable
   mutable std::shared_mutex mutex_;
   uint32_t timeout_ = 0;
   // auth
-  std::string password_ = "";
+  std::string password_;
   std::map<std::string, std::string> aliases_;
   uint32_t maxclients_ = 10000;   // 10000
   uint32_t slowlogtime_ = 1000;   // 1000 microseconds
@@ -239,11 +246,11 @@ class PConfig {
   std::string masterauth_;
   std::string includefile_;       // the template config
   std::vector<PString> modules_;  // modules
-  int32_t fast_cmd_threads_num_ = 12;
-  int32_t slow_cmd_threads_num_ = 12;
+  int32_t fast_cmd_threads_num_ = 4;
+  int32_t slow_cmd_threads_num_ = 4;
   uint64_t max_client_response_size_ = 1073741824;
-  uint64_t rocksdb_ttl_second_ = 604800;
-  uint64_t rocksdb_periodic_second_ = 259200;
+  uint64_t small_compaction_threshold_ = 604800;
+  uint64_t small_compaction_duration_threshold_ = 259200;
 
   ConfigParser parser_;
   ConfigMap config_map_;
