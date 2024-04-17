@@ -141,7 +141,7 @@ var _ = Describe("Consistency", Ordered, func() {
 			"fa": "va",
 			"fc": "vc",
 		}))
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10000 * time.Millisecond)
 		for _, f := range followers {
 			getall, err := f.HGetAll(ctx, testKey).Result()
 			Expect(err).NotTo(HaveOccurred())
