@@ -122,51 +122,51 @@ class PConfig {
   Status Set(std::string, const std::string&, bool force = false);
 
  public:
-  std::atomic<uint32_t> timeout = 0;
+  std::atomic_uint32_t timeout = 0;
   // auth
   AtomicString password;
   AtomicString master_auth;
   AtomicString master_ip;
   std::map<std::string, std::string> aliases;
-  std::atomic<uint32_t> max_clients = 10000;     // 10000
-  std::atomic<uint32_t> slow_log_time = 1000;    // 1000 microseconds
-  std::atomic<uint32_t> slow_log_max_len = 128;  // 128
-  std::atomic<uint16_t> master_port;             // replication
-  AtomicString include_file;                     // the template config
-  std::vector<PString> modules;                  // modules
-  std::atomic<int32_t> fast_cmd_threads_num = 4;
-  std::atomic<int32_t> slow_cmd_threads_num = 4;
-  std::atomic<uint64_t> max_client_response_size = 1073741824;
-  std::atomic<uint64_t> small_compaction_threshold = 604800;
-  std::atomic<uint64_t> small_compaction_duration_threshold = 259200;
+  std::atomic_uint32_t max_clients = 10000;     // 10000
+  std::atomic_uint32_t slow_log_time = 1000;    // 1000 microseconds
+  std::atomic_uint32_t slow_log_max_len = 128;  // 128
+  std::atomic_uint32_t master_port;             // replication
+  AtomicString include_file;                    // the template config
+  std::vector<PString> modules;                 // modules
+  std::atomic_int32_t fast_cmd_threads_num = 4;
+  std::atomic_int32_t slow_cmd_threads_num = 4;
+  std::atomic_uint64_t max_client_response_size = 1073741824;
+  std::atomic_uint64_t small_compaction_threshold = 604800;
+  std::atomic_uint64_t small_compaction_duration_threshold = 259200;
 
-  std::atomic<bool> daemonize = false;
+  std::atomic_bool daemonize = false;
   AtomicString pid_file = "./pikiwidb.pid";
   AtomicString ip = "127.0.0.1";
-  std::atomic<uint16_t> port = 9221;
+  std::atomic_uint16_t port = 9221;
   AtomicString db_path = "./db/";
   AtomicString log_dir = "stdout";  // the log directory, differ from redis
   AtomicString log_level = "warning";
   AtomicString run_id;
   std::atomic<size_t> databases = 16;
-  std::atomic<uint32_t> worker_threads_num = 2;
-  std::atomic<uint32_t> slave_threads_num = 2;
+  std::atomic_uint32_t worker_threads_num = 2;
+  std::atomic_uint32_t slave_threads_num = 2;
   std::atomic<size_t> db_instance_num = 3;
 
-  std::atomic<uint32_t> rocksdb_max_subcompactions = 0;
+  std::atomic_uint32_t rocksdb_max_subcompactions = 0;
   // default 2
-  std::atomic<int> rocksdb_max_background_jobs = 4;
+  std::atomic_int rocksdb_max_background_jobs = 4;
   // default 2
   std::atomic<size_t> rocksdb_max_write_buffer_number = 2;
   // default 2
-  std::atomic<int> rocksdb_min_write_buffer_number_to_merge = 2;
+  std::atomic_int rocksdb_min_write_buffer_number_to_merge = 2;
   // default 64M
   std::atomic<size_t> rocksdb_write_buffer_size = 64 << 20;
-  std::atomic<int> rocksdb_level0_file_num_compaction_trigger = 4;
-  std::atomic<int> rocksdb_num_levels = 7;
-  std::atomic<bool> rocksdb_enable_pipelined_write = false;
-  std::atomic<int> rocksdb_level0_slowdown_writes_trigger = 20;
-  std::atomic<int> rocksdb_level0_stop_writes_trigger = 36;
+  std::atomic_int rocksdb_level0_file_num_compaction_trigger = 4;
+  std::atomic_int rocksdb_num_levels = 7;
+  std::atomic_bool rocksdb_enable_pipelined_write = false;
+  std::atomic_int rocksdb_level0_slowdown_writes_trigger = 20;
+  std::atomic_int rocksdb_level0_stop_writes_trigger = 36;
 
   rocksdb::Options GetRocksDBOptions();
 

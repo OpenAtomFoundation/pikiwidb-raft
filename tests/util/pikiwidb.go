@@ -152,8 +152,8 @@ func StartServer(config string, options map[string]string, delete bool) *Server 
 	defer outfile.Close()
 
 	c.Stdout = outfile
-    c.Stderr = outfile
-    log.SetOutput(outfile)
+	c.Stderr = outfile
+	log.SetOutput(outfile)
 
 	if len(config) != 0 {
 		t := time.Now().UnixMilli()
