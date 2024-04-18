@@ -13,6 +13,7 @@
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "rocksdb/options.h"
@@ -41,9 +42,6 @@ class BaseValue {
 
   Status Set(const std::string& value, bool force);
 
-  // default false,Only rewritable string types require lock protection.
-  virtual bool NeedLock() { return false; }
-
  protected:
   virtual Status SetValue(const std::string&) = 0;
   Status check(const std::string& value) {
@@ -62,7 +60,7 @@ class BaseValue {
 class StringValue : public BaseValue {
  public:
   StringValue(const std::string& key, CheckFunc check_func_ptr, bool rewritable,
-              const std::vector<std::string*>& value_ptr_vec, char delimiter = ' ')
+              const std::vector<AtomicString*>& value_ptr_vec, char delimiter = ' ')
       : BaseValue(key, check_func_ptr, rewritable), values_(value_ptr_vec), delimiter_(delimiter) {
     assert(!values_.empty());
   }
@@ -70,12 +68,10 @@ class StringValue : public BaseValue {
 
   std::string Value() const override { return MergeString(values_, delimiter_); };
 
-  bool NeedLock() override { return rewritable_; }
-
  private:
   Status SetValue(const std::string& value) override;
 
-  std::vector<std::string*> values_;
+  std::vector<AtomicString*> values_;
   char delimiter_ = 0;
 };
 
@@ -125,31 +121,18 @@ class PConfig {
   void Get(const std::string&, std::vector<std::string>*) const;
   Status Set(std::string, const std::string&, bool force = false);
 
-  std::string GetPassword() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return password_;
-  }
-
-  std::string GetMasterAuth() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return master_auth_;
-  }
-
-  std::string GetMasterIP() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return master_ip_;
-  }
-
  public:
   std::atomic<uint32_t> timeout = 0;
   // auth
-
+  AtomicString password;
+  AtomicString master_auth;
+  AtomicString master_ip;
   std::map<std::string, std::string> aliases;
   std::atomic<uint32_t> max_clients = 10000;     // 10000
   std::atomic<uint32_t> slow_log_time = 1000;    // 1000 microseconds
   std::atomic<uint32_t> slow_log_max_len = 128;  // 128
   std::atomic<uint16_t> master_port;             // replication
-  std::string include_file;                      // the template config
+  AtomicString include_file;                     // the template config
   std::vector<PString> modules;                  // modules
   std::atomic<int32_t> fast_cmd_threads_num = 4;
   std::atomic<int32_t> slow_cmd_threads_num = 4;
@@ -158,14 +141,14 @@ class PConfig {
   std::atomic<uint64_t> small_compaction_duration_threshold = 259200;
 
   std::atomic<bool> daemonize = false;
-  std::string pid_file = "./pikiwidb.pid";
-  std::string ip = "127.0.0.1";
+  AtomicString pid_file = "./pikiwidb.pid";
+  AtomicString ip = "127.0.0.1";
   std::atomic<uint16_t> port = 9221;
-  std::string db_path = "./db/";
-  std::string log_dir = "stdout";  // the log directory, differ from redis
-  std::string log_level = "warning";
-  std::string run_id;
-  std::atomic<size_t> databases = 3;
+  AtomicString db_path = "./db/";
+  AtomicString log_dir = "stdout";  // the log directory, differ from redis
+  AtomicString log_level = "warning";
+  AtomicString run_id;
+  std::atomic<size_t> databases = 16;
   std::atomic<uint32_t> worker_threads_num = 2;
   std::atomic<uint32_t> slave_threads_num = 2;
   std::atomic<size_t> db_instance_num = 3;
@@ -190,17 +173,11 @@ class PConfig {
   rocksdb::BlockBasedTableOptions GetRocksDBBlockBasedTableOptions();
 
  private:
-  mutable std::shared_mutex mutex_;
-  std::string password_;
-  std::string master_auth_;
-  std::string master_ip_;
-
- private:
-  inline void AddString(const std::string& key, bool rewritable, std::vector<std::string*> values_ptr_vector) {
+  inline void AddString(const std::string& key, bool rewritable, std::vector<AtomicString*> values_ptr_vector) {
     config_map_.emplace(key, std::make_unique<StringValue>(key, nullptr, rewritable, values_ptr_vector));
   }
   inline void AddStrinWithFunc(const std::string& key, const CheckFunc& checkfunc, bool rewritable,
-                               std::vector<std::string*> values_ptr_vector) {
+                               std::vector<AtomicString*> values_ptr_vector) {
     config_map_.emplace(key, std::make_unique<StringValue>(key, checkfunc, rewritable, values_ptr_vector));
   }
   inline void AddBool(const std::string& key, const CheckFunc& checkfunc, bool rewritable,

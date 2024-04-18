@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <functional>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 
@@ -76,9 +77,66 @@ enum class PParseResult : int8_t {
 
 PParseResult GetIntUntilCRLF(const char*& ptr, std::size_t nBytes, int& val);
 
+class AtomicString {
+ public:
+  AtomicString() = default;
+  ~AtomicString() = default;
+  AtomicString(std::string str) {
+    std::lock_guard lock(mutex_);
+    str_ = std::move(str);
+  }
+  AtomicString(std::string&& str) {
+    std::lock_guard lock(mutex_);
+    str_ = std::move(str);
+  }
+  AtomicString(const std::string& str) {
+    std::lock_guard lock(mutex_);
+    str_ = str;
+  }
+  AtomicString(const char* c) {
+    std::lock_guard lock(mutex_);
+    str_ = std::string(c);
+  };
+  AtomicString& operator=(const std::string& str) {
+    std::lock_guard lock(mutex_);
+    str_ = str;
+    return *this;
+  }
+  AtomicString& operator=(std::string&& str) {
+    std::lock_guard lock(mutex_);
+    str_ = std::move(str);
+    return *this;
+  }
+  operator std::string() {
+    std::shared_lock<std::shared_mutex> lock(mutex_);
+    return str_;
+  }
+
+  operator std::string() const {
+    std::shared_lock<std::shared_mutex> lock(mutex_);
+    return str_;
+  }
+
+  bool empty() const {
+    std::shared_lock<std::shared_mutex> lock(mutex_);
+    return str_.empty();
+  }
+
+  std::string ToString() const {
+    std::shared_lock<std::shared_mutex> lock(mutex_);
+    return str_;
+  }
+
+ private:
+  mutable std::shared_mutex mutex_;
+  std::string str_;
+};
+
 std::vector<PString> SplitString(const PString& str, char seperator);
 
-std::string MergeString(const std::vector<std::string*> values, char seperator);
+std::string MergeString(const std::vector<std::string*>& values, char delimiter);
+
+std::string MergeString(const std::vector<AtomicString*>& values, char delimiter);
 
 // The defer class for C++11
 class ExecuteOnScopeExit {

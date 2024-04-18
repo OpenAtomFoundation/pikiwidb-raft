@@ -99,7 +99,7 @@ ShutdownCmd::ShutdownCmd(const std::string& name, int16_t arity)
 bool ShutdownCmd::DoInitial(PClient* client) {
   // For now, only shutdown need check local
   if (client->PeerIP().find("127.0.0.1") == std::string::npos &&
-      client->PeerIP().find(g_config.ip.c_str()) == std::string::npos) {
+      client->PeerIP().find(g_config.ip.ToString().c_str()) == std::string::npos) {
     client->SetRes(CmdRes::kErrOther, kCmdNameShutdown + " should be localhost");
     return false;
   }

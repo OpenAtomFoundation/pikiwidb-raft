@@ -175,7 +175,7 @@ void PReplication::Cron() {
   if (masterInfo_.addr.IsValid()) {
     switch (masterInfo_.state) {
       case kPReplStateNone: {
-        if (masterInfo_.addr.GetIP() == g_config.ip && masterInfo_.addr.GetPort() == g_config.port) {
+        if (masterInfo_.addr.GetIP() == g_config.ip.ToString() && masterInfo_.addr.GetPort() == g_config.port) {
           ERROR("Fix config, master addr is self addr!");
           assert(!!!"wrong config for master addr");
         }
@@ -208,14 +208,14 @@ void PReplication::Cron() {
       } break;
 
       case kPReplStateConnected:
-        if (!g_config.GetMasterAuth().empty()) {
+        if (!g_config.master_auth.empty()) {
           if (auto master = master_.lock()) {
             UnboundedBuffer req;
             req.PushData("auth ");
-            req.PushData(g_config.GetMasterAuth().data(), g_config.GetMasterAuth().size());
+            req.PushData(g_config.master_auth.ToString().data(), g_config.master_auth.ToString().size());
             req.PushData("\r\n");
             master->SendPacket(req);
-            INFO("send auth with password {}", g_config.GetMasterAuth());
+            INFO("send auth with password {}", g_config.master_auth.ToString());
 
             masterInfo_.state = kPReplStateWaitAuth;
             break;

@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "config.h"
-#include "log.h"
 #include "pstd/pstd_string.h"
 #include "store.h"
 
@@ -23,7 +22,8 @@ constexpr uint16_t PORT_LIMIT_MIN = 1;
 constexpr int DBNUMBER_MAX = 16;
 constexpr int THREAD_MAX = 129;
 constexpr int ROCKSDB_INSTANCE_NUMBER_MAX = 10;
-const std::string ROCKSDB_PREF = "rocksdb";
+
+PConfig g_config;
 
 // preprocess func
 static void EraseQuotes(std::string& str) {
@@ -51,8 +51,6 @@ static Status CheckLogLevel(const std::string& value) {
   }
   return Status::OK();
 }
-
-PConfig g_config;
 
 Status BaseValue::Set(const std::string& value, bool init_stage) {
   if (!init_stage && !rewritable_) {
@@ -110,11 +108,11 @@ PConfig::PConfig() {
   AddString("ip", false, {&ip});
   AddNumberWihLimit<uint16_t>("port", false, &port, PORT_LIMIT_MIN, PORT_LIMIT_MAX);
   AddNumber("timeout", true, &timeout);
-  AddString("db-path", false, std::vector<std::string*>{&db_path});
+  AddString("db-path", false, {&db_path});
   AddStrinWithFunc("loglevel", &CheckLogLevel, false, {&log_level});
   AddString("logfile", false, {&log_dir});
   AddNumberWihLimit<size_t>("databases", false, &databases, 1, DBNUMBER_MAX);
-  AddString("requirepass", true, {&password_});
+  AddString("requirepass", true, {&password});
   AddNumber("maxclients", true, &max_clients);
   AddNumberWihLimit<uint32_t>("worker-threads", false, &worker_threads_num, 1, THREAD_MAX);
   AddNumberWihLimit<uint32_t>("slave-threads", false, &worker_threads_num, 1, THREAD_MAX);
@@ -162,7 +160,7 @@ bool PConfig::LoadFromFile(const std::string& file_name) {
   // Handle separately
   std::vector<PString> master(SplitString(parser_.GetData<PString>("slaveof"), ' '));
   if (master.size() == 2) {
-    master_ip_ = master[0];
+    master_ip = std::move(master[0]);
     master_port = static_cast<uint16_t>(std::stoi(master[1]));
   }
 
@@ -183,11 +181,6 @@ void PConfig::Get(const std::string& key, std::vector<std::string>* values) cons
   for (const auto& [k, v] : config_map_) {
     if (key == "*" || pstd::StringMatch(key.c_str(), k.c_str(), 1)) {
       values->emplace_back(k);
-      if (v->NeedLock()) {
-        std::shared_lock<std::shared_mutex> l(mutex_);
-        values->emplace_back(v->Value());
-        continue;
-      }
       values->emplace_back(v->Value());
     }
   }
@@ -198,11 +191,6 @@ Status PConfig::Set(std::string key, const std::string& value, bool init_stage) 
   auto iter = config_map_.find(key);
   if (iter == config_map_.end()) {
     return Status::NotFound("Non-existent configuration items.");
-  }
-  if (iter->second->NeedLock()) {
-    std::lock_guard<std::shared_mutex> l(mutex_);
-    auto s = iter->second->Set(value, init_stage);
-    return s;
   }
   return iter->second->Set(value, init_stage);
 }

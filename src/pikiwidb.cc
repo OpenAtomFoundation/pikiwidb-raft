@@ -133,8 +133,8 @@ bool PikiwiDB::Init() {
   }
 
   NewTcpConnectionCallback cb = std::bind(&PikiwiDB::OnNewConnection, this, std::placeholders::_1);
-  if (!worker_threads_.Init(g_config.ip.c_str(), g_config.port.load(), cb)) {
-    ERROR("worker_threads Init failed. IP = {} Port = {}", g_config.ip, g_config.port.load());
+  if (!worker_threads_.Init(g_config.ip.ToString().c_str(), g_config.port.load(), cb)) {
+    ERROR("worker_threads Init failed. IP = {} Port = {}", g_config.ip.ToString(), g_config.port.load());
     return false;
   }
 
@@ -165,7 +165,7 @@ bool PikiwiDB::Init() {
 
   // master ip
   if (!g_config.ip.empty()) {
-    PREPL.SetMasterAddr(g_config.GetMasterIP().c_str(), g_config.master_port.load());
+    PREPL.SetMasterAddr(g_config.master_ip.ToString().c_str(), g_config.master_port.load());
   }
 
   //  cmd_table_manager_.InitCmdTable();
