@@ -232,11 +232,11 @@ void PReplication::Cron() {
         } else if (master->GetAuth()) {
           // send replconf
           char req[128];
-          auto len = snprintf(req, sizeof req - 1, "replconf listening-port %hu\r\n", g_config.port);
+          auto len = snprintf(req, sizeof req - 1, "replconf listening-port %hu\r\n", g_config.port.load());
           master->SendPacket(req, len);
           masterInfo_.state = kPReplStateWaitReplconf;
 
-          INFO("Send replconf listening-port {}", g_config.port);
+          INFO("Send replconf listening-port {}", g_config.port.load());
         } else {
           WARN("Haven't auth to master yet, or check masterauth password");
         }

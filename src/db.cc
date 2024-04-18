@@ -16,10 +16,14 @@ DB::DB(int db_id, const std::string &db_path) : db_id_(db_id), db_path_(db_path 
   storage::StorageOptions storage_options;
   storage_options.options = g_config.GetRocksDBOptions();
   // some options obj for all RocksDB in one DB.
-  storage_options.options.write_buffer_manager = std::make_shared<rocksdb::WriteBufferManager>(10000000);
+  auto cap = storage_options.db_instance_num * kColumnNum * storage_options.options.write_buffer_size *
+             storage_options.options.max_write_buffer_number;
+  storage_options.options.write_buffer_manager = std::make_shared<rocksdb::WriteBufferManager>(cap);
+
   storage_options.table_options = g_config.GetRocksDBBlockBasedTableOptions();
-  storage_options.small_compaction_threshold = g_config.GetSmallCompactionThreshold();
-  storage_options.small_compaction_duration_threshold = g_config.GetSmallCompactionDurationThreshold();
+
+  storage_options.small_compaction_threshold = g_config.small_compaction_threshold.load();
+  storage_options.small_compaction_duration_threshold = g_config.small_compaction_duration_threshold.load();
   storage_options.db_instance_num = g_config.db_instance_num;
   storage_options.db_id = db_id;
 

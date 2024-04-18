@@ -25,6 +25,8 @@ namespace pikiwidb {
 
 using Status = rocksdb::Status;
 using CheckFunc = std::function<Status(const std::string&)>;
+class PConfig;
+extern PConfig g_config;
 
 class BaseValue {
  public:
@@ -39,7 +41,8 @@ class BaseValue {
 
   Status Set(const std::string& value, bool force);
 
-  bool ReWritable() { return rewritable_; }
+  // default false,Only rewritable string types require lock protection.
+  virtual bool NeedLock() { return false; }
 
  protected:
   virtual Status SetValue(const std::string&) = 0;
@@ -67,45 +70,47 @@ class StringValue : public BaseValue {
 
   std::string Value() const override { return MergeString(values_, delimiter_); };
 
+  bool NeedLock() override { return rewritable_; }
+
  private:
   Status SetValue(const std::string& value) override;
 
   std::vector<std::string*> values_;
-  char delimiter_;
+  char delimiter_ = 0;
 };
 
 template <typename T>
 class NumberValue : public BaseValue {
  public:
-  NumberValue(const std::string& key, CheckFunc check_func_ptr, bool rewritable, T* value_ptr,
+  NumberValue(const std::string& key, CheckFunc check_func_ptr, bool rewritable, std::atomic<T>* value_ptr,
               T min = std::numeric_limits<T>::min(), T max = std::numeric_limits<T>::max())
       : BaseValue(key, check_func_ptr, rewritable), value_(value_ptr), value_min_(min), value_max_(max) {
     assert(value_ != nullptr);
     assert(value_min_ <= value_max_);
   };
 
-  std::string Value() const override { return std::to_string(*value_); }
+  std::string Value() const override { return std::to_string(value_->load()); }
 
  private:
   Status SetValue(const std::string& value) override;
 
-  T* value_;
+  std::atomic<T>* value_ = nullptr;
   T value_min_;
   T value_max_;
 };
 
 class BoolValue : public BaseValue {
  public:
-  BoolValue(const std::string& key, CheckFunc check_func_ptr, bool rewritable, bool* value_ptr)
+  BoolValue(const std::string& key, CheckFunc check_func_ptr, bool rewritable, std::atomic<bool>* value_ptr)
       : BaseValue(key, check_func_ptr, rewritable), value_(value_ptr) {
     assert(value_ != nullptr);
   };
 
-  std::string Value() const override { return *value_ ? "yes" : "no"; };
+  std::string Value() const override { return value_->load() ? "yes" : "no"; };
 
  private:
   Status SetValue(const std::string& value) override;
-  bool* value_;
+  std::atomic<bool>* value_ = nullptr;
 };
 
 using ValuePrt = std::unique_ptr<BaseValue>;
@@ -120,70 +125,75 @@ class PConfig {
   void Get(const std::string&, std::vector<std::string>*) const;
   Status Set(std::string, const std::string&, bool force = false);
 
- public:
-  int GetTimeout() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return timeout_;
-  }
-
   std::string GetPassword() const {
     std::shared_lock<std::shared_mutex> SharedLock(mutex_);
     return password_;
   }
 
-  int GetSlowlogTime() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return slowlogtime_;
-  }
-
-  int GetSlowlogMaxLen() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return slowlogmaxlen_;
-  }
-
-  int GetFastCmdThreadsNumber() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return fast_cmd_threads_num_;
-  }
-
-  int GetSlowCmdThreadsNumber() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return slow_cmd_threads_num_;
-  }
-
-  int64_t GetMaxClientResponseSize() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return max_client_response_size_;
-  }
-
-  uint64_t GetSmallCompactionThreshold() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return small_compaction_threshold_;
-  }
-
-  uint64_t GetSmallCompactionDurationThreshold() const {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return small_compaction_duration_threshold_;
-  }
-
   std::string GetMasterAuth() const {
     std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return masterauth_;
+    return master_auth_;
   }
 
-  std::string GetMasterIP() {
+  std::string GetMasterIP() const {
     std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return masterIp_;
+    return master_ip_;
   }
 
-  uint16_t GetMasterPort() {
-    std::shared_lock<std::shared_mutex> SharedLock(mutex_);
-    return masterPort_;
-  }
+ public:
+  std::atomic<uint32_t> timeout = 0;
+  // auth
+
+  std::map<std::string, std::string> aliases;
+  std::atomic<uint32_t> max_clients = 10000;     // 10000
+  std::atomic<uint32_t> slow_log_time = 1000;    // 1000 microseconds
+  std::atomic<uint32_t> slow_log_max_len = 128;  // 128
+  std::atomic<uint16_t> master_port;             // replication
+  std::string include_file;                      // the template config
+  std::vector<PString> modules;                  // modules
+  std::atomic<int32_t> fast_cmd_threads_num = 4;
+  std::atomic<int32_t> slow_cmd_threads_num = 4;
+  std::atomic<uint64_t> max_client_response_size = 1073741824;
+  std::atomic<uint64_t> small_compaction_threshold = 604800;
+  std::atomic<uint64_t> small_compaction_duration_threshold = 259200;
+
+  std::atomic<bool> daemonize = false;
+  std::string pid_file = "./pikiwidb.pid";
+  std::string ip = "127.0.0.1";
+  std::atomic<uint16_t> port = 9221;
+  std::string db_path = "./db/";
+  std::string log_dir = "stdout";  // the log directory, differ from redis
+  std::string log_level = "warning";
+  std::string run_id;
+  std::atomic<size_t> databases = 3;
+  std::atomic<uint32_t> worker_threads_num = 2;
+  std::atomic<uint32_t> slave_threads_num = 2;
+  std::atomic<size_t> db_instance_num = 3;
+
+  std::atomic<uint32_t> rocksdb_max_subcompactions = 0;
+  // default 2
+  std::atomic<int> rocksdb_max_background_jobs = 4;
+  // default 2
+  std::atomic<size_t> rocksdb_max_write_buffer_number = 2;
+  // default 2
+  std::atomic<int> rocksdb_min_write_buffer_number_to_merge = 2;
+  // default 64M
+  std::atomic<size_t> rocksdb_write_buffer_size = 64 << 20;
+  std::atomic<int> rocksdb_level0_file_num_compaction_trigger = 4;
+  std::atomic<int> rocksdb_num_levels = 7;
+  std::atomic<bool> rocksdb_enable_pipelined_write = false;
+  std::atomic<int> rocksdb_level0_slowdown_writes_trigger = 20;
+  std::atomic<int> rocksdb_level0_stop_writes_trigger = 36;
 
   rocksdb::Options GetRocksDBOptions();
 
   rocksdb::BlockBasedTableOptions GetRocksDBBlockBasedTableOptions();
+
+ private:
+  mutable std::shared_mutex mutex_;
+  std::string password_;
+  std::string master_auth_;
+  std::string master_ip_;
 
  private:
   inline void AddString(const std::string& key, bool rewritable, std::vector<std::string*> values_ptr_vector) {
@@ -193,73 +203,22 @@ class PConfig {
                                std::vector<std::string*> values_ptr_vector) {
     config_map_.emplace(key, std::make_unique<StringValue>(key, checkfunc, rewritable, values_ptr_vector));
   }
-  inline void AddBool(const std::string& key, const CheckFunc& checkfunc, bool rewritable, bool* value_ptr) {
+  inline void AddBool(const std::string& key, const CheckFunc& checkfunc, bool rewritable,
+                      std::atomic<bool>* value_ptr) {
     config_map_.emplace(key, std::make_unique<BoolValue>(key, checkfunc, rewritable, value_ptr));
   }
   template <typename T>
-  inline void AddNumber(const std::string& key, bool rewritable, T* value_ptr) {
+  inline void AddNumber(const std::string& key, bool rewritable, std::atomic<T>* value_ptr) {
     config_map_.emplace(key, std::make_unique<NumberValue<T>>(key, nullptr, rewritable, value_ptr));
   }
   template <typename T>
-  inline void AddNumberWihLimit(const std::string& key, bool rewritable, T* value_ptr, T min, T max) {
+  inline void AddNumberWihLimit(const std::string& key, bool rewritable, std::atomic<T>* value_ptr, T min, T max) {
     config_map_.emplace(key, std::make_unique<NumberValue<T>>(key, nullptr, rewritable, value_ptr, min, max));
   }
 
- public:
-  bool daemonize = false;
-  std::string pidfile = "./pikiwidb.pid";
-  std::string ip = "127.0.0.1";
-  uint16_t port = 9221;
-  std::string dbpath = "./db/";
-  std::string logdir = "stdout";  // the log directory, differ from redis
-  std::string loglevel = "warning";
-  std::string runid;
-  size_t databases = 3;
-  uint32_t worker_threads_num = 2;
-  uint32_t slave_threads_num = 2;
-  size_t db_instance_num = 3;
-
-  uint32_t rocksdb_max_subcompactions = 0;
-  // default 2
-  int rocksdb_max_background_jobs = 4;
-  // default 2
-  size_t rocksdb_max_write_buffer_number = 2;
-  // default 2
-  int rocksdb_min_write_buffer_number_to_merge = 2;
-  // default 64M
-  size_t rocksdb_write_buffer_size = 64 << 20;
-  int rocksdb_level0_file_num_compaction_trigger = 4;
-  int rocksdb_num_levels = 7;
-  bool rocksdb_enable_pipelined_write = false;
-  int rocksdb_level0_slowdown_writes_trigger = 20;
-  int rocksdb_level0_stop_writes_trigger = 36;
-
  private:
-  mutable std::shared_mutex mutex_;
-  uint32_t timeout_ = 0;
-  // auth
-  std::string password_;
-  std::map<std::string, std::string> aliases_;
-  uint32_t maxclients_ = 10000;   // 10000
-  uint32_t slowlogtime_ = 1000;   // 1000 microseconds
-  uint32_t slowlogmaxlen_ = 128;  // 128
-  std::string masterIp_;
-  std::string test;
-  uint16_t masterPort_;  // replication
-  std::string masterauth_;
-  std::string includefile_;       // the template config
-  std::vector<PString> modules_;  // modules
-  int32_t fast_cmd_threads_num_ = 4;
-  int32_t slow_cmd_threads_num_ = 4;
-  uint64_t max_client_response_size_ = 1073741824;
-  uint64_t small_compaction_threshold_ = 604800;
-  uint64_t small_compaction_duration_threshold_ = 259200;
-
   ConfigParser parser_;
   ConfigMap config_map_;
   std::string config_file_name_;
 };
-
-extern PConfig g_config;
-
 }  // namespace pikiwidb

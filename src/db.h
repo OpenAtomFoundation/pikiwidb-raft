@@ -14,6 +14,7 @@
 #include "storage/storage.h"
 
 namespace pikiwidb {
+constexpr int kColumnNum = 10;
 class DB {
  public:
   DB(int db_id, const std::string& db_path);

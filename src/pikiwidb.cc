@@ -28,6 +28,7 @@
 #include "pstd_util.h"
 
 std::unique_ptr<PikiwiDB> g_pikiwidb;
+using namespace pikiwidb;
 
 static void IntSigHandle(const int sig) {
   INFO("Catch Signal {}, cleanup...", sig);
@@ -119,8 +120,6 @@ void PikiwiDB::OnNewConnection(pikiwidb::TcpConnection* obj) {
 }
 
 bool PikiwiDB::Init() {
-  using namespace pikiwidb;
-
   char runid[kRunidSize + 1] = "";
   getRandomHexChars(runid, kRunidSize);
   g_config.Set("runid", {runid, kRunidSize}, true);
@@ -134,22 +133,22 @@ bool PikiwiDB::Init() {
   }
 
   NewTcpConnectionCallback cb = std::bind(&PikiwiDB::OnNewConnection, this, std::placeholders::_1);
-  if (!worker_threads_.Init(g_config.ip.c_str(), g_config.port, cb)) {
-    ERROR("worker_threads Init failed. IP = {} Port = {}", g_config.ip, g_config.port);
+  if (!worker_threads_.Init(g_config.ip.c_str(), g_config.port.load(), cb)) {
+    ERROR("worker_threads Init failed. IP = {} Port = {}", g_config.ip, g_config.port.load());
     return false;
   }
 
-  auto num = g_config.worker_threads_num + g_config.slave_threads_num;
+  auto num = g_config.worker_threads_num.load() + g_config.slave_threads_num.load();
   auto kMaxWorkerNum = IOThreadPool::GetMaxWorkerNum();
   if (num > kMaxWorkerNum) {
     ERROR("number of threads can't exceeds {}, now is {}", kMaxWorkerNum, num);
     return false;
   }
-  worker_threads_.SetWorkerNum(static_cast<size_t>(g_config.worker_threads_num));
-  slave_threads_.SetWorkerNum(static_cast<size_t>(g_config.slave_threads_num));
+  worker_threads_.SetWorkerNum(static_cast<size_t>(g_config.worker_threads_num.load()));
+  slave_threads_.SetWorkerNum(static_cast<size_t>(g_config.slave_threads_num.load()));
 
   // now we only use fast cmd thread pool
-  auto status = cmd_threads_.Init(g_config.GetFastCmdThreadsNumber(), 0, "pikiwidb-cmd");
+  auto status = cmd_threads_.Init(g_config.fast_cmd_threads_num.load(), 0, "pikiwidb-cmd");
   if (!status.ok()) {
     ERROR("init cmd thread pool failed: {}", status.ToString());
     return false;
@@ -157,16 +156,16 @@ bool PikiwiDB::Init() {
 
   PSTORE.Init(g_config.databases);
 
-  PSlowLog::Instance().SetThreshold(g_config.GetSlowlogTime());
-  PSlowLog::Instance().SetLogLimit(static_cast<std::size_t>(g_config.GetSlowlogMaxLen()));
+  PSlowLog::Instance().SetThreshold(g_config.slow_log_time.load());
+  PSlowLog::Instance().SetLogLimit(static_cast<std::size_t>(g_config.slow_log_max_len.load()));
 
   // init base loop
   auto loop = worker_threads_.BaseLoop();
   loop->ScheduleRepeatedly(1000, &PReplication::Cron, &PREPL);
 
   // master ip
-  if (!g_config.GetMasterIP().empty()) {
-    PREPL.SetMasterAddr(g_config.GetMasterIP().c_str(), g_config.GetMasterPort());
+  if (!g_config.ip.empty()) {
+    PREPL.SetMasterAddr(g_config.GetMasterIP().c_str(), g_config.master_port.load());
   }
 
   //  cmd_table_manager_.InitCmdTable();
@@ -239,7 +238,7 @@ int main(int ac, char* av[]) {
   }
 
   if (!g_pikiwidb->GetConfigName().empty()) {
-    if (!pikiwidb::g_config.LoadFromFile(g_pikiwidb->GetConfigName())) {
+    if (!g_config.LoadFromFile(g_pikiwidb->GetConfigName())) {
       std::cerr << "Load config file [" << g_pikiwidb->GetConfigName() << "] failed!\n";
       return -1;
     }
@@ -248,10 +247,10 @@ int main(int ac, char* av[]) {
   // output logo to console
   char logo[512] = "";
   snprintf(logo, sizeof logo - 1, pikiwidbLogo, KPIKIWIDB_VERSION, static_cast<int>(sizeof(void*)) * 8,
-           static_cast<int>(pikiwidb::g_config.port));
+           static_cast<int>(g_config.port));
   std::cout << logo;
 
-  if (pikiwidb::g_config.daemonize) {
+  if (g_config.daemonize.load()) {
     daemonize();
   }
 
@@ -259,7 +258,7 @@ int main(int ac, char* av[]) {
   SignalSetup();
   InitLogs();
 
-  if (pikiwidb::g_config.daemonize) {
+  if (g_config.daemonize.load()) {
     closeStd();
   }
 

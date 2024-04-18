@@ -81,9 +81,9 @@ Status StringValue::SetValue(const std::string& value) {
 
 Status BoolValue::SetValue(const std::string& value) {
   if (pstd::StringEqualCaseInsensitive(value, "yes")) {
-    *value_ = true;
+    value_->store(true);
   } else {
-    *value_ = false;
+    value_->store(false);
   }
   return Status::OK();
 }
@@ -101,7 +101,7 @@ Status NumberValue<T>::SetValue(const std::string& value) {
   if (v > value_max_) {
     v = value_max_;
   }
-  *value_ = v;
+  value_->store(v);
   return Status::OK();
 }
 
@@ -109,24 +109,24 @@ PConfig::PConfig() {
   AddBool("daemonize", &CheckYesNo, false, &daemonize);
   AddString("ip", false, {&ip});
   AddNumberWihLimit<uint16_t>("port", false, &port, PORT_LIMIT_MIN, PORT_LIMIT_MAX);
-  AddNumber("timeout", true, &timeout_);
-  AddString("db-path", false, std::vector<std::string*>{&dbpath});
-  AddStrinWithFunc("loglevel", &CheckLogLevel, true, {&loglevel});
-  AddString("logfile", true, {&logdir});
+  AddNumber("timeout", true, &timeout);
+  AddString("db-path", false, std::vector<std::string*>{&db_path});
+  AddStrinWithFunc("loglevel", &CheckLogLevel, false, {&log_level});
+  AddString("logfile", false, {&log_dir});
   AddNumberWihLimit<size_t>("databases", false, &databases, 1, DBNUMBER_MAX);
   AddString("requirepass", true, {&password_});
-  AddNumber("maxclients", true, &maxclients_);
+  AddNumber("maxclients", true, &max_clients);
   AddNumberWihLimit<uint32_t>("worker-threads", false, &worker_threads_num, 1, THREAD_MAX);
   AddNumberWihLimit<uint32_t>("slave-threads", false, &worker_threads_num, 1, THREAD_MAX);
-  AddNumber("slowlog-log-slower-than", true, &slowlogtime_);
-  AddNumber("slowlog-max-len", true, &slowlogmaxlen_);
+  AddNumber("slowlog-log-slower-than", true, &slow_log_time);
+  AddNumber("slowlog-max-len", true, &slow_log_max_len);
   AddNumberWihLimit<size_t>("db-instance-num", true, &db_instance_num, 1, ROCKSDB_INSTANCE_NUMBER_MAX);
-  AddNumberWihLimit<int32_t>("fast-cmd-threads-num", false, &fast_cmd_threads_num_, 1, THREAD_MAX);
-  AddNumberWihLimit<int32_t>("slow-cmd-threads-num", false, &slow_cmd_threads_num_, 1, THREAD_MAX);
-  AddNumber("max-client-response-size", true, &max_client_response_size_);
-  AddString("runid", false, {&runid});
-  AddNumber("small-compaction-threshold", true, &small_compaction_threshold_);
-  AddNumber("small-compaction-duration-threshold", true, &small_compaction_duration_threshold_);
+  AddNumberWihLimit<int32_t>("fast-cmd-threads-num", false, &fast_cmd_threads_num, 1, THREAD_MAX);
+  AddNumberWihLimit<int32_t>("slow-cmd-threads-num", false, &slow_cmd_threads_num, 1, THREAD_MAX);
+  AddNumber("max-client-response-size", true, &max_client_response_size);
+  AddString("runid", false, {&run_id});
+  AddNumber("small-compaction-threshold", true, &small_compaction_threshold);
+  AddNumber("small-compaction-duration-threshold", true, &small_compaction_duration_threshold);
 
   // rocksdb config
   AddNumber("rocksdb-max-subcompactions", false, &rocksdb_max_subcompactions);
@@ -148,6 +148,7 @@ bool PConfig::LoadFromFile(const std::string& file_name) {
     return false;
   }
 
+  // During the initialization phase, so there is no need to hold a lock.
   for (auto& [key, value] : parser_.GetMap()) {
     if (auto iter = config_map_.find(key); iter != config_map_.end()) {
       auto& v = config_map_[key];
@@ -161,8 +162,8 @@ bool PConfig::LoadFromFile(const std::string& file_name) {
   // Handle separately
   std::vector<PString> master(SplitString(parser_.GetData<PString>("slaveof"), ' '));
   if (master.size() == 2) {
-    masterIp_ = master[0];
-    masterPort_ = static_cast<uint16_t>(std::stoi(master[1]));
+    master_ip_ = master[0];
+    master_port = static_cast<uint16_t>(std::stoi(master[1]));
   }
 
   std::vector<PString> alias(SplitString(parser_.GetData<PString>("rename-command"), ' '));
@@ -170,7 +171,7 @@ bool PConfig::LoadFromFile(const std::string& file_name) {
     for (auto it(alias.begin()); it != alias.end();) {
       const PString& oldCmd = *(it++);
       const PString& newCmd = *(it++);
-      aliases_[oldCmd] = newCmd;
+      aliases[oldCmd] = newCmd;
     }
   }
 
@@ -179,23 +180,31 @@ bool PConfig::LoadFromFile(const std::string& file_name) {
 
 void PConfig::Get(const std::string& key, std::vector<std::string>* values) const {
   values->clear();
-  std::shared_lock<std::shared_mutex> sharedLock(mutex_);
   for (const auto& [k, v] : config_map_) {
     if (key == "*" || pstd::StringMatch(key.c_str(), k.c_str(), 1)) {
       values->emplace_back(k);
+      if (v->NeedLock()) {
+        std::shared_lock<std::shared_mutex> l(mutex_);
+        values->emplace_back(v->Value());
+        continue;
+      }
       values->emplace_back(v->Value());
     }
   }
 }
 
-Status PConfig::Set(std::string key, const std::string& value, bool force) {
+Status PConfig::Set(std::string key, const std::string& value, bool init_stage) {
   std::transform(key.begin(), key.end(), key.begin(), ::tolower);
   auto iter = config_map_.find(key);
   if (iter == config_map_.end()) {
     return Status::NotFound("Non-existent configuration items.");
   }
-  std::lock_guard<std::shared_mutex> Lock(mutex_);
-  return iter->second->Set(value, force);
+  if (iter->second->NeedLock()) {
+    std::lock_guard<std::shared_mutex> l(mutex_);
+    auto s = iter->second->Set(value, init_stage);
+    return s;
+  }
+  return iter->second->Set(value, init_stage);
 }
 
 rocksdb::Options PConfig::GetRocksDBOptions() {
