@@ -33,9 +33,9 @@ class EventLoop;
 class Binlog;
 
 enum ClusterCmdType {
-  kNONE,
-  kJOIN,
-  kREMOVE,
+  kNone,
+  kJoin,
+  kRemove,
 };
 
 class ClusterCmdContext {
@@ -62,7 +62,7 @@ class ClusterCmdContext {
   void ConnectTargetNode();
 
  private:
-  ClusterCmdType cluster_cmd_type_ = ClusterCmdType::kNONE;
+  ClusterCmdType cluster_cmd_type_ = ClusterCmdType::kNone;
   std::mutex mtx_;
   PClient* client_ = nullptr;
   std::string peer_ip_;

@@ -95,7 +95,7 @@ void RaftNodeCmd::DoCmdRemove(PClient* client) {
     auto port = leader_peer_id.addr.port - pikiwidb::g_config.raft_port_offset;
     auto peer_id = client->argv_[2];
     auto ret =
-        PRAFT.GetClusterCmdCtx().Set(ClusterCmdType::kREMOVE, client, std::move(peer_ip), port, std::move(peer_id));
+        PRAFT.GetClusterCmdCtx().Set(ClusterCmdType::kRemove, client, std::move(peer_ip), port, std::move(peer_id));
     if (!ret) {  // other clients have removed
       return client->SetRes(CmdRes::kErrOther, "Other clients have removed");
     }
@@ -209,7 +209,7 @@ void RaftClusterCmd::DoCmdJoin(PClient* client) {
   auto& [peer_ip, port] = *ip_port;
 
   // Connect target
-  auto ret = PRAFT.GetClusterCmdCtx().Set(ClusterCmdType::kJOIN, client, std::move(peer_ip), port);
+  auto ret = PRAFT.GetClusterCmdCtx().Set(ClusterCmdType::kJoin, client, std::move(peer_ip), port);
   if (!ret) {  // other clients have joined
     return client->SetRes(CmdRes::kErrOther, "Other clients have joined");
   }
