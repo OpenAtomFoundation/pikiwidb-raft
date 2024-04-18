@@ -45,8 +45,8 @@ class ClusterCmdContext {
   ClusterCmdContext() = default;
   ~ClusterCmdContext() = default;
 
-  bool Set(ClusterCmdType cluster_cmd_type, PClient* client, const std::string&& peer_ip, int port,
-           const std::string&& peer_id = "");
+  bool Set(ClusterCmdType cluster_cmd_type, PClient* client, std::string&& peer_ip, int port,
+           std::string&& peer_id = "");
 
   void Clear();
 

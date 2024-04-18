@@ -90,7 +90,7 @@ void RaftNodeCmd::DoCmdRemove(PClient* client) {
     }
 
     // Connect target
-    auto peer_ip = butil::ip2str(leader_peer_id.addr.ip).c_str();
+    std::string peer_ip = butil::ip2str(leader_peer_id.addr.ip).c_str();
     auto port = leader_peer_id.addr.port - pikiwidb::g_config.raft_port_offset;
     auto peer_id = client->argv_[2];
     auto ret =

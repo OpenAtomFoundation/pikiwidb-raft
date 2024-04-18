@@ -29,8 +29,8 @@
 
 namespace pikiwidb {
 
-bool ClusterCmdContext::Set(ClusterCmdType cluster_cmd_type, PClient* client, const std::string&& peer_ip, int port,
-                            const std::string&& peer_id) {
+bool ClusterCmdContext::Set(ClusterCmdType cluster_cmd_type, PClient* client, std::string&& peer_ip, int port,
+                            std::string&& peer_id) {
   std::unique_lock<std::mutex> lck(mtx_);
   if (client_ != nullptr) {
     return false;
