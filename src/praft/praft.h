@@ -20,9 +20,9 @@ namespace pikiwidb {
 #define RAFT_GROUPID_LEN 32
 
 #define OK "+OK"
-#define DATABASES_NUM "databases_num:"
-#define ROCKSDB_NUM "rocksdb_num:"
-#define ROCKSDB_VERSION "rocksdb_version:"
+#define DATABASES_NUM "databases_num"
+#define ROCKSDB_NUM "rocksdb_num"
+#define ROCKSDB_VERSION "rocksdb_version"
 #define WRONG_LEADER "-ERR wrong leader"
 #define RAFT_GROUP_ID "raft_group_id:"
 #define NOT_LEADER "Not leader"

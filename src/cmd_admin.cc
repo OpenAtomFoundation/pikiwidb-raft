@@ -166,9 +166,9 @@ void InfoCmd::InfoData(PClient* client) {
   }
 
   std::string message;
-  message += DATABASES_NUM + std::to_string(pikiwidb::g_config.databases) + "\r\n";
-  message += ROCKSDB_NUM + std::to_string(pikiwidb::g_config.db_instance_num) + "\r\n";
-  message += ROCKSDB_VERSION + ROCKSDB_NAMESPACE::GetRocksVersionAsString() + "\r\n";
+  message += DATABASES_NUM + std::string(":") + std::to_string(pikiwidb::g_config.databases) + "\r\n";
+  message += ROCKSDB_NUM + std::string(":") + std::to_string(pikiwidb::g_config.db_instance_num) + "\r\n";
+  message += ROCKSDB_VERSION + std::string(":") + ROCKSDB_NAMESPACE::GetRocksVersionAsString() + "\r\n";
 
   client->AppendString(message);
 }
