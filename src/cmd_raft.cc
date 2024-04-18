@@ -5,18 +5,19 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
+#include "cmd_raft.h"
+
 #include <cstdint>
 #include <optional>
 #include <string>
 
+#include "praft/praft.h"
+#include "pstd/log.h"
+#include "pstd/pstd_string.h"
+
 #include "client.h"
-#include "cmd_raft.h"
 #include "config.h"
-#include "event_loop.h"
-#include "log.h"
 #include "pikiwidb.h"
-#include "praft.h"
-#include "pstd_string.h"
 #include "replication.h"
 
 namespace pikiwidb {

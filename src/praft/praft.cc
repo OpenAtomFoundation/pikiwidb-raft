@@ -12,12 +12,13 @@
 #include "braft/util.h"
 #include "brpc/server.h"
 
+#include "pstd/log.h"
+#include "pstd/pstd_string.h"
+
 #include "binlog.pb.h"
 #include "config.h"
 #include "pikiwidb.h"
 #include "praft_service.h"
-#include "pstd/log.h"
-#include "pstd/pstd_string.h"
 #include "replication.h"
 #include "store.h"
 
@@ -46,7 +47,7 @@ bool ClusterCmdContext::Set(ClusterCmdType cluster_cmd_type, PClient* client, st
 
 void ClusterCmdContext::Clear() {
   std::unique_lock<std::mutex> lck(mtx_);
-  cluster_cmd_type_ = ClusterCmdType::kNONE;
+  cluster_cmd_type_ = ClusterCmdType::kNone;
   client_ = nullptr;
   peer_ip_.clear();
   port_ = 0;
