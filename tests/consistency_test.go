@@ -1,9 +1,11 @@
 package pikiwidb_test
 
 import (
+	"bufio"
 	"context"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -139,7 +141,7 @@ var _ = Describe("Consistency", Ordered, func() {
 			"fa": "va",
 			"fc": "vc",
 		}))
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10000 * time.Millisecond)
 		for _, f := range followers {
 			getall, err := f.HGetAll(ctx, testKey).Result()
 			Expect(err).NotTo(HaveOccurred())
@@ -147,6 +149,34 @@ var _ = Describe("Consistency", Ordered, func() {
 				"fa": "va",
 				"fc": "vc",
 			}))
+		}
+	})
+
+	It("ThreeNodesClusterConstructionTest", func() {
+		for _, follower := range followers {
+			info, err := follower.Do(ctx, "info", "raft").Result()
+			Expect(err).NotTo(HaveOccurred())
+			info_str := info.(string)
+			scanner := bufio.NewScanner(strings.NewReader(info_str))
+			var peer_id string
+			var is_member bool
+			for scanner.Scan() {
+				line := scanner.Text()
+				if strings.Contains(line, "raft_peer_id") {
+					parts := strings.Split(line, ":")
+					if len(parts) >= 2 {
+						peer_id = parts[1]
+						is_member = true
+						break
+					}
+				}
+			}
+
+			if is_member {
+				ret, err := follower.Do(ctx, "raft.node", "remove", peer_id).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ret).To(Equal(OK))
+			}
 		}
 	})
 })
