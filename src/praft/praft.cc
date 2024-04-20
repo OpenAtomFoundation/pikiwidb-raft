@@ -115,7 +115,6 @@ butil::Status PRaft::Init(std::string& group_id, bool initial_conf_is_null) {
     server_.reset();
     return ERROR_LOG_AND_STATUS("Failed to start server");
   }
-
   // It's ok to start PRaft;
   assert(group_id.size() == RAFT_GROUPID_LEN);
   this->group_id_ = group_id;
@@ -580,7 +579,7 @@ void PRaft::AppendLog(const Binlog& log, std::promise<rocksdb::Status>&& promise
   node_->apply(task);
 }
 
-void PRaft::AddAllFiles(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path) {
+int PRaft::AddAllFiles(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path) {
   assert(writer);
   for (const auto& entry : std::filesystem::directory_iterator(dir)) {
     if (entry.is_directory()) {
@@ -591,34 +590,12 @@ void PRaft::AddAllFiles(const std::filesystem::path& dir, braft::SnapshotWriter*
     } else {
       DEBUG("file_path = {}", std::filesystem::relative(entry.path(), path).string());
       if (writer->add_file(std::filesystem::relative(entry.path(), path)) != 0) {
-        ERROR("add file error!");
+        ERROR("add file {} to snapshot fail!", entry.path().string());
+        return -1;
       }
     }
   }
-}
-
-void PRaft::RecursiveCopy(const std::filesystem::path& source, const std::filesystem::path& destination) {
-  if (std::filesystem::is_regular_file(source)) {
-    if (source.filename() == PBRAFT_SNAPSHOT_META_FILE) {
-      return;
-    } else if (source.extension() == ".sst") {
-      // Create a hard link
-      DEBUG("hard link success! source_file = {} , destination_file = {}", source.string(), destination.string());
-      ::link(source.c_str(), destination.c_str());
-    } else {
-      // Copy the file
-      DEBUG("copy success! source_file = {} , destination_file = {}", source.string(), destination.string());
-      std::filesystem::copy_file(source, destination, std::filesystem::copy_options::overwrite_existing);
-    }
-  } else {
-    if (!pstd::FileExists(destination)) {
-      pstd::CreateDir(destination);
-    }
-
-    for (const auto& entry : std::filesystem::directory_iterator(source)) {
-      RecursiveCopy(entry.path(), destination / entry.path().filename());
-    }
-  }
+  return 0;
 }
 
 // @braft::StateMachine
@@ -663,30 +640,24 @@ void PRaft::on_apply(braft::Iterator& iter) {
 }
 
 void PRaft::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) {
+  assert(writer);
   brpc::ClosureGuard done_guard(done);
-  TasksVector tasks;
-  tasks.reserve(g_config.databases);
-  for (auto i = 0; i < g_config.databases; ++i) {
-    tasks.push_back({TaskType::kCheckpoint, i, {{TaskArg::kCheckpointPath, writer->get_path()}}});
-  }
+  auto path = writer->get_path();
+  INFO("Saving snapshot to {}", path);
+  TasksVector tasks(1, {TaskType::kCheckpoint, db_id_, {{TaskArg::kCheckpointPath, path}}, true});
   PSTORE.DoSomeThingSpecificDB(tasks);
-  PSTORE.WaitForCheckpointDone();
-  auto writer_path = writer->get_path();
-  AddAllFiles(writer_path, writer, writer_path);
+  if (auto res = AddAllFiles(path, writer, path); res != 0) {
+    done->status().set_error(EIO, "Fail to add file to writer");
+  }
 }
 
 int PRaft::on_snapshot_load(braft::SnapshotReader* reader) {
   CHECK(!IsLeader()) << "Leader is not supposed to load snapshot";
-  auto reader_path = reader->get_path();  // xx/snapshot_0000001
-  auto db_path = g_config.dbpath;
-  PSTORE.Clear();
-  for (int i = 0; i < g_config.databases; i++) {
-    auto sub_path = db_path + std::to_string(i);
-    pstd::DeleteDirIfExist(sub_path);
-  }
-  db_path.pop_back();
-  RecursiveCopy(reader_path, db_path);
-  PSTORE.Init();
+  assert(reader);
+  auto reader_path = reader->get_path();                 // xx/snapshot_0000001
+  auto path = g_config.dbpath + std::to_string(db_id_);  // db/db_id
+  TasksVector tasks(1, {TaskType::kLoadDBFromCheckPoint, db_id_, {{TaskArg::kCheckpointPath, reader_path}}, true});
+  PSTORE.DoSomeThingSpecificDB(tasks);
   return 0;
 }
 

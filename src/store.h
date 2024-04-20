@@ -17,21 +17,21 @@
 
 namespace pikiwidb {
 
-enum TaskType {
-  kCheckpoint,
-};
+enum TaskType { kCheckpoint = 0, kLoadDBFromCheckPoint };
 
 enum TaskArg {
-  kCheckpointPath,
+  kCheckpointPath = 0,
 };
 
 struct TaskContext {
   TaskType type;
   int db;
   std::map<TaskArg, std::string> args;
-  TaskContext(TaskType t) : type(t) {}
-  TaskContext(TaskType t, int d) : type(t), db(d) {}
-  TaskContext(TaskType t, int d, const std::map<TaskArg, std::string>& a) : type(t), db(d), args(a) {}
+  bool sync;
+  TaskContext(TaskType t, bool s = false) : type(t), sync(s) {}
+  TaskContext(TaskType t, int d, bool s = false) : type(t), db(d), sync(s) {}
+  TaskContext(TaskType t, int d, const std::map<TaskArg, std::string>& a, bool s = false)
+      : type(t), db(d), args(a), sync(s) {}
 };
 
 using TasksVector = std::vector<TaskContext>;

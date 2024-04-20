@@ -7,7 +7,6 @@
 
 #include <string>
 
-#include "checkpoint_manager.h"
 #include "config.h"
 #include "log.h"
 #include "store.h"
@@ -28,7 +27,7 @@ void PStore::Init() {
   backends_.reserve(dbNum_);
   if (g_config.backend == kBackEndRocksDB) {
     for (int i = 0; i < dbNum_; i++) {
-      auto db = std::make_unique<DB>(i, g_config.dbpath);
+      auto db = std::make_unique<DB>(i, g_config.dbpath, g_config.db_instance_num);
       backends_.push_back(std::move(db));
     }
   } else {
@@ -36,37 +35,43 @@ void PStore::Init() {
   }
 }
 
-void PStore::Clear() { backends_.clear(); }
+void PStore::Clear() {
+  std::lock_guard<std::shared_mutex> lock(dbs_mutex_);
+  backends_.clear();
+}
 
 void PStore::DoSomeThingSpecificDB(const TasksVector& tasks) {
   std::for_each(tasks.begin(), tasks.end(), [this](const auto& task) {
+    if (task.db < 0 || task.db >= dbNum_) {
+      WARN("The database index is out of range.");
+      return;
+    }
+    auto& db = backends_[task.db];
     switch (task.type) {
       case kCheckpoint: {
-        if (task.db < 0 || task.db >= dbNum_) {
-          WARN("The database index is out of range.");
-          return;
-        }
-        auto& db = backends_[task.db];
         if (auto s = task.args.find(kCheckpointPath); s == task.args.end()) {
-          WARN("The critical parameter 'path' is missing in the checkpoint.");
+          WARN("The critical parameter 'path' is missing for do a checkpoint.");
           return;
         }
         auto path = task.args.find(kCheckpointPath)->second;
         trimSlash(path);
-        db->CreateCheckpoint(path);
+        db->CreateCheckpoint(path, task.sync);
         break;
       }
-
+      case kLoadDBFromCheckPoint: {
+        if (auto s = task.args.find(kCheckpointPath); s == task.args.end()) {
+          WARN("The critical parameter 'path' is missing for load a checkpoint.");
+          return;
+        }
+        auto path = task.args.find(kCheckpointPath)->second;
+        trimSlash(path);
+        db->LoadDBFromCheckPoint(path, task.sync);
+        break;
+      }
       default:
         break;
     }
   });
-}
-
-void PStore::WaitForCheckpointDone() {
-  for (auto& db : backends_) {
-    db->WaitForCheckpointDone();
-  }
 }
 
 void PStore::trimSlash(std::string& dirName) {

@@ -4,6 +4,7 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 
 #include <algorithm>
+#include <filesystem>
 #include <string_view>
 #include <utility>
 
@@ -22,6 +23,9 @@
 #include "storage/slot_indexer.h"
 #include "storage/storage.h"
 #include "storage/util.h"
+
+#define PRAFT_SNAPSHOT_META_FILE "__raft_snapshot_meta"
+#define SST_FILE_EXTENSION ".sst"
 
 namespace storage {
 extern std::string BitOpOperate(BitOpType op, const std::vector<std::string>& src_values, int64_t max_len);
@@ -82,6 +86,42 @@ static std::string AppendSubDirectory(const std::string& db_path, int index) {
   }
 }
 
+static int RecursiveLinkAndCopy(const std::filesystem::path& source, const std::filesystem::path& destination) {
+  if (std::filesystem::is_regular_file(source)) {
+    if (source.filename() == PRAFT_SNAPSHOT_META_FILE) {
+      return 0;
+    } else if (source.extension() == SST_FILE_EXTENSION) {
+      // Create a hard link
+      DEBUG("hard link success! source_file = {} , destination_file = {}", source.string(), destination.string());
+      if (::link(source.c_str(), destination.c_str()) < 0) {
+        WARN("hard link file {} fail", source.string());
+        return -1;
+      }
+    } else {
+      // Copy the file
+      DEBUG("copy success! source_file = {} , destination_file = {}", source.string(), destination.string());
+      if (!std::filesystem::copy_file(source, destination, std::filesystem::copy_options::overwrite_existing)) {
+        WARN("copy file {} fail", source.string());
+        return -1;
+      }
+    }
+  } else {
+    if (!pstd::FileExists(destination)) {
+      if (pstd::CreateDir(destination) != 0) {
+        WARN("create dir {} fail", destination.string());
+        return -1;
+      }
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(source)) {
+      if (RecursiveLinkAndCopy(entry.path(), destination / entry.path().filename()) != 0) {
+        return -1;
+      }
+    }
+  }
+  return 0;
+}
+
 Status Storage::Open(const StorageOptions& storage_options, const std::string& db_path) {
   mkpath(db_path.c_str(), 0755);
   db_instance_num_ = storage_options.db_instance_num;
@@ -110,7 +150,7 @@ Status Storage::CreateCheckpoint(const std::string& dump_path, int i) {
   auto tmp_dir = source_dir + ".tmp";
   // 1) Make sure the temporary directory does not exist
   if (!pstd::DeleteDirIfExist(tmp_dir)) {
-    WARN("DB{}'s RocksDB {} delete dir fail!", db_id_, i);
+    WARN("DB{}'s RocksDB {} delete directory fail!", db_id_, i);
     return Status::IOError("DeleteDirIfExist() fail! dir_name : {} ", tmp_dir);
   }
 
@@ -125,7 +165,7 @@ Status Storage::CreateCheckpoint(const std::string& dump_path, int i) {
 
   // 3) Create a checkpoint
   std::unique_ptr<rocksdb::Checkpoint> checkpoint_guard(checkpoint);
-  s = checkpoint->CreateCheckpoint(tmp_dir, kNoFlush, nullptr);
+  s = checkpoint->CreateCheckpoint(tmp_dir, kFlush, nullptr);
   if (!s.ok()) {
     WARN("DB{}'s RocksDB {} create checkpoint failed!. Error: {}", db_id_, i, s.ToString());
     return s;
@@ -133,7 +173,7 @@ Status Storage::CreateCheckpoint(const std::string& dump_path, int i) {
 
   // 4) Make sure the source directory does not exist
   if (!pstd::DeleteDirIfExist(source_dir)) {
-    WARN("DB{}'s RocksDB {} delete dir {} fail!", db_id_, i, source_dir);
+    WARN("DB{}'s RocksDB {} delete directory {} fail!", db_id_, i, source_dir);
     return Status::IOError("DeleteDirIfExist() fail! dir_name : {} ", source_dir);
   }
 
@@ -144,10 +184,42 @@ Status Storage::CreateCheckpoint(const std::string& dump_path, int i) {
     if (!pstd::DeleteDirIfExist(tmp_dir)) {
       WARN("DB{}'s RocksDB {} fail to delete the rename failed directory {} ", db_id_, i, tmp_dir);
     }
-    return Status::IOError("Rename dir {} fail!", tmp_dir);
+    return Status::IOError("Rename directory {} fail!", tmp_dir);
   }
 
   INFO("DB{}'s RocksDB {} create checkpoint {} success!", db_id_, i, source_dir);
+  return Status::OK();
+}
+
+Status Storage::LoadCheckpoint(const std::string& dump_path, const std::string& db_path, int i) {
+  auto rocksdb_checkpoint_path = AppendSubDirectory(db_path, i);
+  INFO("DB{}'s RocksDB {} begin to load a checkpoint from {}!", db_id_, i, rocksdb_checkpoint_path);
+
+  // 首先将原来的 db path 改名, 当 load 失败的时候保证原来的数据还在.
+  auto tmp_path = db_path + ".tmp";
+  if (auto status = pstd::RenameFile(db_path, tmp_path); status != 0) {
+    WARN("DB{}'s RocksDB {} rename db directory {} to temporary directory {} fail!", db_id_, i, db_path, tmp_path);
+    return Status::IOError("Rename directory {} fail!", db_path);
+  }
+
+  if (0 != pstd::CreateDir(db_path)) {
+    pstd::RenameFile(tmp_path, db_path);
+    WARN("DB{}'s RocksDB {} load a checkpoint from {} fail!", db_id_, i, rocksdb_checkpoint_path);
+    return Status::IOError("Create directory {} fail!", db_path);
+  }
+
+  // 将原来的数据拷贝到 DB 目录下.
+  if (RecursiveLinkAndCopy(dump_path, db_path) != 0) {
+    pstd::DeleteDir(db_path);
+    pstd::RenameFile(tmp_path, db_path);
+    WARN("DB{}'s RocksDB {} load a checkpoint from {} fail!", db_id_, i, rocksdb_checkpoint_path);
+    return Status::IOError("recursive link and copy directory {} fail!", dump_path);
+  }
+
+  // 删除掉 tmp
+  if (auto s = rocksdb::DestroyDB(tmp_path, rocksdb::Options()); !s.ok()) {
+    WARN("Failure to destroy the old DB, path = {}", tmp_path);
+  }
   return Status::OK();
 }
 

@@ -22,7 +22,6 @@
 
 namespace pikiwidb {
 
-#define PBRAFT_SNAPSHOT_META_FILE "__raft_snapshot_meta"
 #define RAFT_GROUPID_LEN 32
 
 #define OK "+OK"
@@ -156,9 +155,7 @@ class PRaft : public braft::StateMachine {
   void on_start_following(const ::braft::LeaderChangeContext& ctx) override;
 
  private:
-  void AddAllFiles(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path);
-
-  void RecursiveCopy(const std::filesystem::path& source, const std::filesystem::path& destination);
+  static int AddAllFiles(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path);
 
  private:
   std::unique_ptr<brpc::Server> server_{nullptr};  // brpc
@@ -168,6 +165,7 @@ class PRaft : public braft::StateMachine {
 
   ClusterCmdContext cluster_cmd_ctx_;  // context for cluster join/remove command
   std::string group_id_;               // group id
+  int db_id_ = 0;                      // db_id
 };
 
 }  // namespace pikiwidb
