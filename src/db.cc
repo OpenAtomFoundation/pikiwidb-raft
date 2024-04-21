@@ -36,7 +36,7 @@ DB::DB(int db_index, const std::string& db_path, int rocksdb_inst_num)
     ERROR("Storage open failed! {}", s.ToString());
     abort();
   }
-  opened_ = true;
+  opened_.store(true);
   INFO("Open DB{} success!", db_index_);
 }
 
@@ -80,7 +80,6 @@ void DB::CreateCheckpoint(const std::string& path, bool sync) {
 
 void DB::LoadDBFromCheckPoint(const std::string& path, bool sync) {
   opened_.store(false);
-  // 对于每一个 rocksdb 分别去 Load 自己的 DB.
   auto checkpoint_path = path + '/' + std::to_string(db_index_);
   if (0 != pstd::IsDir(path)) {
     WARN("Checkpoint dir {} does not exist!", checkpoint_path);
@@ -106,7 +105,7 @@ void DB::LoadDBFromCheckPoint(const std::string& path, bool sync) {
   for (auto& r : result) {
     r.get();
   }
-  // 重新启动
+
   storage::StorageOptions storage_options;
   storage_options.options.create_if_missing = true;
   storage_options.db_instance_num = rocksdb_inst_num_;

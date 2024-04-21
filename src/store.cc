@@ -9,6 +9,7 @@
 
 #include "config.h"
 #include "log.h"
+#include "pstd/pstd_string.h"
 #include "store.h"
 
 namespace pikiwidb {
@@ -54,7 +55,7 @@ void PStore::DoSomeThingSpecificDB(const TasksVector& tasks) {
           return;
         }
         auto path = task.args.find(kCheckpointPath)->second;
-        trimSlash(path);
+        pstd::trimSlash(path);
         db->CreateCheckpoint(path, task.sync);
         break;
       }
@@ -64,7 +65,7 @@ void PStore::DoSomeThingSpecificDB(const TasksVector& tasks) {
           return;
         }
         auto path = task.args.find(kCheckpointPath)->second;
-        trimSlash(path);
+        pstd::trimSlash(path);
         db->LoadDBFromCheckPoint(path, task.sync);
         break;
       }
@@ -73,11 +74,4 @@ void PStore::DoSomeThingSpecificDB(const TasksVector& tasks) {
     }
   });
 }
-
-void PStore::trimSlash(std::string& dirName) {
-  while (dirName.back() == '/') {
-    dirName.pop_back();
-  }
-}
-
 }  // namespace pikiwidb

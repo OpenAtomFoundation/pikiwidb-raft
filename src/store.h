@@ -60,7 +60,6 @@ class PStore {
 
  private:
   PStore() = default;
-  void trimSlash(std::string& dirName);
 
   int dbNum_ = 0;
 

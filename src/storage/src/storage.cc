@@ -12,6 +12,7 @@
 #include "config.h"
 #include "pstd/log.h"
 #include "pstd/pikiwidb_slot.h"
+#include "pstd/pstd_string.h"
 #include "rocksdb/utilities/checkpoint.h"
 #include "scope_snapshot.h"
 #include "src/lru_cache.h"
@@ -68,13 +69,14 @@ Storage::Storage() {
 }
 
 Storage::~Storage() {
-  bg_tasks_should_exit_ = true;
+  bg_tasks_should_exit_.store(true);
   bg_tasks_cond_var_.notify_one();
-
-  if (is_opened_) {
-    for (auto& inst : insts_) {
-      inst.reset();
+  if (is_opened_.load()) {
+    int ret = 0;
+    if (ret = pthread_join(bg_tasks_thread_id_, nullptr); ret != 0) {
+      ERROR("pthread_join failed with bgtask thread error : {}", ret);
     }
+    insts_.clear();
   }
 }
 
@@ -92,18 +94,18 @@ static int RecursiveLinkAndCopy(const std::filesystem::path& source, const std::
       return 0;
     } else if (source.extension() == SST_FILE_EXTENSION) {
       // Create a hard link
-      DEBUG("hard link success! source_file = {} , destination_file = {}", source.string(), destination.string());
-      if (::link(source.c_str(), destination.c_str()) < 0) {
+      if (::link(source.c_str(), destination.c_str()) != 0) {
         WARN("hard link file {} fail", source.string());
         return -1;
       }
+      DEBUG("hard link success! source_file = {} , destination_file = {}", source.string(), destination.string());
     } else {
       // Copy the file
-      DEBUG("copy success! source_file = {} , destination_file = {}", source.string(), destination.string());
       if (!std::filesystem::copy_file(source, destination, std::filesystem::copy_options::overwrite_existing)) {
         WARN("copy file {} fail", source.string());
         return -1;
       }
+      DEBUG("copy success! source_file = {} , destination_file = {}", source.string(), destination.string());
     }
   } else {
     if (!pstd::FileExists(destination)) {
@@ -192,33 +194,36 @@ Status Storage::CreateCheckpoint(const std::string& dump_path, int i) {
 }
 
 Status Storage::LoadCheckpoint(const std::string& dump_path, const std::string& db_path, int i) {
-  auto rocksdb_checkpoint_path = AppendSubDirectory(db_path, i);
-  INFO("DB{}'s RocksDB {} begin to load a checkpoint from {}!", db_id_, i, rocksdb_checkpoint_path);
+  auto rocksdb_checkpoint_path = AppendSubDirectory(dump_path, i);
+  INFO("DB{}'s RocksDB {} begin to load a checkpoint from {}", db_id_, i, rocksdb_checkpoint_path);
+  auto rocksdb_path = AppendSubDirectory(db_path, i);  // ./db/db_id/i
+  auto tmp_rocksdb_path = rocksdb_path + ".tmp";       // ./db/db_id/i.tmp
+  insts_[i].reset();
 
-  // 首先将原来的 db path 改名, 当 load 失败的时候保证原来的数据还在.
-  auto tmp_path = db_path + ".tmp";
-  if (auto status = pstd::RenameFile(db_path, tmp_path); status != 0) {
-    WARN("DB{}'s RocksDB {} rename db directory {} to temporary directory {} fail!", db_id_, i, db_path, tmp_path);
+  // 1) Rename the original db to db.tmp, and only perform the maximum possible recovery of data
+  // when loading the checkpoint fails.
+  if (auto status = pstd::RenameFile(rocksdb_path, tmp_rocksdb_path); status != 0) {
+    WARN("DB{}'s RocksDB {} rename db directory {} to temporary directory {} fail!", db_id_, i, db_path,
+         tmp_rocksdb_path);
     return Status::IOError("Rename directory {} fail!", db_path);
   }
 
-  if (0 != pstd::CreateDir(db_path)) {
-    pstd::RenameFile(tmp_path, db_path);
+  // 2) Create a db directory to save the checkpoint.
+  if (0 != pstd::CreatePath(rocksdb_path)) {
+    pstd::RenameFile(tmp_rocksdb_path, rocksdb_path);
     WARN("DB{}'s RocksDB {} load a checkpoint from {} fail!", db_id_, i, rocksdb_checkpoint_path);
-    return Status::IOError("Create directory {} fail!", db_path);
+    return Status::IOError("Create directory {} fail!", rocksdb_path);
+  }
+  if (RecursiveLinkAndCopy(rocksdb_checkpoint_path, rocksdb_path) != 0) {
+    pstd::DeleteDir(rocksdb_path);
+    pstd::RenameFile(tmp_rocksdb_path, rocksdb_path);
+    WARN("DB{}'s RocksDB {} load a checkpoint from {} fail!", db_id_, i, rocksdb_checkpoint_path);
+    return Status::IOError("recursive link and copy directory {} fail!", rocksdb_path);
   }
 
-  // 将原来的数据拷贝到 DB 目录下.
-  if (RecursiveLinkAndCopy(dump_path, db_path) != 0) {
-    pstd::DeleteDir(db_path);
-    pstd::RenameFile(tmp_path, db_path);
-    WARN("DB{}'s RocksDB {} load a checkpoint from {} fail!", db_id_, i, rocksdb_checkpoint_path);
-    return Status::IOError("recursive link and copy directory {} fail!", dump_path);
-  }
-
-  // 删除掉 tmp
-  if (auto s = rocksdb::DestroyDB(tmp_path, rocksdb::Options()); !s.ok()) {
-    WARN("Failure to destroy the old DB, path = {}", tmp_path);
+  // 3) Destroy the db.tmp directory.
+  if (auto s = rocksdb::DestroyDB(tmp_rocksdb_path, rocksdb::Options()); !s.ok()) {
+    WARN("Failure to destroy the old DB, path = {}", tmp_rocksdb_path);
   }
   return Status::OK();
 }
@@ -2047,9 +2052,9 @@ Status Storage::AddBGTask(const BGTask& bg_task) {
 
 Status Storage::RunBGTask() {
   BGTask task;
-  while (!bg_tasks_should_exit_) {
+  while (!bg_tasks_should_exit_.load()) {
     std::unique_lock<std::mutex> lock(bg_tasks_mutex_);
-    bg_tasks_cond_var_.wait(lock, [this]() { return !bg_tasks_queue_.empty() || bg_tasks_should_exit_; });
+    bg_tasks_cond_var_.wait(lock, [this]() { return !bg_tasks_queue_.empty() || bg_tasks_should_exit_.load(); });
 
     if (!bg_tasks_queue_.empty()) {
       task = bg_tasks_queue_.front();
@@ -2057,7 +2062,7 @@ Status Storage::RunBGTask() {
     }
     lock.unlock();
 
-    if (bg_tasks_should_exit_) {
+    if (bg_tasks_should_exit_.load()) {
       return Status::Incomplete("bgtask return with bg_tasks_should_exit true");
     }
 

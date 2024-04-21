@@ -51,7 +51,12 @@ Redis::~Redis() {
   for (auto handle : tmp_handles) {
     delete handle;
   }
+  // delete env_;
   delete db_;
+
+  if (default_compact_range_options_.canceled) {
+    delete default_compact_range_options_.canceled;
+  }
 }
 
 Status Redis::Open(const StorageOptions& storage_options, const std::string& db_path) {

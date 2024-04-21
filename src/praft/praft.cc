@@ -523,7 +523,7 @@ butil::Status PRaft::DoSnapshot() {
   braft::SynchronizedClosure done;
   node_->snapshot(&done);
   done.wait();
-  return {0, "OK"};
+  return done.status();
 }
 
 void PRaft::OnClusterCmdConnectionFailed([[maybe_unused]] EventLoop* loop, const char* peer_ip, int port) {
