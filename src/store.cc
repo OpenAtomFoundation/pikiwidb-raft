@@ -36,12 +36,7 @@ void PStore::Init() {
   }
 }
 
-void PStore::Clear() {
-  std::lock_guard<std::shared_mutex> lock(dbs_mutex_);
-  backends_.clear();
-}
-
-void PStore::DoSomeThingSpecificDB(const TasksVector& tasks) {
+void PStore::HandleTaskSpecificDB(const TasksVector& tasks) {
   std::for_each(tasks.begin(), tasks.end(), [this](const auto& task) {
     if (task.db < 0 || task.db >= dbNum_) {
       WARN("The database index is out of range.");
@@ -55,7 +50,7 @@ void PStore::DoSomeThingSpecificDB(const TasksVector& tasks) {
           return;
         }
         auto path = task.args.find(kCheckpointPath)->second;
-        pstd::trimSlash(path);
+        pstd::TrimSlash(path);
         db->CreateCheckpoint(path, task.sync);
         break;
       }
@@ -65,7 +60,7 @@ void PStore::DoSomeThingSpecificDB(const TasksVector& tasks) {
           return;
         }
         auto path = task.args.find(kCheckpointPath)->second;
-        pstd::trimSlash(path);
+        pstd::TrimSlash(path);
         db->LoadDBFromCheckPoint(path, task.sync);
         break;
       }

@@ -38,7 +38,6 @@ using TasksVector = std::vector<TaskContext>;
 
 class PStore {
  public:
-  friend class CheckpointManager;
   static PStore& Instance();
 
   PStore(const PStore&) = delete;
@@ -46,29 +45,17 @@ class PStore {
 
   void Init();
 
-  void Clear();
-
   std::unique_ptr<DB>& GetBackend(int32_t index) { return backends_[index]; };
 
-  void DoSomeThingSpecificDB(const TasksVector& task);
-
-  void WaitForCheckpointDone();
+  void HandleTaskSpecificDB(const TasksVector& task);
 
   int GetDBNumber() const { return dbNum_; }
-
-  std::shared_mutex& SharedMutex() { return dbs_mutex_; }
 
  private:
   PStore() = default;
 
   int dbNum_ = 0;
 
-  /**
-   * If you want to access all the DBs at the same time,
-   * then you must hold the lock.
-   * For example: you want to execute flushall or bgsave.
-   */
-  std::shared_mutex dbs_mutex_;
   std::vector<std::unique_ptr<DB>> backends_;
 };
 

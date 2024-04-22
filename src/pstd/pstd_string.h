@@ -93,6 +93,6 @@ std::string RandomStringWithNumber(size_t len);
 
 bool StringHasSpaces(const std::string& str);
 
-void trimSlash(std::string& dirName);
+void TrimSlash(std::string& dirName);
 
 }  // namespace pstd

@@ -619,7 +619,7 @@ bool StringHasSpaces(const std::string& str) {
   return std::count_if(str.begin(), str.end(), [](unsigned char c) { return std::isspace(c); });
 }
 
-void trimSlash(std::string& dirName) {
+void TrimSlash(std::string& dirName) {
   while (dirName.back() == '/') {
     dirName.pop_back();
   }

@@ -1110,7 +1110,6 @@ class Storage {
 
   // Storage start the background thread for compaction task
   pthread_t bg_tasks_thread_id_ = 0;
-  std::thread t;
   pstd::Mutex bg_tasks_mutex_;
   pstd::CondVar bg_tasks_cond_var_;
   std::queue<BGTask> bg_tasks_queue_;

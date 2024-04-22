@@ -41,7 +41,7 @@ DB::DB(int db_index, const std::string& db_path, int rocksdb_inst_num)
 }
 
 void DB::DoCheckpoint(const std::string& path, int i) {
-  // 1) always hold storage's sharedLock
+  // 1) always hold the storage's shared lock
   std::shared_lock sharedLock(storage_mutex_);
 
   // 2）Create the checkpoint of rocksdb i.
@@ -49,7 +49,7 @@ void DB::DoCheckpoint(const std::string& path, int i) {
 }
 
 void DB::LoadCheckpoint(const std::string& path, const std::string& db_path, int i) {
-  // 1) Already holding the mutual exclusion lock
+  // 1) Already holding the storage's exclusion lock
 
   // 2) Load the checkpoint of rocksdb i.
   auto status = storage_->LoadCheckpoint(path, db_path, i);
@@ -97,8 +97,6 @@ void DB::LoadDBFromCheckPoint(const std::string& path, bool sync) {
   result.reserve(rocksdb_inst_num_);
   for (int i = 0; i < rocksdb_inst_num_; ++i) {
     // In a new thread, Load a checkpoint for the specified rocksdb i
-    // In DB::DoBgSave, a read lock is always held to protect the Storage
-    // corresponding to this rocksdb i.
     auto res = std::async(std::launch::async, &DB::LoadCheckpoint, this, checkpoint_path, db_path_, i);
     result.push_back(std::move(res));
   }

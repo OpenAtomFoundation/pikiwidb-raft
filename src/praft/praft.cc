@@ -645,7 +645,7 @@ void PRaft::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done
   auto path = writer->get_path();
   INFO("Saving snapshot to {}", path);
   TasksVector tasks(1, {TaskType::kCheckpoint, db_id_, {{TaskArg::kCheckpointPath, path}}, true});
-  PSTORE.DoSomeThingSpecificDB(tasks);
+  PSTORE.HandleTaskSpecificDB(tasks);
   if (auto res = AddAllFiles(path, writer, path); res != 0) {
     done->status().set_error(EIO, "Fail to add file to writer");
   }
@@ -657,7 +657,7 @@ int PRaft::on_snapshot_load(braft::SnapshotReader* reader) {
   auto reader_path = reader->get_path();                 // xx/snapshot_0000001
   auto path = g_config.dbpath + std::to_string(db_id_);  // db/db_id
   TasksVector tasks(1, {TaskType::kLoadDBFromCheckPoint, db_id_, {{TaskArg::kCheckpointPath, reader_path}}, true});
-  PSTORE.DoSomeThingSpecificDB(tasks);
+  PSTORE.HandleTaskSpecificDB(tasks);
   return 0;
 }
 
