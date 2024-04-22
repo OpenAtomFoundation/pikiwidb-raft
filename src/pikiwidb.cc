@@ -8,6 +8,8 @@
 //
 //  PikiwiDB.cc
 
+#include "pikiwidb.h"
+
 #include <sys/fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -21,7 +23,6 @@
 #include "client.h"
 #include "config.h"
 #include "helper.h"
-#include "pikiwidb.h"
 #include "pikiwidb_logo.h"
 #include "slow_log.h"
 #include "store.h"
@@ -256,6 +257,7 @@ void PikiwiDB::Run() {
 void PikiwiDB::Stop() {
   pikiwidb::PRAFT.ShutDown();
   pikiwidb::PRAFT.Join();
+  pikiwidb::PRAFT.Clear();
   slave_threads_.Exit();
   worker_threads_.Exit();
 }

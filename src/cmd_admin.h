@@ -93,6 +93,9 @@ class InfoCmd : public BaseCmd {
 
  private:
   void DoCmd(PClient* client) override;
+
+  void InfoRaft(PClient* client);
+  void InfoData(PClient* client);
 };
 
 }  // namespace pikiwidb

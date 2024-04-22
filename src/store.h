@@ -10,7 +10,6 @@
 #define GLOG_NO_ABBREVIATED_SEVERITIES
 
 #include <map>
-#include <memory>
 #include <shared_mutex>
 #include <vector>
 
@@ -18,28 +17,28 @@
 
 namespace pikiwidb {
 
-enum TaskType {
-  kCheckpoint,
-};
+enum TaskType { kCheckpoint = 0, kLoadDBFromCheckpoint, kEmpty };
 
 enum TaskArg {
-  kCheckpointPath,
+  kCheckpointPath = 0,
 };
 
 struct TaskContext {
-  TaskType type;
-  int db;
+  TaskType type = kEmpty;
+  int db = -1;
   std::map<TaskArg, std::string> args;
-  TaskContext(TaskType t) : type(t) {}
-  TaskContext(TaskType t, int d) : type(t), db(d) {}
-  TaskContext(TaskType t, int d, const std::map<TaskArg, std::string>& a) : type(t), db(d), args(a) {}
+  bool sync = false;
+  TaskContext() = delete;
+  TaskContext(TaskType t, bool s = false) : type(t), sync(s) {}
+  TaskContext(TaskType t, int d, bool s = false) : type(t), db(d), sync(s) {}
+  TaskContext(TaskType t, int d, const std::map<TaskArg, std::string>& a, bool s = false)
+      : type(t), db(d), args(a), sync(s) {}
 };
 
 using TasksVector = std::vector<TaskContext>;
 
 class PStore {
  public:
-  friend class CheckpointManager;
   static PStore& Instance();
 
   PStore(const PStore&) = delete;
@@ -49,24 +48,15 @@ class PStore {
 
   std::unique_ptr<DB>& GetBackend(int32_t index) { return backends_[index]; };
 
-  void DoSomeThingSpecificDB(const TasksVector& task);
+  void HandleTaskSpecificDB(const TasksVector& task);
 
-  void WaitForCheckpointDone();
-
-  std::shared_mutex& SharedMutex() { return dbs_mutex_; }
+  int GetDBNumber() const { return db_number_; }
 
  private:
   PStore() = default;
-  void trimSlash(std::string& dirName);
 
-  int dbNum_ = 0;
+  int db_number_ = 0;
 
-  /**
-   * If you want to access all the DBs at the same time,
-   * then you must hold the lock.
-   * For example: you want to execute flushall or bgsave.
-   */
-  std::shared_mutex dbs_mutex_;
   std::vector<std::unique_ptr<DB>> backends_;
 };
 

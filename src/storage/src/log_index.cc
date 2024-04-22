@@ -69,7 +69,6 @@ std::tuple<int, LogIndex, SequenceNumber, int, LogIndex> LogIndexOfColumnFamilie
 }
 
 bool LogIndexOfColumnFamilies::IsPendingFlush() const {
-  // assert(flushed index <= applied index)
   std::set<int> s;
   for (int i = 0; i < kColumnFamilyNum; i++) {
     s.insert(cf_[i].applied_log_index.log_index);
