@@ -28,7 +28,7 @@ class DB {
 
   void CreateCheckpoint(const std::string& path, bool sync);
 
-  void LoadDBFromCheckPoint(const std::string& path, bool sync = false);
+  void LoadDBFromCheckpoint(const std::string& path, bool sync = false);
 
   int GetDbIndex() { return db_index_; }
 

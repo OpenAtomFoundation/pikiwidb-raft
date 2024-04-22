@@ -656,7 +656,7 @@ int PRaft::on_snapshot_load(braft::SnapshotReader* reader) {
   assert(reader);
   auto reader_path = reader->get_path();                 // xx/snapshot_0000001
   auto path = g_config.dbpath + std::to_string(db_id_);  // db/db_id
-  TasksVector tasks(1, {TaskType::kLoadDBFromCheckPoint, db_id_, {{TaskArg::kCheckpointPath, reader_path}}, true});
+  TasksVector tasks(1, {TaskType::kLoadDBFromCheckpoint, db_id_, {{TaskArg::kCheckpointPath, reader_path}}, true});
   PSTORE.HandleTaskSpecificDB(tasks);
   return 0;
 }

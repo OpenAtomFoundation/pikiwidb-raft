@@ -17,17 +17,18 @@
 
 namespace pikiwidb {
 
-enum TaskType { kCheckpoint = 0, kLoadDBFromCheckPoint };
+enum TaskType { kCheckpoint = 0, kLoadDBFromCheckpoint, kEmpty };
 
 enum TaskArg {
   kCheckpointPath = 0,
 };
 
 struct TaskContext {
-  TaskType type;
-  int db;
+  TaskType type = kEmpty;
+  int db = -1;
   std::map<TaskArg, std::string> args;
-  bool sync;
+  bool sync = false;
+  TaskContext() = delete;
   TaskContext(TaskType t, bool s = false) : type(t), sync(s) {}
   TaskContext(TaskType t, int d, bool s = false) : type(t), db(d), sync(s) {}
   TaskContext(TaskType t, int d, const std::map<TaskArg, std::string>& a, bool s = false)
@@ -49,12 +50,12 @@ class PStore {
 
   void HandleTaskSpecificDB(const TasksVector& task);
 
-  int GetDBNumber() const { return dbNum_; }
+  int GetDBNumber() const { return db_number_; }
 
  private:
   PStore() = default;
 
-  int dbNum_ = 0;
+  int db_number_ = 0;
 
   std::vector<std::unique_ptr<DB>> backends_;
 };

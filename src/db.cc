@@ -78,7 +78,7 @@ void DB::CreateCheckpoint(const std::string& path, bool sync) {
   }
 }
 
-void DB::LoadDBFromCheckPoint(const std::string& path, bool sync) {
+void DB::LoadDBFromCheckpoint(const std::string& path, bool sync) {
   opened_.store(false);
   auto checkpoint_path = path + '/' + std::to_string(db_index_);
   if (0 != pstd::IsDir(path)) {

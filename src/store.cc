@@ -24,10 +24,10 @@ void PStore::Init() {
     return;
   }
 
-  dbNum_ = g_config.databases;
-  backends_.reserve(dbNum_);
+  db_number_ = g_config.databases;
+  backends_.reserve(db_number_);
   if (g_config.backend == kBackEndRocksDB) {
-    for (int i = 0; i < dbNum_; i++) {
+    for (int i = 0; i < db_number_; i++) {
       auto db = std::make_unique<DB>(i, g_config.dbpath, g_config.db_instance_num);
       backends_.push_back(std::move(db));
     }
@@ -38,11 +38,11 @@ void PStore::Init() {
 
 void PStore::HandleTaskSpecificDB(const TasksVector& tasks) {
   std::for_each(tasks.begin(), tasks.end(), [this](const auto& task) {
-    if (task.db < 0 || task.db >= dbNum_) {
+    if (task.db < 0 || task.db >= db_number_) {
       WARN("The database index is out of range.");
       return;
     }
-    auto& db = backends_[task.db];
+    auto& db = backends_.at(task.db);
     switch (task.type) {
       case kCheckpoint: {
         if (auto s = task.args.find(kCheckpointPath); s == task.args.end()) {
@@ -54,14 +54,18 @@ void PStore::HandleTaskSpecificDB(const TasksVector& tasks) {
         db->CreateCheckpoint(path, task.sync);
         break;
       }
-      case kLoadDBFromCheckPoint: {
+      case kLoadDBFromCheckpoint: {
         if (auto s = task.args.find(kCheckpointPath); s == task.args.end()) {
           WARN("The critical parameter 'path' is missing for load a checkpoint.");
           return;
         }
         auto path = task.args.find(kCheckpointPath)->second;
         pstd::TrimSlash(path);
-        db->LoadDBFromCheckPoint(path, task.sync);
+        db->LoadDBFromCheckpoint(path, task.sync);
+        break;
+      }
+      case kEmpty: {
+        WARN("A empty task was passed in, not doing anything.");
         break;
       }
       default:
