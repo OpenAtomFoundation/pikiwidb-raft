@@ -9,13 +9,13 @@
 
 #include <algorithm>
 #include <cinttypes>
-#include <mutex>
 #include <set>
-#include <shared_mutex>
 
 #include "redis.h"
 
 namespace storage {
+
+static constexpr int64_t kGapMax = 1000;
 
 rocksdb::Status storage::LogIndexOfColumnFamilies::Init(Redis *db) {
   for (int i = 0; i < cf_.size(); i++) {
@@ -26,53 +26,42 @@ rocksdb::Status storage::LogIndexOfColumnFamilies::Init(Redis *db) {
     }
     auto res = LogIndexTablePropertiesCollector::GetLargestLogIndexFromTableCollection(collection);
     if (res.has_value()) {
-      cf_[i].applied_log_index.log_index.store(res->GetAppliedLogIndex());
-      cf_[i].applied_log_index.seqno.store(res->GetSequenceNumber());
-      cf_[i].flushed_log_index.log_index.store(res->GetAppliedLogIndex());
-      cf_[i].flushed_log_index.seqno.store(res->GetSequenceNumber());
+      auto log_index = res->GetAppliedLogIndex();
+      auto sequence_number = res->GetSequenceNumber();
+      cf_[i].applied_index.SetLogIndexSeqnoPair(log_index, sequence_number);
+      cf_[i].flushed_index.SetLogIndexSeqnoPair(log_index, sequence_number);
     }
   }
   return Status::OK();
 }
 
-std::tuple<int, LogIndex, SequenceNumber, int, LogIndex> LogIndexOfColumnFamilies::GetSmallestLogIndex() const {
-  auto smallest_applied_log_index = std::numeric_limits<LogIndex>::max();
-  auto smallest_flushed_log_index = std::numeric_limits<LogIndex>::max();
-  auto smallest_flushed_seqno = std::numeric_limits<SequenceNumber>::max();
-  auto smallest_applied_log_index_cf = -1;
-  auto smallest_flushed_log_index_cf = -1;
+LogIndexOfColumnFamilies::SmallestIndexRes LogIndexOfColumnFamilies::GetSmallestLogIndex() const {
+  SmallestIndexRes res;
   for (int i = 0; i < cf_.size(); i++) {
-    // 同一个 CF 以及不同的 CF 的 Flush 事件可能并发, 所有每一个 CF 的 Flushed LogIndex 和 Applied Flushed LogIndex
-    // 还可能向前推进.故最后找出的 min 值可能小于真正的 min 值, 但是不影响正确性. 考虑一种情况:某一个 cf
-    // 刚好把所有的数据 flush, 此时 Flushed LogIndex == Applied LogIndex, 但是不能将当前 cf 跳过. 所以还需要判断当前 cf
-    // 的 Flushed seq 与 last min flushed seq 的大小.
-    if (cf_[i].flushed_log_index.seqno <= last_min_flushed_seqno_.load() &&
-        cf_[i].flushed_log_index == cf_[i].flushed_log_index) {
+    if (cf_[i].flushed_index <= last_flush_index_ && cf_[i].flushed_index == cf_[i].applied_index) {
       continue;
     }
-    auto applied_log_index = cf_[i].applied_log_index.log_index.load();
-    auto flushed_log_index = cf_[i].flushed_log_index.log_index.load();
-    auto flushed_seqno = cf_[i].flushed_log_index.seqno.load();
-    // 此时会读到中间状态, 导致读到到 LogIndex 和 Seq 并不是真正的对应关系.
-    if (applied_log_index < smallest_applied_log_index) {
-      smallest_applied_log_index = applied_log_index;
-      smallest_applied_log_index_cf = i;
+    auto applied_log_index = cf_[i].applied_index.GetLogIndex();
+    auto flushed_log_index = cf_[i].flushed_index.GetLogIndex();
+    auto flushed_seqno = cf_[i].flushed_index.GetSequenceNumber();
+    if (applied_log_index < res.smallest_applied_log_index) {
+      res.smallest_applied_log_index = applied_log_index;
+      res.smallest_applied_log_index_cf = i;
     }
-    if (flushed_log_index < smallest_flushed_log_index) {
-      smallest_flushed_log_index = flushed_log_index;
-      smallest_flushed_seqno = flushed_seqno;
-      smallest_flushed_log_index_cf = i;
+    if (flushed_log_index < res.smallest_flushed_log_index) {
+      res.smallest_flushed_log_index = flushed_log_index;
+      res.smallest_flushed_seqno = flushed_seqno;
+      res.smallest_flushed_log_index_cf = i;
     }
   }
-  return {smallest_flushed_log_index_cf, smallest_flushed_log_index, smallest_flushed_seqno,
-          smallest_applied_log_index_cf, smallest_applied_log_index};
+  return res;
 }
 
 bool LogIndexOfColumnFamilies::IsPendingFlush() const {
   std::set<int> s;
   for (int i = 0; i < kColumnFamilyNum; i++) {
-    s.insert(cf_[i].applied_log_index.log_index);
-    s.insert(cf_[i].flushed_log_index.log_index);
+    s.insert(cf_[i].applied_index.GetLogIndex());
+    s.insert(cf_[i].flushed_index.GetLogIndex());
   }
   assert(!s.empty());
   if (s.size() == 1) {
@@ -122,10 +111,8 @@ LogIndex LogIndexAndSequenceCollector::FindAppliedLogIndex(SequenceNumber seqno)
 }
 
 void LogIndexAndSequenceCollector::Update(LogIndex smallest_applied_log_index, SequenceNumber smallest_flush_seqno) {
-  /*
-    If step length > 1, log index is sampled and sacrifice precision to save memory usage.
-    It means that extra applied log may be applied again on start stage.
-  */
+  // If step length > 1, log index is sampled and sacrifice precision to save memory usage.
+  // It means that extra applied log may be applied again on start stage.
   if ((smallest_applied_log_index & step_length_mask_) == 0) {
     std::lock_guard gd(mutex_);
     list_.emplace_back(smallest_applied_log_index, smallest_flush_seqno);
@@ -134,13 +121,11 @@ void LogIndexAndSequenceCollector::Update(LogIndex smallest_applied_log_index, S
 
 // TODO(longfar): find the iterator which should be deleted and erase from begin to the iterator
 void LogIndexAndSequenceCollector::Purge(LogIndex smallest_applied_log_index) {
-  /*
-   * The reason that we use smallest applied log index of all column families instead of smallest flushed log index is
-   * that the log index corresponding to the largest sequence number in the next flush must be greater than or equal to
-   * the smallest applied log index at this moment.
-   * So we just need to make sure that there is an element in the queue which is less than or equal to the smallest
-   * applied log index to ensure that we can find a correct log index while doing next flush.
-   */
+  // The reason that we use smallest applied log index of all column families instead of smallest flushed log index is
+  // that the log index corresponding to the largest sequence number in the next flush must be greater than or equal to
+  // the smallest applied log index at this moment.
+  // So we just need to make sure that there is an element in the queue which is less than or equal to the smallest
+  // applied log index to ensure that we can find a correct log index while doing next flush.
   std::lock_guard gd(mutex_);
   if (list_.size() < 2) {
     return;
