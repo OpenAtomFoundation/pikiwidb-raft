@@ -55,9 +55,9 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
 
     // Snapshot generation
     if (!snapshots_exists) {
-      INFO("start generate snapshot");
       braft::LocalSnapshotMetaTable snapshot_meta_memtable;
       std::string meta_path = snapshot_path + "/" PRAFT_SNAPSHOT_META_FILE;
+      INFO("start to generate snapshot in path {}", snapshot_path);
       braft::FileSystemAdaptor* fs = braft::default_file_system();
       assert(fs);
       snapshot_meta_memtable.load_from_file(fs, meta_path);
@@ -68,11 +68,12 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
 
       auto rc = snapshot_meta_memtable.save_to_file(fs, meta_path);
       if (rc == 0) {
-        INFO("Succeed to save, path: {}", snapshot_path);
+        INFO("Succeed to save snapshot in path {}", snapshot_path);
       } else {
-        ERROR("Fail to save, path: {}", snapshot_path);
+        ERROR("Fail to save snapshot in path {}", snapshot_path);
       }
-      INFO("end generate snapshot");
+      
+      INFO("generate snapshot completed in path {}", snapshot_path);
     }
   }
 
