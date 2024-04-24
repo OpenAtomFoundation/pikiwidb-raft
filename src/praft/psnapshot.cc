@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-present, Qihoo, Inc.  All rights reserved.
+ * Copyright (c) 2024-present, Qihoo, Inc.  All rights reserved.
  * This source code is licensed under the BSD-style license found in the
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
@@ -26,7 +26,7 @@ extern PConfig g_config;
 braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int oflag,
                                                   const ::google::protobuf::Message* file_meta, butil::File::Error* e) {
   if ((oflag & IS_RDONLY) == 0) {  // This is a read operation
-    bool found_other_files = false;
+    bool snapshots_exists = false;
     std::string snapshot_path;
 
     // parse snapshot path
@@ -45,9 +45,9 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
       for (const auto& entry : std::filesystem::directory_iterator(snapshot_path)) {
         std::string filename = entry.path().filename().string();
         if (entry.is_regular_file() || entry.is_directory()) {
-          if (filename != "." && filename != ".." && filename.find(PBRAFT_SNAPSHOT_META_FILE) == std::string::npos) {
+          if (filename != "." && filename != ".." && filename.find(PRAFT_SNAPSHOT_META_FILE) == std::string::npos) {
             // If the path directory contains files other than raft_snapshot_meta, snapshots have been generated
-            found_other_files = true;
+            snapshots_exists = true;
             break;
           }
         }
@@ -55,11 +55,12 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
     }
 
     // Snapshot generation
-    if (!found_other_files) {
+    if (!snapshots_exists) {
       INFO("start generate snapshot");
       braft::LocalSnapshotMetaTable snapshot_meta_memtable;
-      std::string meta_path = snapshot_path + "/" PBRAFT_SNAPSHOT_META_FILE;
+      std::string meta_path = snapshot_path + "/" PRAFT_SNAPSHOT_META_FILE;
       braft::FileSystemAdaptor* fs = braft::default_file_system();
+      assert(fs);
       snapshot_meta_memtable.load_from_file(fs, meta_path);
 
       TasksVector tasks(1, {TaskType::kCheckpoint, 0, {{TaskArg::kCheckpointPath, snapshot_path}}, true});
@@ -82,6 +83,7 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
 void PPosixFileSystemAdaptor::AddAllFiles(const std::filesystem::path& dir,
                                           braft::LocalSnapshotMetaTable* snapshot_meta_memtable,
                                           const std::string& path) {
+  assert(snapshot_meta_memtable);
   for (const auto& entry : std::filesystem::directory_iterator(dir)) {
     if (entry.is_directory()) {
       if (entry.path() != "." && entry.path() != "..") {

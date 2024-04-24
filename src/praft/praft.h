@@ -21,10 +21,6 @@
 
 #include "client.h"
 
-namespace braft {
-class FileSystemAdaptor;
-}  // namespace braft
-
 namespace pikiwidb {
 
 #define RAFT_GROUPID_LEN 32
@@ -157,9 +153,6 @@ class PRaft : public braft::StateMachine {
   void on_configuration_committed(const ::braft::Configuration& conf) override;
   void on_stop_following(const ::braft::LeaderChangeContext& ctx) override;
   void on_start_following(const ::braft::LeaderChangeContext& ctx) override;
-
- private:
-  static int AddAllFiles(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path);
 
  private:
   std::unique_ptr<brpc::Server> server_{nullptr};  // brpc

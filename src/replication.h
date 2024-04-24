@@ -17,8 +17,6 @@
 #include "net/util.h"
 #include "pstd/memory_file.h"
 
-#include "common.h"
-
 namespace pikiwidb {
 
 template <typename DEST>

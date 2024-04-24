@@ -19,12 +19,11 @@
 #include "binlog.pb.h"
 #include "config.h"
 #include "pikiwidb.h"
-#include "praft.h"
+#include "replication.h"
+#include "store.h"
 
 #include "praft_service.h"
 #include "psnapshot.h"
-#include "replication.h"
-#include "store.h"
 
 #define ERROR_LOG_AND_STATUS(msg) \
   ({                              \
@@ -131,15 +130,13 @@ butil::Status PRaft::Init(std::string& group_id, bool initial_conf_is_null) {
   butil::EndPoint addr(ip, port);
 
   // Default init in one node.
-  /*
-  initial_conf takes effect only when the replication group is started from an empty node.
-  The Configuration is restored from the snapshot and log files when the data in the replication group is not empty.
-  initial_conf is used only to create replication groups.
-  The first node adds itself to initial_conf and then calls add_peer to add other nodes.
-  Set initial_conf to empty for other nodes.
-  You can also start empty nodes simultaneously by setting the same inital_conf(ip:port of multiple nodes) for multiple
-  nodes.
-  */
+  // initial_conf takes effect only when the replication group is started from an empty node.
+  // The Configuration is restored from the snapshot and log files when the data in the replication group is not empty.
+  //  initial_conf is used only to create replication groups.
+  //  The first node adds itself to initial_conf and then calls add_peer to add other nodes.
+  //  Set initial_conf to empty for other nodes.
+  //  You can also start empty nodes simultaneously by setting the same inital_conf(ip:port of multiple nodes) for
+  //  multiple nodes.
   std::string initial_conf;
   if (!initial_conf_is_null) {
     initial_conf = raw_addr_ + ":0,";
@@ -525,6 +522,9 @@ butil::Status PRaft::DoSnapshot(int64_t self_snapshot_index, bool is_sync) {
     return ERROR_LOG_AND_STATUS("Node is not initialized");
   }
   braft::SynchronizedClosure done;
+  // TODO(panlei) Increase the self_log_index parameter
+  // TODO(panlei) Use the is_sync parameter to determine whether
+  //  to use synchronous waiting.
   node_->snapshot(&done);
   done.wait();
   return done.status();
@@ -581,25 +581,6 @@ void PRaft::AppendLog(const Binlog& log, std::promise<rocksdb::Status>&& promise
   task.data = &data;
   task.done = done;
   node_->apply(task);
-}
-
-int PRaft::AddAllFiles(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path) {
-  assert(writer);
-  for (const auto& entry : std::filesystem::directory_iterator(dir)) {
-    if (entry.is_directory()) {
-      if (entry.path() != "." && entry.path() != "..") {
-        DEBUG("dir_path = {}", entry.path().string());
-        AddAllFiles(entry.path(), writer, path);
-      }
-    } else {
-      DEBUG("file_path = {}", std::filesystem::relative(entry.path(), path).string());
-      if (writer->add_file(std::filesystem::relative(entry.path(), path)) != 0) {
-        ERROR("add file {} to snapshot fail!", entry.path().string());
-        return -1;
-      }
-    }
-  }
-  return 0;
 }
 
 // @braft::StateMachine

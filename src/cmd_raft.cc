@@ -44,7 +44,7 @@ void RaftNodeCmd::DoCmd(PClient* client) {
     DoCmdAdd(client);
   } else if (cmd == kRemoveCmd) {
     DoCmdRemove(client);
-  } else if (!strcasecmp(cmd.c_str(), "DOSNAPSHOT")) {
+  } else if (cmd == kDoSnapshot) {
     DoCmdSnapshot(client);
   } else {
     client->SetRes(CmdRes::kErrOther, "RAFT.NODE supports ADD / REMOVE / DOSNAPSHOT only");
