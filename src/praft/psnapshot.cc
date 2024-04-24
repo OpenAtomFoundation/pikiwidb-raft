@@ -72,7 +72,6 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
       } else {
         ERROR("Fail to save snapshot in path {}", snapshot_path);
       }
-      
       INFO("generate snapshot completed in path {}", snapshot_path);
     }
   }
