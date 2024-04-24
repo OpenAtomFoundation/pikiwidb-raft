@@ -39,7 +39,6 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
         break;
       }
     }
-
     // check whether snapshots have been created
     std::lock_guard<braft::raft_mutex_t> guard(mutex_);
     if (!snapshot_path.empty()) {
@@ -67,7 +66,7 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
       PSTORE.HandleTaskSpecificDB(tasks);
       AddAllFiles(snapshot_path, &snapshot_meta_memtable, snapshot_path);
 
-      const int rc = snapshot_meta_memtable.save_to_file(fs, meta_path);
+      auto rc = snapshot_meta_memtable.save_to_file(fs, meta_path);
       if (rc == 0) {
         INFO("Succeed to save, path: {}", snapshot_path);
       } else {

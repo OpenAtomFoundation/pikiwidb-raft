@@ -28,10 +28,10 @@ jobs:
 
       - name: Build
         env: 
-          CPLUS_INCLUDE_PATH: /opt/homebrew/include:/usr/local/include
-          PATH: /opt/homebrew/bin:/usr/local/bin
+          CPLUS_INCLUDE_PATH: /opt/homebrew/include
         run: |
           brew install autoconf
+          brew install go
           sh build.sh
 
       - name: Run Go E2E Tests

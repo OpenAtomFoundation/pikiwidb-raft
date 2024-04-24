@@ -6,10 +6,9 @@
  */
 
 #include "cmd_admin.h"
-#include "braft/raft.h"
-#include "rocksdb/version.h"
 
 #include "braft/raft.h"
+#include "rocksdb/version.h"
 
 #include "praft/praft.h"
 #include "store.h"
