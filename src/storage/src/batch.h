@@ -27,8 +27,8 @@ class Batch {
 
   virtual void Put(ColumnFamilyIndex cf_idx, const Slice& key, const Slice& val) = 0;
   virtual void Delete(ColumnFamilyIndex cf_idx, const Slice& key) = 0;
-  virtual auto Commit() -> Status = 0;
-  auto Count() const -> int32_t { return cnt_; }
+  virtual Status Commit() = 0;
+  int32_t Count() const { return cnt_; }
 
   static auto CreateBatch(Redis* redis) -> std::unique_ptr<Batch>;
 
@@ -50,7 +50,7 @@ class RocksBatch : public Batch {
     batch_.Delete(handles_[cf_idx], key);
     cnt_++;
   }
-  auto Commit() -> Status override { return db_->Write(options_, &batch_); }
+  Status Commit() override { return db_->Write(options_, &batch_); }
 
  private:
   rocksdb::WriteBatch batch_;
