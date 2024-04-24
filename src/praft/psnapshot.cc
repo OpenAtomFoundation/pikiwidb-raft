@@ -11,7 +11,6 @@
 #include "psnapshot.h"
 
 #include "braft/local_file_meta.pb.h"
-#include "braft/snapshot.h"
 #include "butil/files/file_path.h"
 
 #include "pstd/log.h"

@@ -11,14 +11,11 @@
 
 #include "braft/file_system_adaptor.h"
 #include "braft/macros.h"
+#include "braft/snapshot.h"
 
 #define PRAFT_SNAPSHOT_META_FILE "__raft_snapshot_meta"
 #define PRAFT_SNAPSHOT_PATH "snapshot/snapshot_"
 #define IS_RDONLY 0x01
-
-namespace braft {
-class LocalSnapshotMetaTable;
-}  // namespace braft
 
 namespace pikiwidb {
 
