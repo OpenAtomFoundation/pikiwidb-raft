@@ -63,15 +63,10 @@ braft::FileAdaptor* PPosixFileSystemAdaptor::open(const std::string& path, int o
       braft::FileSystemAdaptor* fs = braft::default_file_system();
       snapshot_meta_memtable.load_from_file(fs, meta_path);
 
-      TasksVector tasks;
-      tasks.reserve(g_config.databases);
-      for (auto i = 0; i < g_config.databases; ++i) {
-        tasks.push_back({TaskType::kCheckpoint, i, {{TaskArg::kCheckpointPath, snapshot_path}}});
-      }
-
-      PSTORE.DoSomeThingSpecificDB(tasks);
-      PSTORE.WaitForCheckpointDone();
+      TasksVector tasks(1, {TaskType::kCheckpoint, 0, {{TaskArg::kCheckpointPath, snapshot_path}}, true});
+      PSTORE.HandleTaskSpecificDB(tasks);
       AddAllFiles(snapshot_path, &snapshot_meta_memtable, snapshot_path);
+
       const int rc = snapshot_meta_memtable.save_to_file(fs, meta_path);
       if (rc == 0) {
         INFO("Succeed to save, path: {}", snapshot_path);
