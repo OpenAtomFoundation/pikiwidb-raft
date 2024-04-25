@@ -15,16 +15,15 @@ import (
 	"github.com/OpenAtomFoundation/pikiwidb/tests/util"
 )
 
+var (
+	followers []*redis.Client
+	leader    *redis.Client
+)
+
 var _ = Describe("Consistency", Ordered, func() {
 	var (
-		ctx       = context.TODO()
-		servers   []*util.Server
-		followers []*redis.Client
-		leader    *redis.Client
-	)
-
-	const (
-		testKey = "consistency-test"
+		ctx     = context.TODO()
+		servers []*util.Server
 	)
 
 	BeforeAll(func() {
@@ -104,51 +103,156 @@ var _ = Describe("Consistency", Ordered, func() {
 		followers = nil
 	})
 
-	It("SimpleWriteConsistencyTest", func() {
-		set, err := leader.HSet(ctx, testKey, map[string]string{
+	It("HSet & HDel Consistency Test", func() {
+		const testKey = "HashConsistencyTest"
+		testValue := map[string]string{
 			"fa": "va",
 			"fb": "vb",
 			"fc": "vc",
-		}).Result()
-		Expect(err).NotTo(HaveOccurred())
-		Expect(set).To(Equal(int64(3)))
-
-		getall, err := leader.HGetAll(ctx, testKey).Result()
-		Expect(err).NotTo(HaveOccurred())
-		Expect(getall).To(Equal(map[string]string{
-			"fa": "va",
-			"fb": "vb",
-			"fc": "vc",
-		}))
-		time.Sleep(10000 * time.Millisecond)
-		for _, f := range followers {
-			getall, err := f.HGetAll(ctx, testKey).Result()
+		}
+		{
+			// hset write on leader
+			set, err := leader.HSet(ctx, testKey, testValue).Result()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(getall).To(Equal(map[string]string{
-				"fa": "va",
-				"fb": "vb",
-				"fc": "vc",
-			}))
+			Expect(set).To(Equal(int64(3)))
+
+			// read check
+			readChecker(func(*redis.Client) {
+				getall, err := leader.HGetAll(ctx, testKey).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(getall).To(Equal(testValue))
+			})
 		}
 
-		del, err := leader.HDel(ctx, testKey, "fb").Result()
-		Expect(err).NotTo(HaveOccurred())
-		Expect(del).To(Equal(int64(1)))
-
-		getall, err = leader.HGetAll(ctx, testKey).Result()
-		Expect(err).NotTo(HaveOccurred())
-		Expect(getall).To(Equal(map[string]string{
-			"fa": "va",
-			"fc": "vc",
-		}))
-		time.Sleep(10000 * time.Millisecond)
-		for _, f := range followers {
-			getall, err := f.HGetAll(ctx, testKey).Result()
+		{
+			// hdel write on leader
+			del, err := leader.HDel(ctx, testKey, "fb").Result()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(getall).To(Equal(map[string]string{
-				"fa": "va",
-				"fc": "vc",
-			}))
+			Expect(del).To(Equal(int64(1)))
+
+			// read check
+			readChecker(func(*redis.Client) {
+				getall, err := leader.HGetAll(ctx, testKey).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(getall).To(Equal(map[string]string{
+					"fa": "va",
+					"fc": "vc",
+				}))
+			})
+		}
+	})
+
+	It("SAdd & SRem Consistency Test", func() {
+		const testKey = "SetsConsistencyTestKey"
+		testValues := []string{"sa", "sb", "sc", "sd"}
+
+		{
+			// sadd write on leader
+			sadd, err := leader.SAdd(ctx, testKey, testValues).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sadd).To(Equal(int64(len(testValues))))
+
+			// read check
+			readChecker(func(*redis.Client) {
+				smembers, err := leader.SMembers(ctx, testKey).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(smembers).To(Equal(testValues))
+			})
+		}
+
+		{
+			// srem write on leader
+			srem, err := leader.SRem(ctx, testKey, []string{"sb", "sd"}).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(srem).To(Equal(int64(2)))
+
+			// read check
+			readChecker(func(*redis.Client) {
+				smembers, err := leader.SMembers(ctx, testKey).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(smembers).To(Equal([]string{"sa", "sc"}))
+			})
+		}
+	})
+
+	It("LPush & LPop Consistency Test", func() {
+		const testKey = "ListsConsistencyTestKey"
+		testValues := []string{"la", "lb", "lc", "ld"}
+
+		{
+			// lpush write on leader
+			lpush, err := leader.LPush(ctx, testKey, testValues).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lpush).To(Equal(int64(len(testValues))))
+
+			// read check
+			readChecker(func(*redis.Client) {
+				lrange, err := leader.LRange(ctx, testKey, 0, 10).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(lrange).To(Equal(reverse(testValues)))
+			})
+		}
+
+		{
+			// lpop write on leader
+			lpop, err := leader.LPop(ctx, testKey).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lpop).To(Equal("ld"))
+			lpop, err = leader.LPop(ctx, testKey).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lpop).To(Equal("lc"))
+
+			// read check
+			readChecker(func(*redis.Client) {
+				lrange, err := leader.LRange(ctx, testKey, 0, 10).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(lrange).To(Equal([]string{"lb", "la"}))
+			})
+		}
+	})
+
+	It("ZAdd Consistency Test", func() {
+		const testKey = "ZSetsConsistencyTestKey"
+		testData := []redis.Z{
+			{Score: 4, Member: "z4"},
+			{Score: 8, Member: "z8"},
+			{Score: 5, Member: "z5"},
+		}
+		expectData := []redis.Z{
+			{Score: 8, Member: "z8"},
+			{Score: 5, Member: "z5"},
+			{Score: 4, Member: "z4"},
+		}
+		{
+			// zadd write on leader
+			zadd, err := leader.ZAdd(ctx, testKey, testData...).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(zadd).To(Equal(int64(len(testData))))
+
+			// read check
+			readChecker(func(*redis.Client) {
+				zrange, err := leader.ZRevRangeWithScores(ctx, testKey, 0, -1).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(zrange).To(Equal(expectData))
+			})
+		}
+	})
+
+	It("Set Consistency Test", func() {
+		const testKey = "StringsConsistencyTestKey"
+		const testValue = "StringsConsistencyTestKey"
+		{
+			// set write on leader
+			set, err := leader.Set(ctx, testKey, testValue, 0).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(set).To(Equal("OK"))
+
+			// read check
+			readChecker(func(*redis.Client) {
+				get, err := leader.Get(ctx, testKey).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(get).To(Equal(testValue))
+			})
 		}
 	})
 
@@ -179,4 +283,32 @@ var _ = Describe("Consistency", Ordered, func() {
 			}
 		}
 	})
+
 })
+
+func readChecker(check func(*redis.Client)) {
+	// read on leader
+	check(leader)
+	time.Sleep(10000 * time.Millisecond)
+
+	// read on followers
+	followerChecker(followers, check)
+}
+
+func followerChecker(fs []*redis.Client, check func(*redis.Client)) {
+	for _, f := range fs {
+		check(f)
+	}
+}
+
+func reverse(src []string) []string {
+	a := make([]string, len(src))
+	copy(a, src)
+
+	for i := len(a)/2 - 1; i >= 0; i-- {
+		opp := len(a) - 1 - i
+		a[i], a[opp] = a[opp], a[i]
+	}
+
+	return a
+}

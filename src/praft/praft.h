@@ -14,6 +14,7 @@
 #include <tuple>
 #include <vector>
 
+#include "braft/file_system_adaptor.h"
 #include "braft/raft.h"
 #include "brpc/server.h"
 #include "rocksdb/status.h"
@@ -103,8 +104,7 @@ class PRaft : public braft::StateMachine {
   butil::Status Init(std::string& group_id, bool initial_conf_is_null);
   butil::Status AddPeer(const std::string& peer);
   butil::Status RemovePeer(const std::string& peer);
-  butil::Status RaftRecvEntry();
-  butil::Status DoSnapshot();
+  butil::Status DoSnapshot(int64_t self_snapshot_index = 0, bool is_sync = true);
 
   void ShutDown();
   void Join();
@@ -155,14 +155,12 @@ class PRaft : public braft::StateMachine {
   void on_start_following(const ::braft::LeaderChangeContext& ctx) override;
 
  private:
-  static int AddAllFiles(const std::filesystem::path& dir, braft::SnapshotWriter* writer, const std::string& path);
-
- private:
   std::unique_ptr<brpc::Server> server_{nullptr};  // brpc
   std::unique_ptr<braft::Node> node_{nullptr};
   braft::NodeOptions node_options_;  // options for raft node
   std::string raw_addr_;             // ip:port of this node
 
+  scoped_refptr<braft::FileSystemAdaptor> snapshot_adaptor_ = nullptr;
   ClusterCmdContext cluster_cmd_ctx_;  // context for cluster join/remove command
   std::string group_id_;               // group id
   int db_id_ = 0;                      // db_id

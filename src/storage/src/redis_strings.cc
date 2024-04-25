@@ -3,17 +3,18 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 
-#include <iostream>
 #include <memory>
 
 #include <fmt/core.h>
 
 #include "pstd/log.h"
 #include "src/base_key_format.h"
+#include "src/batch.h"
 #include "src/redis.h"
 #include "src/scope_record_lock.h"
 #include "src/scope_snapshot.h"
 #include "src/strings_filter.h"
+#include "storage/storage_define.h"
 #include "storage/util.h"
 
 namespace storage {
@@ -630,10 +631,12 @@ Status Redis::MSetnx(const std::vector<KeyValue>& kvs, int32_t* ret) {
 
 Status Redis::Set(const Slice& key, const Slice& value) {
   StringsValue strings_value(value);
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
 
   BaseKey base_key(key);
-  return db_->Put(default_write_options_, base_key.Encode(), strings_value.Encode());
+  batch->Put(kStringsCF, base_key.Encode(), strings_value.Encode());
+  return batch->Commit();
 }
 
 Status Redis::Setxx(const Slice& key, const Slice& value, int32_t* ret, const uint64_t ttl) {

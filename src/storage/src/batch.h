@@ -27,9 +27,13 @@ class Batch {
 
   virtual void Put(ColumnFamilyIndex cf_idx, const Slice& key, const Slice& val) = 0;
   virtual void Delete(ColumnFamilyIndex cf_idx, const Slice& key) = 0;
-  virtual auto Commit() -> Status = 0;
+  virtual Status Commit() = 0;
+  int32_t Count() const { return cnt_; }
 
   static auto CreateBatch(Redis* redis) -> std::unique_ptr<Batch>;
+
+ protected:
+  uint32_t cnt_ = 0;
 };
 
 class RocksBatch : public Batch {
@@ -40,9 +44,13 @@ class RocksBatch : public Batch {
 
   void Put(ColumnFamilyIndex cf_idx, const Slice& key, const Slice& val) override {
     batch_.Put(handles_[cf_idx], key, val);
+    cnt_++;
   }
-  void Delete(ColumnFamilyIndex cf_idx, const Slice& key) override { batch_.Delete(handles_[cf_idx], key); }
-  auto Commit() -> Status override { return db_->Write(options_, &batch_); }
+  void Delete(ColumnFamilyIndex cf_idx, const Slice& key) override {
+    batch_.Delete(handles_[cf_idx], key);
+    cnt_++;
+  }
+  Status Commit() override { return db_->Write(options_, &batch_); }
 
  private:
   rocksdb::WriteBatch batch_;
@@ -65,6 +73,7 @@ class BinlogBatch : public Batch {
     entry->set_op_type(pikiwidb::OperateType::kPut);
     entry->set_key(key.ToString());
     entry->set_value(value.ToString());
+    cnt_++;
   }
 
   void Delete(ColumnFamilyIndex cf_idx, const Slice& key) override {
@@ -72,6 +81,7 @@ class BinlogBatch : public Batch {
     entry->set_cf_idx(cf_idx);
     entry->set_op_type(pikiwidb::OperateType::kDelete);
     entry->set_key(key.ToString());
+    cnt_++;
   }
 
   Status Commit() override {

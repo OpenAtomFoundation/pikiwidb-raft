@@ -1,7 +1,8 @@
-# Copyright (c) 2023-present, Qihoo, Inc.  All rights reserved.
+# Copyright (c) 2024-present, Qihoo, Inc.  All rights reserved.
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree. An additional grant
 # of patent rights can be found in the PATENTS file in the same directory.
+
 ADD_CUSTOM_COMMAND(
   OUTPUT "${PROTO_OUTPUT_DIR}/binlog.pb.cc"
   DEPENDS extern_protobuf

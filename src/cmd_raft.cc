@@ -44,8 +44,10 @@ void RaftNodeCmd::DoCmd(PClient* client) {
     DoCmdAdd(client);
   } else if (cmd == kRemoveCmd) {
     DoCmdRemove(client);
-  } else {
+  } else if (cmd == kDoSnapshot) {
     DoCmdSnapshot(client);
+  } else {
+    client->SetRes(CmdRes::kErrOther, "RAFT.NODE supports ADD / REMOVE / DOSNAPSHOT only");
   }
 }
 
@@ -230,4 +232,5 @@ void RaftClusterCmd::DoCmdJoin(PClient* client) {
   // Not reply any message here, we will reply after the connection is established.
   client->Clear();
 }
+
 }  // namespace pikiwidb
