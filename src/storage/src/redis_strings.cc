@@ -595,13 +595,13 @@ Status Redis::MSet(const std::vector<KeyValue>& kvs) {
   }
 
   MultiScopeRecordLock ml(lock_mgr_, keys);
-  rocksdb::WriteBatch batch;
+  auto batch = Batch::CreateBatch(this);
   for (const auto& kv : kvs) {
     BaseKey base_key(kv.key);
     StringsValue strings_value(kv.value);
-    batch.Put(base_key.Encode(), strings_value.Encode());
+    batch->Put(kStringsCF, base_key.Encode(), strings_value.Encode());
   }
-  return db_->Write(default_write_options_, &batch);
+  return batch->Commit();
 }
 
 Status Redis::MSetnx(const std::vector<KeyValue>& kvs, int32_t* ret) {
@@ -712,7 +712,9 @@ Status Redis::SetBit(const Slice& key, int64_t offset, int32_t on, int32_t* ret)
     }
     StringsValue strings_value(data_value);
     strings_value.SetEtime(timestamp);
-    return db_->Put(rocksdb::WriteOptions(), base_key.Encode(), strings_value.Encode());
+    auto batch = Batch::CreateBatch(this);
+    batch->Put(kStringsCF, base_key.Encode(), strings_value.Encode());
+    return batch->Commit();
   } else {
     return s;
   }
@@ -730,7 +732,9 @@ Status Redis::Setex(const Slice& key, const Slice& value, uint64_t ttl) {
 
   BaseKey base_key(key);
   ScopeRecordLock l(lock_mgr_, key);
-  return db_->Put(default_write_options_, base_key.Encode(), strings_value.Encode());
+  auto batch = Batch::CreateBatch(this);
+  batch->Put(kStringsCF, base_key.Encode(), strings_value.Encode());
+  return batch->Commit();
 }
 
 Status Redis::Setnx(const Slice& key, const Slice& value, int32_t* ret, const uint64_t ttl) {

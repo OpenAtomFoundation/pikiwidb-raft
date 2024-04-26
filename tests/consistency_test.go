@@ -186,6 +186,153 @@ var _ = Describe("Consistency", Ordered, func() {
 		}
 	})
 
+	It("SDiffstore & SInterstore & SMove & SPop & SUnionstore Consistency Test", func() {
+		const testKey1 = "SetsConsistencyTestKey1"
+		const testKey2 = "SetsConsistencyTestKey2"
+		testValues1 := []string{"sa", "sb", "sc", "sd"}
+		testValues1Less := []string{"sa", "sb", "sc"}
+		testValues2 := []string{"sa", "sb", "sc2", "sd2"}
+		testValues2More := []string{"sa", "sb", "sc2", "sd", "sd2"}
+
+		{
+			sadd, err := leader.SAdd(ctx, testKey1, testValues1).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sadd).To(Equal(int64(len(testValues1))))
+
+			sadd, err = leader.SAdd(ctx, testKey2, testValues2).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sadd).To(Equal(int64(len(testValues2))))
+
+			flag, err := leader.SMove(ctx, testKey1, testKey2, "sd").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(flag).To(Equal(true))
+
+			readChecker(func(c *redis.Client) {
+				smembers, err := c.SMembers(ctx, testKey1).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(smembers).To(Equal(testValues1Less))
+
+				smembers, err = c.SMembers(ctx, testKey2).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(smembers).To(Equal(testValues2More))
+			})
+		}
+
+		const testKey3 = "SetsConsistencyTestKey3"
+		testValues3 := []string{"sa", "sb", "sc", "sd"}
+		{
+			sadd, err := leader.SAdd(ctx, testKey3, testValues3).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sadd).To(Equal(int64(len(testValues3))))
+
+			spop, err := leader.SPop(ctx, testKey3).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(spop).To(BeElementOf(testValues3))
+
+			spops, err := leader.SPopN(ctx, testKey3, 2).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(spops[0]).To(BeElementOf(testValues3))
+			Expect(spops[1]).To(BeElementOf(testValues3))
+
+			readChecker(func(c *redis.Client) {
+				smembers, err := c.SMembers(ctx, testKey3).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(len(smembers)).To(Equal(int(1)))
+			})
+		}
+
+		const testKey4 = "SetsConsistencyTestKey4"
+		diff := []string{"sc", "sd"}
+		{
+			_, err := leader.Del(ctx, testKey1).Result()
+			Expect(err).NotTo(HaveOccurred())
+
+			sadd, err := leader.SAdd(ctx, testKey1, testValues1).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sadd).To(Equal(int64(len(testValues1))))
+
+			_, err = leader.Del(ctx, testKey2).Result()
+			Expect(err).NotTo(HaveOccurred())
+
+			sadd, err = leader.SAdd(ctx, testKey2, testValues2).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sadd).To(Equal(int64(len(testValues2))))
+
+			_, err = leader.Del(ctx, testKey4).Result()
+			Expect(err).NotTo(HaveOccurred())
+
+			sdiff, err := leader.SDiffStore(ctx, testKey4, testKey1, testKey2).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sdiff).To(Equal(int64(len(diff))))
+
+			readChecker(func(c *redis.Client) {
+				smembers, err := c.SMembers(ctx, testKey4).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(smembers).To(Equal(diff))
+			})
+		}
+
+		inter := []string{"sa", "sb"}
+		{
+			_, err := leader.Del(ctx, testKey1).Result()
+			Expect(err).NotTo(HaveOccurred())
+
+			sadd, err := leader.SAdd(ctx, testKey1, testValues1).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sadd).To(Equal(int64(len(testValues1))))
+
+			_, err = leader.Del(ctx, testKey2).Result()
+			Expect(err).NotTo(HaveOccurred())
+
+			sadd, err = leader.SAdd(ctx, testKey2, testValues2).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sadd).To(Equal(int64(len(testValues2))))
+
+			_, err = leader.Del(ctx, testKey4).Result()
+			Expect(err).NotTo(HaveOccurred())
+
+			sinter, err := leader.SInterStore(ctx, testKey4, testKey1, testKey2).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sinter).To(Equal(int64(len(inter))))
+
+			readChecker(func(c *redis.Client) {
+				smembers, err := c.SMembers(ctx, testKey4).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(smembers).To(Equal(inter))
+			})
+		}
+
+		union := []string{"sa", "sb", "sc", "sc2", "sd", "sd2"}
+		{
+			_, err := leader.Del(ctx, testKey1).Result()
+			Expect(err).NotTo(HaveOccurred())
+
+			sadd, err := leader.SAdd(ctx, testKey1, testValues1).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sadd).To(Equal(int64(len(testValues1))))
+
+			_, err = leader.Del(ctx, testKey2).Result()
+			Expect(err).NotTo(HaveOccurred())
+
+			sadd, err = leader.SAdd(ctx, testKey2, testValues2).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sadd).To(Equal(int64(len(testValues2))))
+
+			_, err = leader.Del(ctx, testKey4).Result()
+			Expect(err).NotTo(HaveOccurred())
+
+			sunion, err := leader.SUnionStore(ctx, testKey4, testKey1, testKey2).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sunion).To(Equal(int64(len(union))))
+
+			readChecker(func(c *redis.Client) {
+				smembers, err := c.SMembers(ctx, testKey4).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(smembers).To(Equal(union))
+			})
+		}
+	})
+
 	It("LPush & LPop Consistency Test", func() {
 		const testKey = "ListsConsistencyTestKey"
 		testValues := []string{"la", "lb", "lc", "ld"}
@@ -394,9 +541,32 @@ var _ = Describe("Consistency", Ordered, func() {
 		}
 	})
 
-	It("Set Consistency Test", func() {
+	It("SetBit Consistency Test", func() {
+		const testKey = "StringsConsistencyTestKey"
+		{
+			// set write on leader
+			set, err := leader.SetBit(ctx, testKey, 1, 1).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(set).To(Equal(int64(0)))
+
+			readChecker(func(c *redis.Client) {
+				get, err := c.GetBit(ctx, testKey, 0).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(get).To(Equal(int64(0)))
+
+				get, err = c.GetBit(ctx, testKey, 1).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(get).To(Equal(int64(1)))
+			})
+		}
+	})
+
+	It("Set & SetEx & MSet & MSetNX Consistency Test", func() {
 		const testKey = "StringsConsistencyTestKey"
 		const testValue = "StringsConsistencyTestKey"
+		const testValueNew = "StringsConsistencyTestKey-new"
+		const testKey2 = "StringsConsistencyTestKey2"
+		const testValue2 = "StringsConsistencyTestKey2"
 		{
 			// set write on leader
 			set, err := leader.Set(ctx, testKey, testValue, 0).Result()
@@ -408,6 +578,59 @@ var _ = Describe("Consistency", Ordered, func() {
 				get, err := c.Get(ctx, testKey).Result()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(get).To(Equal(testValue))
+			})
+		}
+		{
+			// set write on leader
+			set, err := leader.MSet(ctx, testKey, testValue, testKey2, testValue2).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(set).To(Equal("OK"))
+
+			// read check
+			readChecker(func(c *redis.Client) {
+				get, err := c.Get(ctx, testKey).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(get).To(Equal(testValue))
+
+				get, err = c.Get(ctx, testKey2).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(get).To(Equal(testValue2))
+			})
+		}
+		{
+			mSetNX, err := leader.MSetNX(ctx, testKey, testValueNew, testKey2, testValue2).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mSetNX).To(Equal(false))
+
+			del, err := leader.Del(ctx, testKey, testKey2).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(del).To(Equal(int64(2)))
+
+			mSetNX, err = leader.MSetNX(ctx, testKey, testValueNew, testKey2, testValue2).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mSetNX).To(Equal(true))
+
+			readChecker(func(c *redis.Client) {
+				get, err := c.Get(ctx, testKey).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(get).To(Equal(testValueNew))
+
+				get, err = c.Get(ctx, testKey2).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(get).To(Equal(testValue2))
+			})
+		}
+		{
+			// set write on leader
+			set, err := leader.SetEx(ctx, testKey, testValue, 3).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(set).To(Equal("OK"))
+
+			// read check
+			time.Sleep(10 * time.Second)
+			readChecker(func(c *redis.Client) {
+				_, err := c.Get(ctx, testKey).Result()
+				Expect(err).To(Equal(redis.Nil))
 			})
 		}
 	})
