@@ -15,8 +15,6 @@
 
 namespace storage {
 
-static constexpr int64_t kGapMax = 1000;
-
 rocksdb::Status storage::LogIndexOfColumnFamilies::Init(Redis *db) {
   for (int i = 0; i < cf_.size(); i++) {
     rocksdb::TablePropertiesCollection collection;
@@ -35,10 +33,10 @@ rocksdb::Status storage::LogIndexOfColumnFamilies::Init(Redis *db) {
   return Status::OK();
 }
 
-LogIndexOfColumnFamilies::SmallestIndexRes LogIndexOfColumnFamilies::GetSmallestLogIndex() const {
+LogIndexOfColumnFamilies::SmallestIndexRes LogIndexOfColumnFamilies::GetSmallestLogIndex(int flush_cf) const {
   SmallestIndexRes res;
   for (int i = 0; i < cf_.size(); i++) {
-    if (cf_[i].flushed_index <= last_flush_index_ && cf_[i].flushed_index == cf_[i].applied_index) {
+    if (i != flush_cf && cf_[i].flushed_index >= cf_[i].applied_index) {
       continue;
     }
     auto applied_log_index = cf_[i].applied_index.GetLogIndex();
@@ -57,7 +55,7 @@ LogIndexOfColumnFamilies::SmallestIndexRes LogIndexOfColumnFamilies::GetSmallest
   return res;
 }
 
-bool LogIndexOfColumnFamilies::IsPendingFlush() const {
+size_t LogIndexOfColumnFamilies::GetPendingFlushGap() const {
   std::set<int> s;
   for (int i = 0; i < kColumnFamilyNum; i++) {
     s.insert(cf_[i].applied_index.GetLogIndex());
@@ -69,8 +67,10 @@ bool LogIndexOfColumnFamilies::IsPendingFlush() const {
   }
   auto iter_first = s.begin();
   auto iter_last = s.end();
-  return *std::prev(iter_last) - *iter_first >= kGapMax;
+  return *std::prev(iter_last) - *iter_first;
 };
+
+std::atomic_int64_t LogIndexAndSequenceCollector::max_gap_ = 1000;
 
 std::optional<LogIndexAndSequencePair> storage::LogIndexTablePropertiesCollector::ReadStatsFromTableProps(
     const std::shared_ptr<const rocksdb::TableProperties> &table_props) {

@@ -75,6 +75,8 @@ struct StorageOptions {
   int db_id = 0;
   AppendLogFunction append_log_function = nullptr;
   uint32_t raft_timeout_s = std::numeric_limits<uint32_t>::max();
+  int64_t max_gap = 1000;
+  uint64_t mem_manager_size = 100000000;
   Status ResetOptions(const OptionType& option_type, const std::unordered_map<std::string, std::string>& options_map);
 };
 

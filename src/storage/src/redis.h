@@ -344,6 +344,10 @@ class Redis {
     return nullptr;
   }
 
+  LogIndexOfColumnFamilies& GetLogIndexOfColumnFamilies() { return log_index_of_all_cfs_; }
+
+  LogIndexAndSequenceCollector& GetCollector() { return log_index_collector_; }
+
  private:
   int32_t index_ = 0;
   Storage* const storage_;

@@ -7,8 +7,8 @@ INCLUDE(ExternalProject)
 
 SET(ZLIB_SOURCES_DIR ${THIRD_PARTY_PATH}/zlib)
 SET(ZLIB_INSTALL_DIR ${THIRD_PARTY_PATH}/install/zlib)
-SET(ZLIB_ROOT ${ZLIB_INSTALL_DIR} CACHE FILEPATH "zlib root directory." FORCE)
-SET(ZLIB_INCLUDE_DIR "${ZLIB_INSTALL_DIR}/include" CACHE PATH "zlib include directory." FORCE)
+# SET(ZLIB_ROOT ${ZLIB_INSTALL_DIR} CACHE FILEPATH "zlib root directory." FORCE)
+# SET(ZLIB_INCLUDE_DIR "${ZLIB_INSTALL_DIR}/include" CACHE PATH "zlib include directory." FORCE)
 
 ExternalProject_Add(
         extern_zlib

@@ -11,6 +11,7 @@
 #include <atomic>
 #include <deque>
 #include <functional>
+#include <future>
 #include <optional>
 #include <shared_mutex>
 #include <string_view>
@@ -62,6 +63,10 @@ struct LogIndexSeqnoPair {
   bool operator==(const LogIndexSeqnoPair &other) const { return seqno.load() == other.seqno.load(); }
 
   bool operator<=(const LogIndexSeqnoPair &other) const { return seqno.load() <= other.seqno.load(); }
+
+  bool operator>=(const LogIndexSeqnoPair &other) const { return seqno.load() >= other.seqno.load(); }
+
+  bool operator<(const LogIndexSeqnoPair &other) const { return seqno.load() < other.seqno.load(); }
 };
 
 class LogIndexOfColumnFamilies {
@@ -83,10 +88,10 @@ class LogIndexOfColumnFamilies {
   // Read the largest log index of each column family from all sst files
   rocksdb::Status Init(Redis *db);
 
-  SmallestIndexRes GetSmallestLogIndex() const;
+  SmallestIndexRes GetSmallestLogIndex(int flush_cf) const;
 
   void SetFlushedLogIndex(size_t cf_id, LogIndex log_index, SequenceNumber seqno) {
-    cf_[cf_id].applied_index.log_index.store(std::max(cf_[cf_id].applied_index.log_index.load(), log_index));
+    cf_[cf_id].flushed_index.log_index.store(std::max(cf_[cf_id].flushed_index.log_index.load(), log_index));
     cf_[cf_id].flushed_index.seqno.store(std::max(cf_[cf_id].flushed_index.seqno.load(), seqno));
   }
 
@@ -117,11 +122,18 @@ class LogIndexOfColumnFamilies {
   }
   bool IsPendingFlush() const;
 
+  size_t GetPendingFlushGap() const;
+
   void SetLastFlushIndex(LogIndex flushed_logindex, SequenceNumber flushed_seqno) {
     auto lastest_flush_log_index = std::max(last_flush_index_.GetLogIndex(), flushed_logindex);
     auto lastest_flush_sequence_number = std::max(last_flush_index_.GetSequenceNumber(), flushed_seqno);
     last_flush_index_.SetLogIndexSeqnoPair(lastest_flush_log_index, lastest_flush_sequence_number);
   }
+
+  // for gtest
+  LogIndexSeqnoPair &GetLastFlushIndex() { return last_flush_index_; }
+
+  LogIndexPair &GetCFStatus(size_t cf) { return cf_[cf]; }
 
  private:
   std::array<LogIndexPair, kColumnFamilyNum> cf_;
@@ -140,6 +152,23 @@ class LogIndexAndSequenceCollector {
 
   // purge out dated log index after memtable flushed.
   void Purge(LogIndex smallest_applied_log_index);
+
+  // Is manual flushing required?
+  bool IsFlushPending() const { return GetSize() >= max_gap_; }
+
+  // for gtest
+  uint64_t GetSize() const {
+    std::shared_lock<std::shared_mutex> share_lock;
+    return list_.size();
+  }
+
+  std::deque<LogIndexAndSequencePair> &GetList() {
+    std::shared_lock<std::shared_mutex> share_lock;
+    return list_;
+  }
+
+ public:
+  static std::atomic_int64_t max_gap_;
 
  private:
   uint64_t step_length_mask_ = 0;
@@ -214,34 +243,44 @@ class LogIndexAndSequenceCollectorPurger : public rocksdb::EventListener {
                             flush_job_info.largest_seqno);
 
     auto [smallest_applied_log_index_cf, smallest_applied_log_index, smallest_flushed_log_index_cf,
-          smallest_flushed_log_index, smallest_flushed_seqno] = cf_->GetSmallestLogIndex();
+          smallest_flushed_log_index, smallest_flushed_seqno] = cf_->GetSmallestLogIndex(flush_job_info.cf_id);
+    collector_->Purge(smallest_applied_log_index);
 
-    cf_->SetFlushedLogIndexGlobal(smallest_flushed_log_index, smallest_flushed_seqno);
+    if (smallest_flushed_log_index_cf != -1) {
+      cf_->SetFlushedLogIndexGlobal(smallest_flushed_log_index, smallest_flushed_seqno);
+    }
     auto count = count_.fetch_add(1);
 
     if (count % 10 == 0) {
       // TODO(dingxiaoshuai) 主动触发 snapshot 截断日志
     }
+    if (flush_job_info.cf_id == manul_flushing_cf_.load()) {
+      manul_flushing_cf_.store(-1);
+    }
 
-    auto is_flushing = manul_flushing_.load();
-    if (is_flushing || count % kColumnFamilyNum != 0 || !cf_->IsPendingFlush()) {
+    auto flushing_cf = manul_flushing_cf_.load();
+    if (flushing_cf != -1 || !collector_->IsFlushPending()) {
       return;
     }
-    if (!manul_flushing_.compare_exchange_strong(is_flushing, true)) {
+
+    assert(flushing_cf == -1);
+
+    if (!manul_flushing_cf_.compare_exchange_strong(flushing_cf, smallest_flushed_log_index_cf)) {
       return;
     }
-    // default: wait = true, allow_write_stall = false.
+
+    assert(manul_flushing_cf_.load() == smallest_flushed_log_index_cf);
     rocksdb::FlushOptions flush_option;
+    flush_option.wait = false;
     db->Flush(flush_option, column_families_->at(smallest_flushed_log_index_cf));
-    manul_flushing_.store(false);
   }
 
  private:
   std::vector<rocksdb::ColumnFamilyHandle *> *column_families_;
   LogIndexAndSequenceCollector *collector_ = nullptr;
   LogIndexOfColumnFamilies *cf_ = nullptr;
-  std::atomic<uint64_t> count_ = 0;
-  std::atomic<bool> manul_flushing_ = false;
+  std::atomic_uint64_t count_ = 0;
+  std::atomic<size_t> manul_flushing_cf_ = -1;
 };
 
 }  // namespace storage
