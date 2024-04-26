@@ -117,8 +117,8 @@ var _ = Describe("Consistency", Ordered, func() {
 			Expect(set).To(Equal(int64(3)))
 
 			// read check
-			readChecker(func(*redis.Client) {
-				getall, err := leader.HGetAll(ctx, testKey).Result()
+			readChecker(func(c *redis.Client) {
+				getall, err := c.HGetAll(ctx, testKey).Result()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(getall).To(Equal(testValue))
 			})
@@ -131,8 +131,8 @@ var _ = Describe("Consistency", Ordered, func() {
 			Expect(del).To(Equal(int64(1)))
 
 			// read check
-			readChecker(func(*redis.Client) {
-				getall, err := leader.HGetAll(ctx, testKey).Result()
+			readChecker(func(c *redis.Client) {
+				getall, err := c.HGetAll(ctx, testKey).Result()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(getall).To(Equal(map[string]string{
 					"fa": "va",
@@ -153,8 +153,8 @@ var _ = Describe("Consistency", Ordered, func() {
 			Expect(sadd).To(Equal(int64(len(testValues))))
 
 			// read check
-			readChecker(func(*redis.Client) {
-				smembers, err := leader.SMembers(ctx, testKey).Result()
+			readChecker(func(c *redis.Client) {
+				smembers, err := c.SMembers(ctx, testKey).Result()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(smembers).To(Equal(testValues))
 			})
@@ -167,8 +167,8 @@ var _ = Describe("Consistency", Ordered, func() {
 			Expect(srem).To(Equal(int64(2)))
 
 			// read check
-			readChecker(func(*redis.Client) {
-				smembers, err := leader.SMembers(ctx, testKey).Result()
+			readChecker(func(c *redis.Client) {
+				smembers, err := c.SMembers(ctx, testKey).Result()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(smembers).To(Equal([]string{"sa", "sc"}))
 			})
@@ -186,8 +186,8 @@ var _ = Describe("Consistency", Ordered, func() {
 			Expect(lpush).To(Equal(int64(len(testValues))))
 
 			// read check
-			readChecker(func(*redis.Client) {
-				lrange, err := leader.LRange(ctx, testKey, 0, 10).Result()
+			readChecker(func(c *redis.Client) {
+				lrange, err := c.LRange(ctx, testKey, 0, 10).Result()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(lrange).To(Equal(reverse(testValues)))
 			})
@@ -203,8 +203,8 @@ var _ = Describe("Consistency", Ordered, func() {
 			Expect(lpop).To(Equal("lc"))
 
 			// read check
-			readChecker(func(*redis.Client) {
-				lrange, err := leader.LRange(ctx, testKey, 0, 10).Result()
+			readChecker(func(c *redis.Client) {
+				lrange, err := c.LRange(ctx, testKey, 0, 10).Result()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(lrange).To(Equal([]string{"lb", "la"}))
 			})
@@ -230,8 +230,8 @@ var _ = Describe("Consistency", Ordered, func() {
 			Expect(zadd).To(Equal(int64(len(testData))))
 
 			// read check
-			readChecker(func(*redis.Client) {
-				zrange, err := leader.ZRevRangeWithScores(ctx, testKey, 0, -1).Result()
+			readChecker(func(c *redis.Client) {
+				zrange, err := c.ZRevRangeWithScores(ctx, testKey, 0, -1).Result()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(zrange).To(Equal(expectData))
 			})
@@ -248,8 +248,8 @@ var _ = Describe("Consistency", Ordered, func() {
 			Expect(set).To(Equal("OK"))
 
 			// read check
-			readChecker(func(*redis.Client) {
-				get, err := leader.Get(ctx, testKey).Result()
+			readChecker(func(c *redis.Client) {
+				get, err := c.Get(ctx, testKey).Result()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(get).To(Equal(testValue))
 			})
