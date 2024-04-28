@@ -29,27 +29,32 @@ ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     ENDIF ()
 ENDIF ()
 
-# get current date and time
-EXECUTE_PROCESS(COMMAND date "+%Y-%m-%d_%H:%M:%S" OUTPUT_VARIABLE BUILD_TIMESTAMP OUTPUT_STRIP_TRAILING_WHITESPACE)
-ADD_DEFINITIONS(-DKPIKIWIDB_BUILD_DATE="${BUILD_TIMESTAMP}")
+IF(CMAKE_BUILD_TYPE STREQUAL "release")
+    MESSAGE("Building in Release mode")
+    # get current date and time
+    EXECUTE_PROCESS(COMMAND date "+%Y-%m-%d_%H:%M:%S" OUTPUT_VARIABLE BUILD_TIMESTAMP OUTPUT_STRIP_TRAILING_WHITESPACE)
+    ADD_DEFINITIONS(-DKPIKIWIDB_BUILD_DATE="${BUILD_TIMESTAMP}")
+    MESSAGE(STATUS "Build timestamp: ${BUILD_TIMESTAMP}")
 
-message(STATUS "Build timestamp: ${BUILD_TIMESTAMP}")
+    # get git commit id
+    EXECUTE_PROCESS(COMMAND git rev-parse HEAD OUTPUT_VARIABLE GIT_COMMIT_ID OUTPUT_STRIP_TRAILING_WHITESPACE)
+    ADD_DEFINITIONS(-DKPIKIWIDB_GIT_COMMIT_ID="${GIT_COMMIT_ID}")
+    MESSAGE(STATUS "Git commit id: ${GIT_COMMIT_ID}")
+ELSE()
+    MESSAGE("Building in Debug mode")
+    OPTION(ADDRESS_SANITIZER "Enable AddressSanitizer (default sanitizer)" ON)
+    OPTION(THREAD_SANITIZER "Enable ThreadSanitizer" OFF)
 
-# get git commit id
-EXECUTE_PROCESS(COMMAND git rev-parse HEAD OUTPUT_VARIABLE GIT_COMMIT_ID OUTPUT_STRIP_TRAILING_WHITESPACE)
-ADD_DEFINITIONS(-DKPIKIWIDB_GIT_COMMIT_ID="${GIT_COMMIT_ID}")
-MESSAGE(STATUS "Git commit id: ${GIT_COMMIT_ID}")
-
-############# You should enable sanitizer if you are developing pikiwidb #############
-# Uncomment the following two lines to enable AddressSanitizer to detect memory leaks and other memory-related bugs.
-# SET(CMAKE_BUILD_TYPE "Debug")
-# SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address  -O0 -fno-omit-frame-pointer -fno-optimize-sibling-calls")
-
-# [Notice] AddressSanitizer and ThreadSanitizer can not be enabled at the same time.
-
-# Uncomment the following two lines to enable ThreadSanitizer to detect data race and other thread-related issue.
-# SET(CMAKE_BUILD_TYPE "Debug")
-# SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=thread -O0 -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+    IF(THREAD_SANITIZER)
+        # enable ThreadSanitizer to detect data race and other thread-related issue.
+        SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=thread -O0 -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+        MESSAGE(STATUS "ThreadSanitizer is enabled.")
+    ELSEIF(ADDRESS_SANITIZER)
+        # enable AddressSanitizer to detect memory leaks and other memory-related bugs.
+        SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address  -O0 -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+        MESSAGE(STATUS "AddressSanitizer is enabled.")
+    ENDIF()
+ENDIF()
 
 EXECUTE_PROCESS(COMMAND uname -p OUTPUT_VARIABLE HOST_ARCH)
 STRING(TOLOWER ${HOST_ARCH} HOST_ARCH)

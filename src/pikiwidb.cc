@@ -66,8 +66,12 @@ bool PikiwiDB::ParseArgs(int ac, char* av[]) {
       std::cerr << "PikiwiDB Server version: " << KPIKIWIDB_VERSION << " bits=" << (sizeof(void*) == 8 ? 64 : 32)
                 << std::endl;
       std::cerr << "PikiwiDB Server Build Type: " << KPIKIWIDB_BUILD_TYPE << std::endl;
+#if defined(KPIKIWIDB_BUILD_DATE)
       std::cerr << "PikiwiDB Server Build Date: " << KPIKIWIDB_BUILD_DATE << std::endl;
+#endif
+#if defined(KPIKIWIDB_GIT_COMMIT_ID)
       std::cerr << "PikiwiDB Server Build GIT SHA: " << KPIKIWIDB_GIT_COMMIT_ID << std::endl;
+#endif
 
       exit(0);
     } else if (strncasecmp(av[i], "-h", 2) == 0 || strncasecmp(av[i], "--help", 6) == 0) {
