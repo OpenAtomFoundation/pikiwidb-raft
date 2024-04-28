@@ -26,6 +26,20 @@ namespace pikiwidb {
     cmds_->insert(std::make_pair(kCmdName##cmd, std::move(ptr)));                   \
   } while (0)
 
+#define ADD_COMMAND_GROUP(cmd, argc)                                                \
+  do {                                                                              \
+    std::unique_ptr<BaseCmd> ptr = std::make_unique<Cmd##cmd>(kCmdName##cmd, argc); \
+    cmds_->insert(std::make_pair(kCmdName##cmd, std::move(ptr)));                   \
+  } while (0)
+
+#define ADD_SUBCOMMAND(cmd, subcmd, argc)                                                                 \
+  do {                                                                                                    \
+    auto it##cmd = cmds_->find(kCmdName##cmd);                                                            \
+    auto ptr##cmd = std::unique_ptr<BaseCmdGroup>(static_cast<BaseCmdGroup*>(it##cmd->second.release())); \
+    ptr##cmd->AddSubCmd(std::make_unique<Cmd##cmd##subcmd>(kSubCmdName##cmd##subcmd, argc));              \
+    it##cmd->second = std::move(ptr##cmd);                                                                \
+  } while (0)
+
 CmdTableManager::CmdTableManager() {
   cmds_ = std::make_unique<CmdTable>();
   cmds_->reserve(300);
@@ -35,10 +49,9 @@ void CmdTableManager::InitCmdTable() {
   std::unique_lock wl(mutex_);
 
   // admin
-  auto configPtr = std::make_unique<CmdConfig>(kCmdNameConfig, -2);
-  configPtr->AddSubCmd(std::make_unique<CmdConfigGet>("get", -3));
-  configPtr->AddSubCmd(std::make_unique<CmdConfigSet>("set", -4));
-  cmds_->insert(std::make_pair(kCmdNameConfig, std::move(configPtr)));
+  ADD_COMMAND_GROUP(Config, -2);
+  ADD_SUBCOMMAND(Config, Get, -3);
+  ADD_SUBCOMMAND(Config, Set, -4);
   ADD_COMMAND(Ping, 0);
 
   // server
