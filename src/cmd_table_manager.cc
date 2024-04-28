@@ -53,6 +53,10 @@ void CmdTableManager::InitCmdTable() {
   ADD_SUBCOMMAND(Config, Get, -3);
   ADD_SUBCOMMAND(Config, Set, -4);
   ADD_COMMAND(Ping, 0);
+  ADD_COMMAND_GROUP(Debug, -2);
+  ADD_SUBCOMMAND(Debug, Help, 2);
+  ADD_SUBCOMMAND(Debug, OOM, 2);
+  ADD_SUBCOMMAND(Debug, Segfault, 2);
 
   // server
   ADD_COMMAND(Flushdb, 1);

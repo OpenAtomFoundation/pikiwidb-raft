@@ -10,6 +10,14 @@
 #include "base_cmd.h"
 #include "config.h"
 
+const std::vector<std::string> debugHelps = {"DEBUG <subcommand> [<arg> [value] [opt] ...]. Subcommands are:",
+                                             "HELP",
+                                             "    Print this help.",
+                                             "SEGFAULT",
+                                             "    Crash the server with sigsegv.",
+                                             "OOM",
+                                             "    Crash the server simulating an out-of-memory error."};
+
 namespace pikiwidb {
 
 class CmdConfig : public BaseCmdGroup {
@@ -116,6 +124,52 @@ class InfoCmd : public BaseCmd {
 
   void InfoRaft(PClient* client);
   void InfoData(PClient* client);
+};
+
+class CmdDebug : public BaseCmdGroup {
+ public:
+  CmdDebug(const std::string& name, int arity);
+
+  bool HasSubCommand() const override;
+
+ protected:
+  bool DoInitial(PClient* client) override { return true; };
+
+ private:
+  void DoCmd(PClient* client) override{};
+};
+
+class CmdDebugHelp : public BaseCmd {
+ public:
+  CmdDebugHelp(const std::string& name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient* client) override;
+
+ private:
+  void DoCmd(PClient* client) override;
+};
+
+class CmdDebugOOM : public BaseCmd {
+ public:
+  CmdDebugOOM(const std::string& name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient* client) override;
+
+ private:
+  void DoCmd(PClient* client) override;
+};
+
+class CmdDebugSegfault : public BaseCmd {
+ public:
+  CmdDebugSegfault(const std::string& name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient* client) override;
+
+ private:
+  void DoCmd(PClient* client) override;
 };
 
 }  // namespace pikiwidb

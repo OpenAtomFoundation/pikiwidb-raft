@@ -152,4 +152,11 @@ var _ = Describe("Admin", Ordered, func() {
 		ping := client.Ping(ctx)
 		Expect(ping.Err()).NotTo(HaveOccurred())
 	})
+
+	It("Cmd Debug", func() {
+		// TODO: enable test after implementing DebugObject
+		// res := client.DebugObject(ctx, "timeout")
+		// Expect(res.Err()).NotTo(HaveOccurred())
+		// Expect(res.Val()).To(Equal(map[string]string{"timeout": "0"}))
+	})
 })
