@@ -21,6 +21,7 @@
 #include "rocksdb/listener.h"
 #include "rocksdb/table_properties.h"
 #include "rocksdb/types.h"
+
 #include "storage/storage_define.h"
 
 namespace storage {
@@ -110,6 +111,7 @@ class LogIndexOfColumnFamilies {
   bool IsApplied(size_t cf_id, LogIndex cur_log_index) const {
     return cur_log_index < cf_[cf_id].applied_index.GetLogIndex();
   }
+
   void Update(size_t cf_id, LogIndex cur_log_index, SequenceNumber cur_seqno) {
     if (cf_[cf_id].flushed_index <= last_flush_index_ && cf_[cf_id].flushed_index == cf_[cf_id].applied_index) {
       auto flush_log_index = std::max(cf_[cf_id].flushed_index.GetLogIndex(), last_flush_index_.GetLogIndex());
@@ -120,6 +122,7 @@ class LogIndexOfColumnFamilies {
 
     cf_[cf_id].applied_index.SetLogIndexSeqnoPair(cur_log_index, cur_seqno);
   }
+
   bool IsPendingFlush() const;
 
   size_t GetPendingFlushGap() const;
@@ -235,45 +238,11 @@ class LogIndexTablePropertiesCollectorFactory : public rocksdb::TablePropertiesC
 class LogIndexAndSequenceCollectorPurger : public rocksdb::EventListener {
  public:
   explicit LogIndexAndSequenceCollectorPurger(std::vector<rocksdb::ColumnFamilyHandle *> *column_families,
-                                              LogIndexAndSequenceCollector *collector, LogIndexOfColumnFamilies *cf)
-      : column_families_(column_families), collector_(collector), cf_(cf) {}
+                                              LogIndexAndSequenceCollector *collector, LogIndexOfColumnFamilies *cf,
+                                              std::function<void(int64_t, bool)> callback)
+      : column_families_(column_families), collector_(collector), cf_(cf), callback_(callback) {}
 
-  void OnFlushCompleted(rocksdb::DB *db, const rocksdb::FlushJobInfo &flush_job_info) override {
-    cf_->SetFlushedLogIndex(flush_job_info.cf_id, collector_->FindAppliedLogIndex(flush_job_info.largest_seqno),
-                            flush_job_info.largest_seqno);
-
-    auto [smallest_applied_log_index_cf, smallest_applied_log_index, smallest_flushed_log_index_cf,
-          smallest_flushed_log_index, smallest_flushed_seqno] = cf_->GetSmallestLogIndex(flush_job_info.cf_id);
-    collector_->Purge(smallest_applied_log_index);
-
-    if (smallest_flushed_log_index_cf != -1) {
-      cf_->SetFlushedLogIndexGlobal(smallest_flushed_log_index, smallest_flushed_seqno);
-    }
-    auto count = count_.fetch_add(1);
-
-    if (count % 10 == 0) {
-      // TODO(dingxiaoshuai) 主动触发 snapshot 截断日志
-    }
-    if (flush_job_info.cf_id == manul_flushing_cf_.load()) {
-      manul_flushing_cf_.store(-1);
-    }
-
-    auto flushing_cf = manul_flushing_cf_.load();
-    if (flushing_cf != -1 || !collector_->IsFlushPending()) {
-      return;
-    }
-
-    assert(flushing_cf == -1);
-
-    if (!manul_flushing_cf_.compare_exchange_strong(flushing_cf, smallest_flushed_log_index_cf)) {
-      return;
-    }
-
-    assert(manul_flushing_cf_.load() == smallest_flushed_log_index_cf);
-    rocksdb::FlushOptions flush_option;
-    flush_option.wait = false;
-    db->Flush(flush_option, column_families_->at(smallest_flushed_log_index_cf));
-  }
+  void OnFlushCompleted(rocksdb::DB *db, const rocksdb::FlushJobInfo &flush_job_info) override;
 
  private:
   std::vector<rocksdb::ColumnFamilyHandle *> *column_families_;
@@ -281,6 +250,7 @@ class LogIndexAndSequenceCollectorPurger : public rocksdb::EventListener {
   LogIndexOfColumnFamilies *cf_ = nullptr;
   std::atomic_uint64_t count_ = 0;
   std::atomic<size_t> manul_flushing_cf_ = -1;
+  std::function<void(int64_t, bool)> callback_;
 };
 
 }  // namespace storage

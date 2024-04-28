@@ -72,6 +72,7 @@ class FlushOldestCFTest : public ::testing::Test {
     options_.append_log_function = [this](const pikiwidb::Binlog& log, std::promise<rocksdb::Status>&& promise) {
       log_queue_.AppendLog(log, std::move(promise));
     };
+    options_.do_snapshot_function = [](int64_t log_index, bool sync) {};
     options_.max_gap = 15;
     write_options_.disableWAL = true;
   }
@@ -130,8 +131,8 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
   };
 
   {
-    //  type    kv       kv            kv
-    // entry  [0:0] -> [1:1] -> ... [10:10]
+    //  type    kv            kv
+    // entry  [1:1] -> ... [10:10]
     //
     //  cf   flushed_log_index  flushed_sequence_number  applied_log_index  applied_sequence_number
     //  0           0                    0                        10                   10
@@ -247,6 +248,7 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
     sleep(5);  // sleep flush complete.
     // 1) 根据 cf 1 的 latest SequenceNumber = 49 查到对应的 log index 为 30. 设置 cf 1 的 flushed_log_index 和
     // flushed_sequence_number 为 30 49.
+    //
     //  type     kv            kv         hash        hash                 hash
     // entry   [1:1] -> ... [10:10]  -> [11:11]  -> [12:13]  -> ...  -> [30:49]
     //
@@ -259,10 +261,11 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
     // last_flush_index   log_index    sequencenumber
     //                       0               0
 
-    // 2) 查找到此时的 smallest_applied_log_index_cf = 0 smallest_applied_log_index = 10 smallest_flushed_log_index_cf =
-    // 0
+    // 2) 查找到此时的 smallest_applied_log_index_cf = 0 smallest_applied_log_index = 10
+    // smallest_flushed_log_index_cf = 0
     //               smallest_flushed_log_index = 0 smallest_flushed_seqno = 0
     // 根据 smallest_applied_log_index = 10 在队列长度 >= 2 的前提下, 持续删除 log_index < 10 的条目.
+    //
     //  type      kv         hash        hash                 hash
     // entry   [10:10]  -> [11:11]  -> [12:13]  -> ...  -> [30:49]
     //
@@ -277,6 +280,7 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
 
     // 3) 根据 smallest_flushed_log_index_cf =  0 smallest_flushed_log_index = 0 smallest_flushed_seqno = 0
     // 设置 last_flush_index 为 0, 0
+    //
     //  type      kv         hash        hash                 hash
     // entry   [10:10]  -> [11:11]  -> [12:13]  -> ...  -> [30:49]
     //
@@ -291,7 +295,9 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
 
     // 4) 检测到队列中 logindex 的最大差值超过阈值, 触发 smallest_flushed_log_index_cf flush . 该 case 中对应 cf 为 0.
     //  根据 cf 0 的 latest SequenceNumber = 10 查到对应的 log index 为 10. 设置 cf 0 的 flushed_log_index 和
-    //  flushed_sequence_number 为 10 10. type      kv         hash        hash                 hash
+    //  flushed_sequence_number 为 10 10.
+    //
+    //  type      kv         hash        hash                 hash
     // entry   [10:10]  -> [11:11]  -> [12:13]  -> ...  -> [30:49]
     //
     //  cf   flushed_log_index  flushed_sequence_number  applied_log_index  applied_sequence_number
@@ -303,10 +309,10 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
     // last_flush_index   log_index    sequencenumber
     //                       0              0
 
-    // 5) 查找到此时的 smallest_applied_log_index_cf = 0 smallest_applied_log_index = 10 smallest_flushed_log_index_cf =
-    // 2
-    //               smallest_flushed_log_index = 0 smallest_flushed_seqno = 0
+    // 5) 查找到此时的 smallest_applied_log_index_cf = 0 smallest_applied_log_index = 10
+    // smallest_flushed_log_index_cf = 2 smallest_flushed_log_index = 0 smallest_flushed_seqno = 0
     // 根据 smallest_applied_log_index = 10 在队列长度 >= 2 的前提下, 删除 log_index < 10 的条目, 不变.
+    //
     //  type      kv         hash        hash                 hash
     // entry   [10:10]  -> [11:11]  -> [12:13]  -> ...  -> [30:49]
     //
@@ -321,7 +327,9 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
 
     // 6) 检测到队列中 logindex 的最大差值超过阈值, 触发 smallest_flushed_log_index_cf flush . 该 case 中对应 cf 为 2.
     //  根据 cf 2 的 latest SequenceNumber = 50 查到对应的 log index 为 30. 设置 cf 2 的 flushed_log_index 和
-    //  flushed_sequence_number 为 30 50. type      kv         hash        hash                 hash
+    //  flushed_sequence_number 为 30 50.
+    //
+    //  type      kv         hash        hash                 hash
     // entry   [10:10]  -> [11:11]  -> [12:13]  -> ...  -> [30:49]
     //
     //  cf   flushed_log_index  flushed_sequence_number  applied_log_index  applied_sequence_number
@@ -333,10 +341,10 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
     // last_flush_index   log_index    sequencenumber
     //                       0              0
 
-    // 7) 查找到此时的 smallest_applied_log_index_cf = 2 smallest_applied_log_index = 30 smallest_flushed_log_index_cf =
-    // 2
-    //               smallest_flushed_log_index = 30 smallest_flushed_seqno = 50
+    // 7) 查找到此时的 smallest_applied_log_index_cf = 2 smallest_applied_log_index = 30
+    // smallest_flushed_log_index_cf = 2 smallest_flushed_log_index = 30 smallest_flushed_seqno = 50
     // 根据 smallest_applied_log_index = 30 在队列长度 >= 2 的前提下, 删除 log_index < 50 的条目.
+    //
     //  type     hash
     // entry   [30:49]
     //
@@ -350,7 +358,8 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
     //                       0              0
 
     // 8) 根据 smallest_flushed_log_index_cf = 2 smallest_flushed_log_index = 30 smallest_flushed_seqno = 50
-    // 设置 last_flush_index 为 30, 50
+    // 设置 last_flush_index 为 30, 50.
+    //
     //  type     hash
     // entry   [30:49]
     //
@@ -364,9 +373,10 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
     //                       30              50
 
     // 9) 当设置 last_flush_index 为 30, 50 时, 会同时拉高没有数据的 cf 的 flushed_index, 该 case 为 cf 0, cf 1,
-    // 将 cf 0 的 flushed_index 从 10 10 提高为 30, 50.
-    // 将 cf 1 的 flushed index 从 30 49 提升到 30, 50.
-    // 其他没有写入的 cf 也会被拉高.
+    // 将 cf 0 的 flushed_index 从 10 10 提高为 30 50.
+    // 将 cf 1 的 flushed index 从 30 49 提升到 30 50.
+    // 其他没有写入的 cf flushed index 从 0 0 提升到 30 50.
+    //
     //  type     hash
     // entry   [30:49]
     //
@@ -457,7 +467,7 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
           smallest_flushed_log_index, smallest_flushed_seqno] =
         rocksdb->GetLogIndexOfColumnFamilies().GetSmallestLogIndex(-1);
 
-    // 除了 cf 0 之外, 所有的 cf 都是没有数据的, 所以不在我们统计范围之内.
+    // 除了 cf 0 之外, 其余的 cf 都没有未持久化数据, 所以不在我们统计范围之内.
     ASSERT_EQ(smallest_applied_log_index_cf, 0);
     ASSERT_EQ(smallest_applied_log_index, 35);
 

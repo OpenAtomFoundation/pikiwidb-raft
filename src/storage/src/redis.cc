@@ -176,8 +176,8 @@ Status Redis::Open(const StorageOptions& storage_options, const std::string& db_
     ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(zset_score);
 
     // Add a listener on flush to purge log index collector
-    db_ops.listeners.push_back(
-        std::make_shared<LogIndexAndSequenceCollectorPurger>(&handles_, &log_index_collector_, &log_index_of_all_cfs_));
+    db_ops.listeners.push_back(std::make_shared<LogIndexAndSequenceCollectorPurger>(
+        &handles_, &log_index_collector_, &log_index_of_all_cfs_, storage_options.do_snapshot_function));
   }
 
   auto s = rocksdb::DB::Open(db_ops, db_path, column_families, &handles_, &db_);

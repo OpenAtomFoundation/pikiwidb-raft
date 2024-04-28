@@ -25,13 +25,13 @@ namespace pikiwidb {
 
 #define RAFT_GROUPID_LEN 32
 
-#define OK "+OK"
-#define DATABASES_NUM "databases_num"
-#define ROCKSDB_NUM "rocksdb_num"
-#define ROCKSDB_VERSION "rocksdb_version"
-#define WRONG_LEADER "-ERR wrong leader"
-#define RAFT_GROUP_ID "raft_group_id:"
-#define NOT_LEADER "Not leader"
+constexpr const char* OK = "+OK";
+constexpr const char* DATABASES_NUM = "databases_num";
+constexpr const char* ROCKSDB_NUM = "rocksdb_num";
+constexpr const char* ROCKSDB_VERSION = "rocksdb_version";
+constexpr const char* WRONG_LEADER = "-ERR wrong leader";
+constexpr const char* RAFT_GROUP_ID = "raft_group_id:";
+constexpr const char* NOT_LEADER = "Not leader";
 
 #define PRAFT PRaft::Instance()
 

@@ -104,6 +104,7 @@ class LogIndexTest : public ::testing::Test {
     options_.append_log_function = [this](const pikiwidb::Binlog& log, std::promise<rocksdb::Status>&& promise) {
       log_queue_.AppendLog(log, std::move(promise));
     };
+    options_.do_snapshot_function = [](int64_t log_index, bool sync) {};
   }
   ~LogIndexTest() override { DeleteFiles(db_path_.c_str()); }
 

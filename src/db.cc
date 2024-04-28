@@ -29,6 +29,8 @@ DB::DB(int db_index, const std::string& db_path, int rocksdb_inst_num)
     storage_options.append_log_function = [&r = PRAFT](const Binlog& log, std::promise<rocksdb::Status>&& promise) {
       r.AppendLog(log, std::move(promise));
     };
+    storage_options.do_snapshot_function =
+        std::bind(&pikiwidb::PRaft::DoSnapshot, &pikiwidb::PRAFT, std::placeholders::_1, std::placeholders::_2);
   }
   storage_ = std::make_unique<storage::Storage>();
 

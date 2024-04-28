@@ -152,4 +152,43 @@ auto LogIndexTablePropertiesCollector::GetLargestLogIndexFromTableCollection(
                                      : std::make_optional<LogIndexAndSequencePair>(max_flushed_log_index, seqno);
 }
 
+void LogIndexAndSequenceCollectorPurger::OnFlushCompleted(rocksdb::DB *db,
+                                                          const rocksdb::FlushJobInfo &flush_job_info) {
+  cf_->SetFlushedLogIndex(flush_job_info.cf_id, collector_->FindAppliedLogIndex(flush_job_info.largest_seqno),
+                          flush_job_info.largest_seqno);
+
+  auto [smallest_applied_log_index_cf, smallest_applied_log_index, smallest_flushed_log_index_cf,
+        smallest_flushed_log_index, smallest_flushed_seqno] = cf_->GetSmallestLogIndex(flush_job_info.cf_id);
+  collector_->Purge(smallest_applied_log_index);
+
+  if (smallest_flushed_log_index_cf != -1) {
+    cf_->SetFlushedLogIndexGlobal(smallest_flushed_log_index, smallest_flushed_seqno);
+  }
+  auto count = count_.fetch_add(1);
+
+  if (count % 10 == 0) {
+    callback_(smallest_flushed_log_index, false);
+  }
+
+  if (flush_job_info.cf_id == manul_flushing_cf_.load()) {
+    manul_flushing_cf_.store(-1);
+  }
+
+  auto flushing_cf = manul_flushing_cf_.load();
+  if (flushing_cf != -1 || !collector_->IsFlushPending()) {
+    return;
+  }
+
+  assert(flushing_cf == -1);
+
+  if (!manul_flushing_cf_.compare_exchange_strong(flushing_cf, smallest_flushed_log_index_cf)) {
+    return;
+  }
+
+  assert(manul_flushing_cf_.load() == smallest_flushed_log_index_cf);
+  rocksdb::FlushOptions flush_option;
+  flush_option.wait = false;
+  db->Flush(flush_option, column_families_->at(smallest_flushed_log_index_cf));
+}
+
 }  // namespace storage
