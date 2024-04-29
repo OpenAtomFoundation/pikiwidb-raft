@@ -245,7 +245,7 @@ class LogIndexAndSequenceCollectorPurger : public rocksdb::EventListener {
   void OnFlushCompleted(rocksdb::DB *db, const rocksdb::FlushJobInfo &flush_job_info) override;
 
  private:
-  std::vector<rocksdb::ColumnFamilyHandle *> *column_families_;
+  std::vector<rocksdb::ColumnFamilyHandle *> *column_families_ = nullptr;
   LogIndexAndSequenceCollector *collector_ = nullptr;
   LogIndexOfColumnFamilies *cf_ = nullptr;
   std::atomic_uint64_t count_ = 0;
