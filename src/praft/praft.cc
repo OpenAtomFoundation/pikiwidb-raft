@@ -629,7 +629,7 @@ void PRaft::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done
 int PRaft::on_snapshot_load(braft::SnapshotReader* reader) {
   CHECK(!IsLeader()) << "Leader is not supposed to load snapshot";
   assert(reader);
-  auto reader_path = reader->get_path();                 // xx/snapshot_0000001
+  auto reader_path = reader->get_path();                             // xx/snapshot_0000001
   auto path = g_config.db_path.ToString() + std::to_string(db_id_);  // db/db_id
   TasksVector tasks(1, {TaskType::kLoadDBFromCheckpoint, db_id_, {{TaskArg::kCheckpointPath, reader_path}}, true});
   PSTORE.HandleTaskSpecificDB(tasks);

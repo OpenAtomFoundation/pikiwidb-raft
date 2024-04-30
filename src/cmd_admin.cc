@@ -10,9 +10,9 @@
 #include "braft/raft.h"
 #include "rocksdb/version.h"
 
+#include "pikiwidb.h"
 #include "praft/praft.h"
 #include "store.h"
-#include "pikiwidb.h"
 
 namespace pikiwidb {
 

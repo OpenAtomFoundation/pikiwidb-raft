@@ -5,16 +5,15 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-
 #include "store.h"
 
 #include <memory>
 #include <string>
 
-#include "pstd/log.h"
-#include "pstd/pstd_string.h"
 #include "config.h"
 #include "db.h"
+#include "pstd/log.h"
+#include "pstd/pstd_string.h"
 
 namespace pikiwidb {
 

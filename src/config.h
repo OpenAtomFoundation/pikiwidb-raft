@@ -9,12 +9,12 @@
 
 #include <cassert>
 #include <functional>
+#include <map>
 #include <memory>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <utility>
-#include <map>
 #include <vector>
 
 #include "rocksdb/options.h"
@@ -171,8 +171,8 @@ class PConfig {
   std::atomic_bool rocksdb_enable_pipelined_write = false;
   std::atomic_int rocksdb_level0_slowdown_writes_trigger = 20;
   std::atomic_int rocksdb_level0_stop_writes_trigger = 36;
-  std::atomic_uint64_t rocksdb_ttl_second = 604800; // default 86400 * 7
-  std::atomic_uint64_t rocksdb_periodic_second = 259200; // default 86400 * 3
+  std::atomic_uint64_t rocksdb_ttl_second = 604800;       // default 86400 * 7
+  std::atomic_uint64_t rocksdb_periodic_second = 259200;  // default 86400 * 3
 
   rocksdb::Options GetRocksDBOptions();
 
