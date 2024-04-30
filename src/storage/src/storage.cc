@@ -127,6 +127,10 @@ static int RecursiveLinkAndCopy(const std::filesystem::path& source, const std::
 Status Storage::Open(const StorageOptions& storage_options, const std::string& db_path) {
   mkpath(db_path.c_str(), 0755);
   db_instance_num_ = storage_options.db_instance_num;
+  // Temporarily set to 100000
+  LogIndexAndSequenceCollector::max_gap_.store(storage_options.max_gap);
+  storage_options.options.write_buffer_manager =
+      std::make_shared<rocksdb::WriteBufferManager>(storage_options.mem_manager_size);
   for (size_t index = 0; index < db_instance_num_; index++) {
     insts_.emplace_back(std::make_unique<Redis>(this, index));
     Status s = insts_.back()->Open(storage_options, AppendSubDirectory(db_path, index));
@@ -2333,6 +2337,8 @@ Status Storage::OnBinlogWrite(const pikiwidb::Binlog& log, LogIndex log_idx) {
 
   rocksdb::WriteBatch batch;
   bool is_finished_start = true;
+  // 提前获取 seq, 每次自增, 需要保证该操作串行执行?
+  auto seqno = inst->GetDB()->GetLatestSequenceNumber();
   for (const auto& entry : log.entries()) {
     if (inst->IsRestarting() && inst->IsApplied(entry.cf_idx(), log_idx)) [[unlikely]] {
       // If the starting phase is over, the log must not have been applied
@@ -2356,8 +2362,7 @@ Status Storage::OnBinlogWrite(const pikiwidb::Binlog& log, LogIndex log_idx) {
         ERROR(msg);
         return Status::Incomplete(msg);
     }
-
-    inst->UpdateAppliedLogIndexOfColumnFamily(entry.cf_idx(), log_idx);
+    inst->UpdateAppliedLogIndexOfColumnFamily(entry.cf_idx(), log_idx, ++seqno);
   }
   if (inst->IsRestarting() && is_finished_start) [[unlikely]] {
     INFO("Redis {} finished start phase", inst->GetIndex());

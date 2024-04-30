@@ -16,8 +16,8 @@ ExternalProject_Add(
         extern_braft
         ${EXTERNAL_PROJECT_LOG_ARGS}
         DEPENDS brpc
-        URL "https://github.com/pikiwidb/braft/archive/refs/heads/stable.zip"
-        URL_HASH SHA256=e73831f9768ac57d07f01ed81a11c8368e259c25315a960c29a6422f31f42fd1
+        GIT_REPOSITORY "https://github.com/pikiwidb/braft.git"
+        GIT_TAG master
         PREFIX ${BRAFT_SOURCES_DIR}
         UPDATE_COMMAND ""
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}

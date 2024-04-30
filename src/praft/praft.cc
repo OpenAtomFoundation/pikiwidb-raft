@@ -522,10 +522,7 @@ butil::Status PRaft::DoSnapshot(int64_t self_snapshot_index, bool is_sync) {
     return ERROR_LOG_AND_STATUS("Node is not initialized");
   }
   braft::SynchronizedClosure done;
-  // TODO(panlei) Increase the self_log_index parameter
-  // TODO(panlei) Use the is_sync parameter to determine whether
-  //  to use synchronous waiting.
-  node_->snapshot(&done);
+  node_->snapshot(&done, self_snapshot_index);
   done.wait();
   return done.status();
 }
