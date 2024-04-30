@@ -124,6 +124,7 @@ PConfig::PConfig() {
   AddString("runid", false, {&run_id});
   AddNumber("small-compaction-threshold", true, &small_compaction_threshold);
   AddNumber("small-compaction-duration-threshold", true, &small_compaction_duration_threshold);
+  AddBool("use-raft", &CheckYesNo, false, &use_raft);
 
   // rocksdb config
   AddNumber("rocksdb-max-subcompactions", false, &rocksdb_max_subcompactions);
