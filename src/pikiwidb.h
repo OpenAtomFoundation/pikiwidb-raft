@@ -45,6 +45,8 @@ class PikiwiDB final {
 
   void PushWriteTask(const std::shared_ptr<pikiwidb::PClient>& client) { worker_threads_.PushWriteTask(client); }
 
+  time_t Start_time_s() { return start_time_s_; }
+
  public:
   PString cfg_file_;
   uint16_t port_{0};
@@ -62,6 +64,8 @@ class PikiwiDB final {
   //  pikiwidb::CmdTableManager cmd_table_manager_;
 
   uint32_t cmd_id_ = 0;
+
+  time_t start_time_s_ = 0;
 };
 
 extern std::unique_ptr<PikiwiDB> g_pikiwidb;

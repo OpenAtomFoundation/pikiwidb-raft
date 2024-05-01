@@ -12,6 +12,7 @@
 
 #include <sys/fcntl.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 #include <iostream>
 #include <thread>
@@ -173,6 +174,7 @@ bool PikiwiDB::Init() {
   }
 
   //  cmd_table_manager_.InitCmdTable();
+  time(&start_time_s_);
 
   return true;
 }

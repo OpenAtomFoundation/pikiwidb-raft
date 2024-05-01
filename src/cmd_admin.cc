@@ -5,6 +5,11 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
+#include <sys/resource.h>
+#include <sys/statvfs.h>
+#include <sys/time.h>
+#include <sys/utsname.h>
+
 #include "cmd_admin.h"
 #include "db.h"
 
@@ -15,6 +20,8 @@
 #include "praft/praft.h"
 #include "pstd/env.h"
 
+#include "cmd_table_manager.h"
+#include "slow_log.h"
 #include "store.h"
 
 namespace pikiwidb {
@@ -136,25 +143,108 @@ bool PingCmd::DoInitial(PClient* client) { return true; }
 
 void PingCmd::DoCmd(PClient* client) { client->SetRes(CmdRes::kPong, "PONG"); }
 
+const std::string InfoCmd::kInfoSection = "info";
+const std::string InfoCmd::kAllSection = "all";
+const std::string InfoCmd::kServerSection = "server";
+const std::string InfoCmd::kClientsSection = "clients";
+const std::string InfoCmd::kStatsSection = "stats";
+const std::string InfoCmd::kCPUSection = "cpu";
+const std::string InfoCmd::kReplicationSection = "replication";
+const std::string InfoCmd::kKeyspaceSection = "keyspace";
+const std::string InfoCmd::kDataSection = "data";
+const std::string InfoCmd::kRocksDBSection = "rocksdb";
+const std::string InfoCmd::kDebugSection = "debug";
+const std::string InfoCmd::kCommandStatsSection = "commandstats";
+const std::string InfoCmd::kCacheSection = "cache";
+const std::string InfoCmd::kRaftSection = "RAFT";
+
 InfoCmd::InfoCmd(const std::string& name, int16_t arity)
     : BaseCmd(name, arity, kCmdFlagsAdmin | kCmdFlagsReadonly, kAclCategoryAdmin) {}
 
-bool InfoCmd::DoInitial(PClient* client) { return true; }
+bool InfoCmd::DoInitial(PClient* client) {
+  size_t argc = client->argv_.size();
+  if (argc > 4) {
+    client->SetRes(CmdRes::kSyntaxErr);
+    return false;
+  }
+  if (argc == 1) {
+    info_section_ = kInfo;
+    return true;
+  }
+
+  const auto& argv_ = client->argv_;
+  if (strcasecmp(argv_[1].data(), kAllSection.data()) == 0) {
+    info_section_ = kInfoAll;
+  } else if (strcasecmp(argv_[1].data(), kServerSection.data()) == 0) {
+    info_section_ = kInfoServer;
+  } else if (strcasecmp(argv_[1].data(), kStatsSection.data()) == 0) {
+    info_section_ = kInfoStats;
+  } else if (strcasecmp(argv_[1].data(), kCPUSection.data()) == 0) {
+    info_section_ = kInfoCPU;
+  } else if (strcasecmp(argv_[1].data(), kDataSection.data()) == 0) {
+    info_section_ = kInfoData;
+  } else if (strcasecmp(argv_[1].data(), kRaftSection.data()) == 0) {
+    info_section_ = kInfoRaft;
+  } else if (strcasecmp(argv_[1].data(), kCommandStatsSection.data()) == 0) {
+    info_section_ = kInfoCommandStats;
+  }
+
+  if (argc != 2) {
+    client->SetRes(CmdRes::kSyntaxErr);
+    return false;
+  }
+  return true;
+}
 
 // @todo The info raft command is only supported for the time being
 void InfoCmd::DoCmd(PClient* client) {
-  if (client->argv_.size() <= 1) {
-    return client->SetRes(CmdRes::kWrongNum, client->CmdName());
+  std::string info;
+  switch (info_section_) {
+    case kInfo:
+      InfoServer(info);
+      info.append("\r\n");
+      InfoData(info);
+      info.append("\r\n");
+      InfoStats(info);
+      info.append("\r\n");
+      InfoCPU(info);
+      info.append("\r\n");
+      break;
+    case kInfoAll:
+      InfoServer(info);
+      info.append("\r\n");
+      InfoData(info);
+      info.append("\r\n");
+      InfoStats(info);
+      info.append("\r\n");
+      InfoCommandStats(client, info);
+      info.append("\r\n");
+      InfoCPU(info);
+      info.append("\r\n");
+      break;
+    case kInfoServer:
+      InfoServer(info);
+      break;
+    case kInfoStats:
+      InfoStats(info);
+      break;
+    case kInfoCPU:
+      InfoCPU(info);
+      break;
+    case kInfoData:
+      InfoData(info);
+      break;
+    case kInfoCommandStats:
+      InfoCommandStats(client, info);
+      break;
+    case kInfoRaft:
+      InfoRaft(info);
+      break;
+    default:
+      break;
   }
 
-  auto cmd = client->argv_[1];
-  if (!strcasecmp(cmd.c_str(), "RAFT")) {
-    InfoRaft(client);
-  } else if (!strcasecmp(cmd.c_str(), "data")) {
-    InfoData(client);
-  } else {
-    client->SetRes(CmdRes::kErrOther, "the cmd is not supported");
-  }
+  client->AppendString(info);
 }
 
 /*
@@ -171,21 +261,18 @@ void InfoCmd::DoCmd(PClient* client) {
     raft_num_voting_nodes:2
     raft_node1:id=1733428433,state=connected,voting=yes,addr=localhost,port=5001,last_conn_secs=5,conn_errors=0,conn_oks=1
 */
-void InfoCmd::InfoRaft(PClient* client) {
-  if (client->argv_.size() != 2) {
-    return client->SetRes(CmdRes::kWrongNum, client->CmdName());
-  }
-
+void InfoCmd::InfoRaft(std::string& message) {
   if (!PRAFT.IsInitialized()) {
-    return client->SetRes(CmdRes::kErrOther, "Don't already cluster member");
+    message += "-ERR:Don't already cluster member \r\n";
+    return;
   }
 
   auto node_status = PRAFT.GetNodeStatus();
   if (node_status.state == braft::State::STATE_END) {
-    return client->SetRes(CmdRes::kErrOther, "Node is not initialized");
+    message += "-ERR:Node is not initialized \r\n";
+    return;
   }
 
-  std::string message;
   message += "raft_group_id:" + PRAFT.GetGroupID() + "\r\n";
   message += "raft_node_id:" + PRAFT.GetNodeID() + "\r\n";
   message += "raft_peer_id:" + PRAFT.GetPeerID() + "\r\n";
@@ -202,7 +289,8 @@ void InfoCmd::InfoRaft(PClient* client) {
     std::vector<braft::PeerId> peers;
     auto status = PRAFT.GetListPeers(&peers);
     if (!status.ok()) {
-      return client->SetRes(CmdRes::kErrOther, status.error_str());
+      message += "-ERR:" + status.error_str();
+      return;
     }
 
     for (int i = 0; i < peers.size(); i++) {
@@ -210,21 +298,106 @@ void InfoCmd::InfoRaft(PClient* client) {
                  ",port=" + std::to_string(peers[i].addr.port) + "\r\n";
     }
   }
-
-  client->AppendString(message);
 }
 
-void InfoCmd::InfoData(PClient* client) {
-  if (client->argv_.size() != 2) {
-    return client->SetRes(CmdRes::kWrongNum, client->CmdName());
+void InfoCmd::InfoServer(std::string& info) {
+  static struct utsname host_info;
+  static bool host_info_valid = false;
+  if (!host_info_valid) {
+    uname(&host_info);
+    host_info_valid = true;
   }
 
-  std::string message;
+  time_t current_time_s = time(nullptr);
+  std::stringstream tmp_stream;
+  char version[32];
+  snprintf(version, sizeof(version), "%s", KPIKIWIDB_VERSION);
+
+  tmp_stream << "# Server\r\n";
+  tmp_stream << "PikiwiDB_version:" << version << "\r\n";
+  tmp_stream << "PikiwiDB_build_git_sha:" << KPIKIWIDB_GIT_COMMIT_ID << "\r\n";
+  tmp_stream << "Pikiwidb_build_compile_date: " << KPIKIWIDB_BUILD_DATE << "\r\n";
+  tmp_stream << "os:" << host_info.sysname << " " << host_info.release << " " << host_info.machine << "\r\n";
+  tmp_stream << "arch_bits:" << (reinterpret_cast<char*>(&host_info.machine) + strlen(host_info.machine) - 2) << "\r\n";
+  tmp_stream << "process_id:" << getpid() << "\r\n";
+  tmp_stream << "run_id:" << static_cast<std::string>(g_config.run_id) << "\r\n";
+  tmp_stream << "tcp_port:" << g_config.port << "\r\n";
+  tmp_stream << "uptime_in_seconds:" << (current_time_s - g_pikiwidb->Start_time_s()) << "\r\n";
+  tmp_stream << "uptime_in_days:" << (current_time_s / (24 * 3600) - g_pikiwidb->Start_time_s() / (24 * 3600) + 1)
+             << "\r\n";
+  tmp_stream << "config_file:" << g_pikiwidb->GetConfigName() << "\r\n";
+
+  info.append(tmp_stream.str());
+}
+
+void InfoCmd::InfoStats(std::string& info) {
+  std::stringstream tmp_stream;
+  tmp_stream << "# Stats"
+             << "\r\n";
+
+  tmp_stream << "is_bgsaving:" << (PREPL.IsBgsaving() ? "Yes" : "No") << "\r\n";
+  tmp_stream << "slow_logs_count:" << PSlowLog::Instance().GetLogsCount() << "\r\n";
+  info.append(tmp_stream.str());
+}
+
+void InfoCmd::InfoCPU(std::string& info) {
+  struct rusage self_ru;
+  struct rusage c_ru;
+  getrusage(RUSAGE_SELF, &self_ru);
+  getrusage(RUSAGE_CHILDREN, &c_ru);
+  std::stringstream tmp_stream;
+  tmp_stream << "# CPU"
+             << "\r\n";
+  tmp_stream << "used_cpu_sys:" << std::setiosflags(std::ios::fixed) << std::setprecision(2)
+             << static_cast<float>(self_ru.ru_stime.tv_sec) + static_cast<float>(self_ru.ru_stime.tv_usec) / 1000000
+             << "\r\n";
+  tmp_stream << "used_cpu_user:" << std::setiosflags(std::ios::fixed) << std::setprecision(2)
+             << static_cast<float>(self_ru.ru_utime.tv_sec) + static_cast<float>(self_ru.ru_utime.tv_usec) / 1000000
+             << "\r\n";
+  tmp_stream << "used_cpu_sys_children:" << std::setiosflags(std::ios::fixed) << std::setprecision(2)
+             << static_cast<float>(c_ru.ru_stime.tv_sec) + static_cast<float>(c_ru.ru_stime.tv_usec) / 1000000
+             << "\r\n";
+  tmp_stream << "used_cpu_user_children:" << std::setiosflags(std::ios::fixed) << std::setprecision(2)
+             << static_cast<float>(c_ru.ru_utime.tv_sec) + static_cast<float>(c_ru.ru_utime.tv_usec) / 1000000
+             << "\r\n";
+  info.append(tmp_stream.str());
+}
+
+void InfoCmd::InfoData(std::string& message) {
+  message += "# DATA \r\n ";
   message += DATABASES_NUM + std::string(":") + std::to_string(pikiwidb::g_config.databases) + "\r\n";
   message += ROCKSDB_NUM + std::string(":") + std::to_string(pikiwidb::g_config.db_instance_num) + "\r\n";
   message += ROCKSDB_VERSION + std::string(":") + ROCKSDB_NAMESPACE::GetRocksVersionAsString() + "\r\n";
+}
 
-  client->AppendString(message);
+double InfoCmd::MethodofTotalTimeCalculation(const uint64_t time_consuming) {
+  return static_cast<double>(time_consuming) / 1000.0;
+}
+
+double InfoCmd::MethodofCommandStatistics(const uint64_t time_consuming, const uint64_t frequency) {
+  return (static_cast<double>(time_consuming) / 1000.0) / static_cast<double>(frequency);
+}
+
+void InfoCmd::InfoCommandStats(PClient* client, std::string& info) {
+  std::stringstream tmp_stream;
+  tmp_stream.precision(2);
+  tmp_stream.setf(std::ios::fixed);
+  tmp_stream << "# Commandstats"
+             << "\r\n";
+  auto cmdstat_map = client->GetCommandStatMap();
+  for (auto iter : *cmdstat_map) {
+    if (iter.second.cmd_count != 0) {
+      tmp_stream << iter.first << ":"
+                 << "calls=" << iter.second.cmd_count
+                 << ", usec=" << MethodofTotalTimeCalculation(iter.second.cmd_time_consuming) << ", usec_per_call=";
+      if (!iter.second.cmd_time_consuming) {
+        tmp_stream << 0 << "\r\n";
+      } else {
+        tmp_stream << MethodofCommandStatistics(iter.second.cmd_time_consuming, iter.second.cmd_count) << "\r\n";
+      }
+    }
+  }
+  info.append(tmp_stream.str());
 }
 
 CmdDebug::CmdDebug(const std::string& name, int arity) : BaseCmdGroup(name, kCmdFlagsAdmin, kAclCategoryAdmin) {}
