@@ -40,6 +40,7 @@ void CmdTableManager::InitCmdTable() {
   configPtr->AddSubCmd(std::make_unique<CmdConfigSet>("set", -4));
   cmds_->insert(std::make_pair(kCmdNameConfig, std::move(configPtr)));
   ADD_COMMAND(Ping, 0);
+  ADD_COMMAND(Info, -1);
 
   // server
   ADD_COMMAND(Flushdb, 1);
@@ -183,4 +184,5 @@ bool CmdTableManager::CmdExist(const std::string& cmd) const {
 }
 
 uint32_t CmdTableManager::GetCmdId() { return ++cmdId_; }
+
 }  // namespace pikiwidb

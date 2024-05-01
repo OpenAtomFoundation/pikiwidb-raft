@@ -20,6 +20,42 @@
 
 namespace pikiwidb {
 
+struct CommandStatistics {
+  CommandStatistics() = default;
+  CommandStatistics(const CommandStatistics& other) {
+    cmd_time_consuming.store(other.cmd_time_consuming.load());
+    cmd_count.store(other.cmd_count.load());
+  }
+  std::atomic<uint64_t> cmd_count = 0;
+  std::atomic<uint64_t> cmd_time_consuming = 0;
+};
+
+struct TimeStat {
+  TimeStat() = default;
+  void Reset() {
+    enqueue_ts_ = dequeue_ts_ = 0;
+    process_done_ts_ = 0;
+  }
+
+  // uint64_t start_ts() const {
+  //   return enqueue_ts_;
+  // }
+
+  uint64_t total_time() const { return process_done_ts_ > enqueue_ts_ ? process_done_ts_ - enqueue_ts_ : 0; }
+
+  // uint64_t queue_time() const {
+  //   return dequeue_ts_ > enqueue_ts_ ? dequeue_ts_ - enqueue_ts_ : 0;
+  // }
+
+  // uint64_t process_time() const {
+  //   return process_done_ts_ > dequeue_ts_ ? process_done_ts_ - dequeue_ts_ : 0;
+  // }
+
+  uint64_t enqueue_ts_;
+  uint64_t dequeue_ts_;
+  uint64_t process_done_ts_;
+};
+
 class CmdRes {
  public:
   enum CmdRet {
@@ -215,6 +251,10 @@ class PClient : public std::enable_shared_from_this<PClient>, public CmdRes {
   // e.g：["set","key","value"]
   std::span<std::string> argv_;
 
+  // Info Commandstats used
+  std::shared_ptr<TimeStat> time_stat_;
+  std::unordered_map<std::string, CommandStatistics>* GetCommandStatMap();
+
  private:
   std::shared_ptr<TcpConnection> getTcpConnection() const { return tcp_connection_.lock(); }
   int handlePacket(const char*, int);
@@ -265,5 +305,10 @@ class PClient : public std::enable_shared_from_this<PClient>, public CmdRes {
   ClientState state_;
 
   static thread_local PClient* s_current;
+
+  /*
+   * Info Commandstats used
+   */
+  std::unordered_map<std::string, CommandStatistics> cmdstat_map_;
 };
 }  // namespace pikiwidb

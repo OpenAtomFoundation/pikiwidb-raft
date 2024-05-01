@@ -17,7 +17,11 @@
 
 #include "base_cmd.h"
 #include "config.h"
+#include "env.h"
 #include "pikiwidb.h"
+#include "pstd_string.h"
+#include "slow_log.h"
+#include "store.h"
 
 namespace pikiwidb {
 
@@ -347,7 +351,7 @@ int PClient::handlePacket(const char* start, int bytes) {
   //  executeCommand();
   //    return static_cast<int>(ptr - start);
   //  }
-
+  time_stat_->enqueue_ts_ = pstd::NowMicros();
   g_pikiwidb->SubmitFast(std::make_shared<CmdThreadPoolTask>(shared_from_this()));
 
   // check transaction
@@ -423,6 +427,7 @@ PClient::PClient(TcpConnection* obj)
       parser_(params_) {
   auth_ = false;
   reset();
+  time_stat_.reset(new TimeStat());
 }
 
 int PClient::HandlePackets(pikiwidb::TcpConnection* obj, const char* start, int size) {
@@ -712,5 +717,7 @@ void PClient::FeedMonitors(const std::vector<std::string>& params) {
 void PClient::SetKey(std::vector<std::string>& names) {
   keys_ = std::move(names);  // use std::move clear copy expense
 }
+
+std::unordered_map<std::string, CommandStatistics>* PClient::GetCommandStatMap() { return &cmdstat_map_; }
 
 }  // namespace pikiwidb

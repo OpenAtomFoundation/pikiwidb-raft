@@ -6,6 +6,8 @@
  */
 
 #include "cmd_thread_pool_worker.h"
+#include "client.h"
+#include "env.h"
 #include "log.h"
 #include "pikiwidb.h"
 
@@ -35,7 +37,21 @@ void CmdWorkThreadPoolWorker::Work() {
         g_pikiwidb->PushWriteTask(task->Client());
         continue;
       }
+
+      auto cmdstat_map = task->Client()->GetCommandStatMap();
+      CommandStatistics statistics;
+      if (cmdstat_map->find(task->CmdName()) == cmdstat_map->end()) {
+        cmdstat_map->emplace(task->CmdName(), statistics);
+      }
+      task->Client()->time_stat_->dequeue_ts_ = pstd::NowMicros();
       task->Run(cmdPtr);
+
+      // Info Commandstats used
+
+      task->Client()->time_stat_->process_done_ts_ = pstd::NowMicros();
+      (*cmdstat_map)[task->CmdName()].cmd_count.fetch_add(1);
+      (*cmdstat_map)[task->CmdName()].cmd_time_consuming.fetch_add(task->Client()->time_stat_->total_time());
+
       g_pikiwidb->PushWriteTask(task->Client());
     }
     self_task_.clear();

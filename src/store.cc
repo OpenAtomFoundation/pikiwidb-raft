@@ -71,4 +71,5 @@ void PStore::HandleTaskSpecificDB(const TasksVector& tasks) {
     }
   });
 }
+
 }  // namespace pikiwidb
