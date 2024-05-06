@@ -142,11 +142,6 @@ bool RaftClusterCmd::DoInitial(PClient* client) {
 }
 
 void RaftClusterCmd::DoCmd(PClient* client) {
-  // parse arguments
-  if (client->argv_.size() < 2) {
-    return client->SetRes(CmdRes::kWrongNum, client->CmdName());
-  }
-
   if (PRAFT.IsInitialized()) {
     return client->SetRes(CmdRes::kErrOther, "Already cluster member");
   }

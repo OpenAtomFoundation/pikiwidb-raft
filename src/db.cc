@@ -40,7 +40,7 @@ DB::DB(int db_index, const std::string& db_path, int rocksdb_inst_num)
     abort();
   }
 
-  opened_.store(true);
+  opened_ = true;
   INFO("Open DB{} success!", db_index_);
 }
 
@@ -83,7 +83,6 @@ void DB::CreateCheckpoint(const std::string& path, bool sync) {
 }
 
 void DB::LoadDBFromCheckpoint(const std::string& path, bool sync) {
-  opened_.store(false);
   auto checkpoint_path = path + '/' + std::to_string(db_index_);
   if (0 != pstd::IsDir(path)) {
     WARN("Checkpoint dir {} does not exist!", checkpoint_path);
@@ -97,6 +96,7 @@ void DB::LoadDBFromCheckpoint(const std::string& path, bool sync) {
   }
 
   std::lock_guard<std::shared_mutex> lock(storage_mutex_);
+  opened_ = false;
   std::vector<std::future<void>> result;
   result.reserve(rocksdb_inst_num_);
   for (int i = 0; i < rocksdb_inst_num_; ++i) {
@@ -128,7 +128,7 @@ void DB::LoadDBFromCheckpoint(const std::string& path, bool sync) {
     ERROR("Storage open failed! {}", s.ToString());
     abort();
   }
-  opened_.store(true);
+  opened_ = true;
   INFO("DB{} load a checkpoint from {} success!", db_index_, path);
 }
 }  // namespace pikiwidb

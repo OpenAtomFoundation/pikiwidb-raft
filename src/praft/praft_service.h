@@ -20,7 +20,7 @@ class DummyServiceImpl : public DummyService {
                    ::pikiwidb::DummyResponse* response, ::google::protobuf::Closure* done) override {}
 
  private:
-  PRaft* praft_;
+  PRaft* praft_ = nullptr;
 };
 
 }  // namespace pikiwidb

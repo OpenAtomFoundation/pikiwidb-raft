@@ -160,7 +160,7 @@ Status Storage::CreateCheckpoint(const std::string& dump_path, int i) {
     return Status::IOError("DeleteDirIfExist() fail! dir_name : {} ", tmp_dir);
   }
 
-  // 2) Create checkpoint of this RocksDB
+  // 2) Create checkpoint object of this RocksDB
   rocksdb::Checkpoint* checkpoint = nullptr;
   auto db = insts_[i]->GetDB();
   rocksdb::Status s = rocksdb::Checkpoint::Create(db, &checkpoint);
@@ -180,6 +180,9 @@ Status Storage::CreateCheckpoint(const std::string& dump_path, int i) {
   // 4) Make sure the source directory does not exist
   if (!pstd::DeleteDirIfExist(source_dir)) {
     WARN("DB{}'s RocksDB {} delete directory {} fail!", db_id_, i, source_dir);
+    if (!pstd::DeleteDirIfExist(tmp_dir)) {
+      WARN("DB{}'s RocksDB {} fail to delete the temporary directory {} ", db_id_, i, tmp_dir);
+    }
     return Status::IOError("DeleteDirIfExist() fail! dir_name : {} ", source_dir);
   }
 

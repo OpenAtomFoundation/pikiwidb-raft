@@ -54,7 +54,7 @@ class RocksBatch : public Batch {
 
  private:
   rocksdb::WriteBatch batch_;
-  rocksdb::DB* db_;
+  rocksdb::DB* db_ = nullptr;
   const rocksdb::WriteOptions& options_;
   const std::vector<rocksdb::ColumnFamilyHandle*>& handles_;
 };

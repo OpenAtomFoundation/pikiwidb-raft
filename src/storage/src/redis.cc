@@ -146,22 +146,6 @@ Status Redis::Open(const StorageOptions& storage_options, const std::string& db_
   zset_data_cf_ops.table_factory.reset(rocksdb::NewBlockBasedTableFactory(zset_data_cf_table_ops));
   zset_score_cf_ops.table_factory.reset(rocksdb::NewBlockBasedTableFactory(zset_score_cf_table_ops));
 
-  std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
-  column_families.emplace_back(rocksdb::kDefaultColumnFamilyName, string_cf_ops);
-  // hash CF
-  column_families.emplace_back("hash_meta_cf", hash_meta_cf_ops);
-  column_families.emplace_back("hash_data_cf", hash_data_cf_ops);
-  // set CF
-  column_families.emplace_back("set_meta_cf", set_meta_cf_ops);
-  column_families.emplace_back("set_data_cf", set_data_cf_ops);
-  // list CF
-  column_families.emplace_back("list_meta_cf", list_meta_cf_ops);
-  column_families.emplace_back("list_data_cf", list_data_cf_ops);
-  // zset CF
-  column_families.emplace_back("zset_meta_cf", zset_meta_cf_ops);
-  column_families.emplace_back("zset_data_cf", zset_data_cf_ops);
-  column_families.emplace_back("zset_score_cf", zset_score_cf_ops);
-
   if (append_log_function_) {
     // Add log index table property collector factory to each column family
     ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(string);
@@ -179,6 +163,22 @@ Status Redis::Open(const StorageOptions& storage_options, const std::string& db_
     db_ops.listeners.push_back(std::make_shared<LogIndexAndSequenceCollectorPurger>(
         &handles_, &log_index_collector_, &log_index_of_all_cfs_, storage_options.do_snapshot_function));
   }
+
+  std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
+  column_families.emplace_back(rocksdb::kDefaultColumnFamilyName, string_cf_ops);
+  // hash CF
+  column_families.emplace_back("hash_meta_cf", hash_meta_cf_ops);
+  column_families.emplace_back("hash_data_cf", hash_data_cf_ops);
+  // set CF
+  column_families.emplace_back("set_meta_cf", set_meta_cf_ops);
+  column_families.emplace_back("set_data_cf", set_data_cf_ops);
+  // list CF
+  column_families.emplace_back("list_meta_cf", list_meta_cf_ops);
+  column_families.emplace_back("list_data_cf", list_data_cf_ops);
+  // zset CF
+  column_families.emplace_back("zset_meta_cf", zset_meta_cf_ops);
+  column_families.emplace_back("zset_data_cf", zset_data_cf_ops);
+  column_families.emplace_back("zset_score_cf", zset_score_cf_ops);
 
   auto s = rocksdb::DB::Open(db_ops, db_path, column_families, &handles_, &db_);
   if (!s.ok()) {

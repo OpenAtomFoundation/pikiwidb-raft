@@ -52,7 +52,7 @@ class DB {
    */
   std::shared_mutex storage_mutex_;
   std::unique_ptr<storage::Storage> storage_;
-  std::atomic_bool opened_ = false;
+  bool opened_ = false;
 };
 
 }  // namespace pikiwidb
