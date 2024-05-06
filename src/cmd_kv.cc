@@ -13,7 +13,6 @@
 
 namespace pikiwidb {
 
-using pikiwidb::TasksVector;
 GetCmd::GetCmd(const std::string& name, int16_t arity)
     : BaseCmd(name, arity, kCmdFlagsReadonly, kAclCategoryRead | kAclCategoryString) {}
 

@@ -17,8 +17,6 @@ TARGET_INCLUDE_DIRECTORIES(pikiwidb
         PRIVATE ${rocksdb_SOURCE_DIR}/include
         PRIVATE ${BRAFT_INCLUDE_DIR}
         PRIVATE ${BRPC_INCLUDE_DIR}
-        PRIVATE ${GFLAGS_INCLUDE_PATH}
-        PRIVATE ${PROJECT_SOURCE_DIR}/src/praft
         )
 
 

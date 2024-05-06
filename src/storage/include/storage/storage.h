@@ -186,9 +186,13 @@ class Storage {
 
   Status Open(const StorageOptions& storage_options, const std::string& db_path);
 
-  Status CreateCheckpoint(const std::string& dump_path, int index);
+  std::vector<std::future<Status>> CreateCheckpoint(const std::string& checkpoint_path);
 
-  Status LoadCheckpoint(const std::string& dump_path, const std::string& db_path, int index);
+  Status CreateCheckpointInternal(const std::string& checkpoint_path, int db_index);
+
+  std::vector<std::future<Status>> LoadCheckpoint(const std::string& checkpoint_path, const std::string& db_path);
+
+  Status LoadCheckpointInternal(const std::string& dump_path, const std::string& db_path, int index);
 
   Status LoadCursorStartKey(const DataType& dtype, int64_t cursor, char* type, std::string* start_key);
 

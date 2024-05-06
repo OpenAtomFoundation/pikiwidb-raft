@@ -17,8 +17,6 @@ TARGET_INCLUDE_DIRECTORIES(storage
         PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include 
         PRIVATE ${rocksdb_SOURCE_DIR}/
         PRIVATE ${rocksdb_SOURCE_DIR}/include
-        PRIVATE ${BRAFT_INCLUDE_DIR}
-        PRIVATE ${BRPC_INCLUDE_DIR}
         PRIVATE ${PROTO_OUTPUT_DIR}
 )
 

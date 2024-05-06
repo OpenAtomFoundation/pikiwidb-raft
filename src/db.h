@@ -18,7 +18,7 @@ namespace pikiwidb {
 
 class DB {
  public:
-  DB(int db_index, const std::string& db_path, int rocksdb_inst_num);
+  DB(int db_index, const std::string& db_path);
 
   std::unique_ptr<storage::Storage>& GetStorage() { return storage_; }
 
@@ -32,18 +32,13 @@ class DB {
 
   void CreateCheckpoint(const std::string& path, bool sync);
 
-  void LoadDBFromCheckpoint(const std::string& path, bool sync = false);
+  void LoadDBFromCheckpoint(const std::string& path, bool sync = true);
 
   int GetDbIndex() { return db_index_; }
 
  private:
-  void DoCheckpoint(const std::string&, int i);
-  void LoadCheckpoint(const std::string&, const std::string& db_path, int i);
-
- private:
   const int db_index_ = 0;
   const std::string db_path_;
-  int rocksdb_inst_num_ = 0;
   /**
    * If you want to change the pointer that points to storage,
    * you must first acquire a mutex lock.
