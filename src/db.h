@@ -20,6 +20,8 @@ class DB {
  public:
   DB(int db_index, const std::string& db_path);
 
+  rocksdb::Status Open();
+
   std::unique_ptr<storage::Storage>& GetStorage() { return storage_; }
 
   void Lock() { storage_mutex_.lock(); }

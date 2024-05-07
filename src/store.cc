@@ -27,6 +27,7 @@ void PStore::Init(int db_number) {
   backends_.reserve(db_number_);
   for (int i = 0; i < db_number_; i++) {
     auto db = std::make_unique<DB>(i, g_config.db_path);
+    db->Open();
     backends_.push_back(std::move(db));
     INFO("Open DB_{} success!", i);
   }

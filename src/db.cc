@@ -16,7 +16,9 @@ extern pikiwidb::PConfig g_config;
 namespace pikiwidb {
 
 DB::DB(int db_index, const std::string& db_path)
-    : db_index_(db_index), db_path_(db_path + std::to_string(db_index_) + '/') {
+    : db_index_(db_index), db_path_(db_path + std::to_string(db_index_) + '/') {}
+
+rocksdb::Status DB::Open() {
   storage::StorageOptions storage_options;
   storage_options.options = g_config.GetRocksDBOptions();
   storage_options.db_instance_num = g_config.db_instance_num.load();
@@ -42,6 +44,7 @@ DB::DB(int db_index, const std::string& db_path)
 
   opened_ = true;
   INFO("Open DB{} success!", db_index_);
+  return rocksdb::Status::OK();
 }
 
 void DB::CreateCheckpoint(const std::string& checkpoint_path, bool sync) {
