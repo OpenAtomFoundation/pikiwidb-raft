@@ -66,8 +66,8 @@ bool PikiwiDB::ParseArgs(int ac, char* av[]) {
       std::cerr << "PikiwiDB Server version: " << KPIKIWIDB_VERSION << " bits=" << (sizeof(void*) == 8 ? 64 : 32)
                 << std::endl;
       std::cerr << "PikiwiDB Server Build Type: " << KPIKIWIDB_BUILD_TYPE << std::endl;
-      std::cerr << "PikiwiDB Server Build Date: " << KPIKIWIDB_BUILD_DATE << std::endl;
-      std::cerr << "PikiwiDB Server Build GIT SHA: " << KPIKIWIDB_GIT_COMMIT_ID << std::endl;
+      //      std::cerr << "PikiwiDB Server Build Date: " << KPIKIWIDB_BUILD_DATE << std::endl;
+      //      std::cerr << "PikiwiDB Server Build GIT SHA: " << KPIKIWIDB_GIT_COMMIT_ID << std::endl;
 
       exit(0);
     } else if (strncasecmp(av[i], "-h", 2) == 0 || strncasecmp(av[i], "--help", 6) == 0) {
@@ -122,14 +122,14 @@ void PikiwiDB::OnNewConnection(pikiwidb::TcpConnection* obj) {
 bool PikiwiDB::Init() {
   char runid[kRunidSize + 1] = "";
   getRandomHexChars(runid, kRunidSize);
-  g_config.Set("runid", {runid, kRunidSize}, true);
+  g_config.Set("runid", {runid, kRunidSize}, true /* is_init_stage */);
 
   if (port_ != 0) {
-    g_config.Set("port", std::to_string(port_), true);
+    g_config.Set("port", std::to_string(port_), true /* is_init_stage */);
   }
 
   if (!log_level_.empty()) {
-    g_config.Set("log-level", log_level_, true);
+    g_config.Set("log-level", log_level_, true /* is_init_stage */);
   }
 
   NewTcpConnectionCallback cb = std::bind(&PikiwiDB::OnNewConnection, this, std::placeholders::_1);
@@ -176,7 +176,6 @@ bool PikiwiDB::Init() {
 void PikiwiDB::Run() {
   worker_threads_.SetName("pikiwi-main");
   slave_threads_.SetName("pikiwi-slave");
-
   cmd_threads_.Start();
 
   std::thread t([this]() {
@@ -194,12 +193,14 @@ void PikiwiDB::Run() {
 }
 
 void PikiwiDB::Stop() {
-  pikiwidb::PRAFT.ShutDown();
-  pikiwidb::PRAFT.Join();
-  pikiwidb::PRAFT.Clear();
   slave_threads_.Exit();
   worker_threads_.Exit();
   cmd_threads_.Stop();
+  if (g_config.use_raft.load(std::memory_order_relaxed)) {
+    pikiwidb::PRAFT.ShutDown();
+    pikiwidb::PRAFT.Join();
+    pikiwidb::PRAFT.Clear();
+  }
 }
 
 // pikiwidb::CmdTableManager& PikiwiDB::GetCmdTableManager() { return cmd_table_manager_; }
@@ -248,8 +249,9 @@ int main(int ac, char* av[]) {
 
   // output logo to console
   char logo[512] = "";
-  snprintf(logo, sizeof logo - 1, pikiwidbLogo, KPIKIWIDB_VERSION, static_cast<int>(sizeof(void*)) * 8,
-           static_cast<int>(g_config.port));
+  snprintf(
+      logo, sizeof logo - 1, pikiwidbLogo, KPIKIWIDB_VERSION, static_cast<int>(sizeof(void*)) * 8,
+      static_cast<int>((g_pikiwidb->port_ == 0) ? g_config.port.load(std::memory_order_relaxed) : g_pikiwidb->port_));
   std::cout << logo;
 
   if (g_config.daemonize.load()) {

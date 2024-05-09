@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <future>
+#include <iterator>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -33,6 +34,48 @@
 namespace storage {
 extern std::string BitOpOperate(BitOpType op, const std::vector<std::string>& src_values, int64_t max_len);
 class Redis;
+
+rocksdb::Status storage::PointPairOfRocksDB::Init() {
+  assert(db_);
+  for (int i = 0; i < cf_.size(); i++) {
+    rocksdb::TablePropertiesCollection collection;
+    auto s = db_->GetDB()->GetPropertiesOfAllTables(db_->GetColumnFamilyHandles()[i], &collection);
+    if (!s.ok()) {
+      return s;
+    }
+    auto res = LogIndexTablePropertiesCollector::GetLargestLogIndexFromTableCollection(collection);
+    if (res.has_value()) {
+      auto log_index = res->GetAppliedLogIndex();
+      auto sequence_number = res->GetSequenceNumber();
+      cf_[i].apply_point.SetLogIndexSeqnoPair(log_index, sequence_number);
+      cf_[i].flush_point.SetLogIndexSeqnoPair(log_index, sequence_number);
+      persisted_watermark_.SetMaxLogIndexSeqnoPair(log_index, sequence_number);
+    }
+  }
+  return Status::OK();
+}
+
+PointPairOfRocksDB::CurrentSmallestPoint PointPairOfRocksDB::GetCurrentSmallestPoint(int current_flush_cf) const {
+  CurrentSmallestPoint res;
+  for (int i = 0; i < cf_.size(); i++) {
+    if (i != current_flush_cf && cf_[i].IsEmpty()) {
+      continue;
+    }
+    auto applied_log_index = cf_[i].apply_point.GetLogIndex();
+    auto flushed_log_index = cf_[i].flush_point.GetLogIndex();
+    auto flushed_seqno = cf_[i].flush_point.GetSequenceNumber();
+    if (applied_log_index < res.smallest_applied_log_index) {
+      res.smallest_applied_log_index = applied_log_index;
+      res.smallest_applied_log_index_cf = i;
+    }
+    if (flushed_log_index < res.smallest_flushed_log_index) {
+      res.smallest_flushed_log_index = flushed_log_index;
+      res.smallest_flushed_seqno = flushed_seqno;
+      res.smallest_flushed_log_index_cf = i;
+    }
+  }
+  return res;
+}
 
 Status StorageOptions::ResetOptions(const OptionType& option_type,
                                     const std::unordered_map<std::string, std::string>& options_map) {
@@ -129,13 +172,24 @@ static int RecursiveLinkAndCopy(const std::filesystem::path& source, const std::
 Status Storage::Open(const StorageOptions& storage_options, const std::string& db_path) {
   mkpath(db_path.c_str(), 0755);
   db_instance_num_ = storage_options.db_instance_num;
-  // Temporarily set to 100000
-  LogIndexAndSequenceCollector::max_gap_.store(storage_options.max_gap);
-  storage_options.options.write_buffer_manager =
-      std::make_shared<rocksdb::WriteBufferManager>(storage_options.mem_manager_size);
-  for (size_t index = 0; index < db_instance_num_; index++) {
+  raft_mode_ = storage_options.raft_mode;
+  insts_.clear();
+  for (size_t index = 0; index < db_instance_num_; ++index) {
     insts_.emplace_back(std::make_unique<Redis>(this, index));
-    Status s = insts_.back()->Open(storage_options, AppendSubDirectory(db_path, index));
+  }
+  if (raft_mode_) {
+    std::printf("raft mode\n");
+    points_.clear();
+    for (size_t index = 0; index < db_instance_num_; ++index) {
+      points_.emplace_back(std::make_unique<PointPairOfRocksDB>(insts_[index].get()));
+      insts_[index]->SetPointPairOfRocksDB(points_.back().get());
+    }
+    LogIndexAndSequenceCollector::max_gap = storage_options.max_gap;
+    assert(points_.size() == insts_.size());
+  }
+
+  for (size_t index = 0; index < db_instance_num_; ++index) {
+    Status s = insts_[index]->Open(storage_options, AppendSubDirectory(db_path, index));
     if (!s.ok()) {
       ERROR("open RocksDB{} failed {}", index, s.ToString());
       return Status::IOError();
@@ -261,6 +315,25 @@ Status Storage::LoadCheckpointInternal(const std::string& checkpoint_sub_path, c
     WARN("Failure to destroy the old DB, path = {}", tmp_rocksdb_path);
   }
   return Status::OK();
+}
+
+std::vector<std::future<Status>> Storage::FlushAll() {
+  INFO("DB{} begin to flush and truncate log", db_id_);
+  std::vector<std::future<Status>> result;
+  result.reserve(db_instance_num_);
+  for (int i = 0; i < db_instance_num_; ++i) {
+    // In a new thread, Load a checkpoint for the specified rocksdb i
+    auto res = std::async(std::launch::async, &Storage::FlushAllInternal, this, i);
+    result.push_back(std::move(res));
+  }
+  return result;
+}
+
+Status Storage::FlushAllInternal(int index) {
+  auto& db_wrapper = insts_[index];
+  auto s = db_wrapper->GetDB()->Flush(rocksdb::FlushOptions(), db_wrapper->GetColumnFamilyHandles());
+  // wait until flush finish.
+  return s;
 }
 
 Status Storage::LoadCursorStartKey(const DataType& dtype, int64_t cursor, char* type, std::string* start_key) {
@@ -2406,6 +2479,22 @@ Status Storage::OnBinlogWrite(const pikiwidb::Binlog& log, LogIndex log_idx) {
   }
   inst->UpdateLogIndex(log_idx, first_seqno);
   return s;
+}
+
+LogIndex Storage::GetTruncateIndex() {
+  for (auto& p : points_) {
+    if (p->IsEmpty()) {
+      continue;
+    }
+
+    auto logindex = p->GetPersistedWatermark().GetLogIndex();
+    if (last_truncate_point_ == 0) {
+      last_truncate_point_.store(logindex);
+    } else {
+      last_truncate_point_ = std::min(last_truncate_point_.load(), logindex);
+    }
+  }
+  return last_truncate_point_;
 }
 
 }  //  namespace storage

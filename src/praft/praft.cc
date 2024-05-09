@@ -164,7 +164,21 @@ butil::Status PRaft::Init(std::string& group_id, bool initial_conf_is_null) {
     node_.reset();
     return ERROR_LOG_AND_STATUS("Failed to init raft node");
   }
+  auto res = std::async(
+      std::launch::async,
+      [this](std::chrono::minutes interval) {
+        while (true) {
+          std::this_thread::sleep_for(interval);
+          if (!this->server_->IsRunning()) {
+            return;
+          }
+          auto log_index = PSTORE.GetBackend(0)->GetStorage()->GetTruncateIndex();
+          TruncateLog(log_index);
+        }
+      },
+      std::chrono::minutes(30));
 
+  (void)res;
   return {0, "OK"};
 }
 
@@ -379,7 +393,6 @@ void PRaft::LeaderRedirection(PClient* join_client, const std::string& reply) {
   }
   PRAFT.GetClusterCmdCtx().ConnectTargetNode();
 
-  // Not reply any message here, we will reply after the connection is established.
   join_client->Clear();
 }
 
@@ -517,7 +530,7 @@ butil::Status PRaft::RemovePeer(const std::string& peer) {
   return {0, "OK"};
 }
 
-butil::Status PRaft::DoSnapshot(int64_t self_snapshot_index, bool is_sync) {
+butil::Status PRaft::TruncateLog(int64_t self_snapshot_index, bool is_sync) {
   if (!node_) {
     return ERROR_LOG_AND_STATUS("Node is not initialized");
   }

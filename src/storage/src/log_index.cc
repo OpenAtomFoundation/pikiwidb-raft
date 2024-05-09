@@ -12,65 +12,11 @@
 #include <set>
 
 #include "redis.h"
+#include "storage/storage.h"
 
 namespace storage {
 
-rocksdb::Status storage::LogIndexOfColumnFamilies::Init(Redis *db) {
-  for (int i = 0; i < cf_.size(); i++) {
-    rocksdb::TablePropertiesCollection collection;
-    auto s = db->GetDB()->GetPropertiesOfAllTables(db->GetColumnFamilyHandles()[i], &collection);
-    if (!s.ok()) {
-      return s;
-    }
-    auto res = LogIndexTablePropertiesCollector::GetLargestLogIndexFromTableCollection(collection);
-    if (res.has_value()) {
-      auto log_index = res->GetAppliedLogIndex();
-      auto sequence_number = res->GetSequenceNumber();
-      cf_[i].applied_index.SetLogIndexSeqnoPair(log_index, sequence_number);
-      cf_[i].flushed_index.SetLogIndexSeqnoPair(log_index, sequence_number);
-    }
-  }
-  return Status::OK();
-}
-
-LogIndexOfColumnFamilies::SmallestIndexRes LogIndexOfColumnFamilies::GetSmallestLogIndex(int flush_cf) const {
-  SmallestIndexRes res;
-  for (int i = 0; i < cf_.size(); i++) {
-    if (i != flush_cf && cf_[i].flushed_index >= cf_[i].applied_index) {
-      continue;
-    }
-    auto applied_log_index = cf_[i].applied_index.GetLogIndex();
-    auto flushed_log_index = cf_[i].flushed_index.GetLogIndex();
-    auto flushed_seqno = cf_[i].flushed_index.GetSequenceNumber();
-    if (applied_log_index < res.smallest_applied_log_index) {
-      res.smallest_applied_log_index = applied_log_index;
-      res.smallest_applied_log_index_cf = i;
-    }
-    if (flushed_log_index < res.smallest_flushed_log_index) {
-      res.smallest_flushed_log_index = flushed_log_index;
-      res.smallest_flushed_seqno = flushed_seqno;
-      res.smallest_flushed_log_index_cf = i;
-    }
-  }
-  return res;
-}
-
-size_t LogIndexOfColumnFamilies::GetPendingFlushGap() const {
-  std::set<int> s;
-  for (int i = 0; i < kColumnFamilyNum; i++) {
-    s.insert(cf_[i].applied_index.GetLogIndex());
-    s.insert(cf_[i].flushed_index.GetLogIndex());
-  }
-  assert(!s.empty());
-  if (s.size() == 1) {
-    return false;
-  }
-  auto iter_first = s.begin();
-  auto iter_last = s.end();
-  return *std::prev(iter_last) - *iter_first;
-};
-
-std::atomic_int64_t LogIndexAndSequenceCollector::max_gap_ = 1000;
+std::atomic_int64_t LogIndexAndSequenceCollector::max_gap = 40000;
 
 std::optional<LogIndexAndSequencePair> storage::LogIndexTablePropertiesCollector::ReadStatsFromTableProps(
     const std::shared_ptr<const rocksdb::TableProperties> &table_props) {
@@ -154,20 +100,16 @@ auto LogIndexTablePropertiesCollector::GetLargestLogIndexFromTableCollection(
 
 void LogIndexAndSequenceCollectorPurger::OnFlushCompleted(rocksdb::DB *db,
                                                           const rocksdb::FlushJobInfo &flush_job_info) {
-  cf_->SetFlushedLogIndex(flush_job_info.cf_id, collector_->FindAppliedLogIndex(flush_job_info.largest_seqno),
-                          flush_job_info.largest_seqno);
+  cf_->SetFlushPoint(flush_job_info.cf_id, collector_->FindAppliedLogIndex(flush_job_info.largest_seqno),
+                     flush_job_info.largest_seqno);
 
   auto [smallest_applied_log_index_cf, smallest_applied_log_index, smallest_flushed_log_index_cf,
-        smallest_flushed_log_index, smallest_flushed_seqno] = cf_->GetSmallestLogIndex(flush_job_info.cf_id);
+        smallest_flushed_log_index, smallest_flushed_seqno] = cf_->GetCurrentSmallestPoint(flush_job_info.cf_id);
   collector_->Purge(smallest_applied_log_index);
 
   if (smallest_flushed_log_index_cf != -1) {
-    cf_->SetFlushedLogIndexGlobal(smallest_flushed_log_index, smallest_flushed_seqno);
-  }
-  auto count = count_.fetch_add(1);
-
-  if (count % 10 == 0) {
-    callback_(smallest_flushed_log_index, false);
+    assert(cf_);
+    cf_->UpdataPersistedWatermark(smallest_flushed_log_index, smallest_flushed_seqno);
   }
 
   if (flush_job_info.cf_id == manul_flushing_cf_.load()) {
@@ -188,6 +130,7 @@ void LogIndexAndSequenceCollectorPurger::OnFlushCompleted(rocksdb::DB *db,
   assert(manul_flushing_cf_.load() == smallest_flushed_log_index_cf);
   rocksdb::FlushOptions flush_option;
   flush_option.wait = false;
+  std::printf("1");
   db->Flush(flush_option, column_families_->at(smallest_flushed_log_index_cf));
 }
 

@@ -122,7 +122,8 @@ void RaftNodeCmd::DoCmdRemove(PClient* client) {
 }
 
 void RaftNodeCmd::DoCmdSnapshot(PClient* client) {
-  auto s = PRAFT.DoSnapshot();
+  auto index = PSTORE.GetBackend(0)->GetStorage()->GetTruncateIndex();
+  auto s = PRAFT.TruncateLog(index);
   if (s.ok()) {
     client->SetRes(CmdRes::kOK);
   }

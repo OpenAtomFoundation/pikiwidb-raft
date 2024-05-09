@@ -11,6 +11,8 @@
 #include "praft/praft.h"
 #include "pstd/log.h"
 
+#include "storage/src/log_index.h"
+
 extern pikiwidb::PConfig g_config;
 
 namespace pikiwidb {
@@ -20,26 +22,28 @@ DB::DB(int db_index, const std::string& db_path)
 
 rocksdb::Status DB::Open() {
   storage::StorageOptions storage_options;
-  storage_options.options = g_config.GetRocksDBOptions();
-  storage_options.table_options = g_config.GetRocksDBBlockBasedTableOptions();
 
+  storage_options.options = g_config.GetRocksDBOptions();
+  storage_options.options.write_buffer_manager =
+      std::make_shared<rocksdb::WriteBufferManager>(storage_options.mem_manager_size);
   storage_options.options.ttl = g_config.rocksdb_ttl_second.load(std::memory_order_relaxed);
   storage_options.options.periodic_compaction_seconds =
       g_config.rocksdb_periodic_second.load(std::memory_order_relaxed);
 
+  storage_options.table_options = g_config.GetRocksDBBlockBasedTableOptions();
+
   storage_options.small_compaction_threshold = g_config.small_compaction_threshold.load();
   storage_options.small_compaction_duration_threshold = g_config.small_compaction_duration_threshold.load();
 
-  if (g_config.use_raft.load(std::memory_order_relaxed)) {
+  storage_options.db_instance_num = g_config.db_instance_num.load();
+  storage_options.db_id = db_index_;
+
+  storage_options.raft_mode = g_config.use_raft.load(std::memory_order_acquire);
+  if (storage_options.raft_mode) {
     storage_options.append_log_function = [&r = PRAFT](const Binlog& log, std::promise<rocksdb::Status>&& promise) {
       r.AppendLog(log, std::move(promise));
     };
-    storage_options.do_snapshot_function =
-        std::bind(&pikiwidb::PRaft::DoSnapshot, &pikiwidb::PRAFT, std::placeholders::_1, std::placeholders::_2);
   }
-
-  storage_options.db_instance_num = g_config.db_instance_num.load();
-  storage_options.db_id = db_index_;
 
   storage_ = std::make_unique<storage::Storage>();
 
@@ -103,8 +107,6 @@ void DB::LoadDBFromCheckpoint(const std::string& checkpoint_path, bool sync [[ma
     storage_options.append_log_function = [&r = PRAFT](const Binlog& log, std::promise<rocksdb::Status>&& promise) {
       r.AppendLog(log, std::move(promise));
     };
-    storage_options.do_snapshot_function =
-        std::bind(&pikiwidb::PRaft::DoSnapshot, &pikiwidb::PRAFT, std::placeholders::_1, std::placeholders::_2);
   }
   storage_ = std::make_unique<storage::Storage>();
 
@@ -116,4 +118,5 @@ void DB::LoadDBFromCheckpoint(const std::string& checkpoint_path, bool sync [[ma
   opened_ = true;
   INFO("DB{} load a checkpoint from {} success!", db_index_, checkpoint_path);
 }
+
 }  // namespace pikiwidb

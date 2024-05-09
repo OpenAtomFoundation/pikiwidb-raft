@@ -60,6 +60,7 @@ Redis::~Redis() {
 }
 
 Status Redis::Open(const StorageOptions& storage_options, const std::string& db_path) {
+  is_raft_mode_ = storage_options.raft_mode;
   append_log_function_ = storage_options.append_log_function;
   raft_timeout_s_ = storage_options.raft_timeout_s;
   statistics_store_->SetCapacity(storage_options.statistics_max_size);
@@ -146,7 +147,8 @@ Status Redis::Open(const StorageOptions& storage_options, const std::string& db_
   zset_data_cf_ops.table_factory.reset(rocksdb::NewBlockBasedTableFactory(zset_data_cf_table_ops));
   zset_score_cf_ops.table_factory.reset(rocksdb::NewBlockBasedTableFactory(zset_score_cf_table_ops));
 
-  if (append_log_function_) {
+  if (is_raft_mode_) {
+    assert(append_log_function_);
     // Add log index table property collector factory to each column family
     ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(string);
     ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(hash_meta);
@@ -160,8 +162,9 @@ Status Redis::Open(const StorageOptions& storage_options, const std::string& db_
     ADD_TABLE_PROPERTY_COLLECTOR_FACTORY(zset_score);
 
     // Add a listener on flush to purge log index collector
-    db_ops.listeners.push_back(std::make_shared<LogIndexAndSequenceCollectorPurger>(
-        &handles_, &log_index_collector_, &log_index_of_all_cfs_, storage_options.do_snapshot_function));
+    assert(point_pair_of_all_cfs_);
+    db_ops.listeners.push_back(
+        std::make_shared<LogIndexAndSequenceCollectorPurger>(&handles_, &log_index_collector_, point_pair_of_all_cfs_));
   }
 
   std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
@@ -185,7 +188,11 @@ Status Redis::Open(const StorageOptions& storage_options, const std::string& db_
     return s;
   }
   assert(!handles_.empty());
-  return log_index_of_all_cfs_.Init(this);
+  assert(!is_raft_mode_ || point_pair_of_all_cfs_);
+  if (!is_raft_mode_) {
+    return s;
+  }
+  return point_pair_of_all_cfs_->Init();
 }
 
 Status Redis::GetScanStartPoint(const DataType& type, const Slice& key, const Slice& pattern, int64_t cursor,

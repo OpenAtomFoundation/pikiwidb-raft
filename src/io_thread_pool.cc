@@ -220,7 +220,6 @@ void WorkIOThreadPool::StartWorkers() {
 
 void WorkIOThreadPool::Exit() {
   IOThreadPool::Exit();
-
   writeRunning_ = false;
   int i = 0;
   for (auto& cond : writeCond_) {

@@ -28,6 +28,7 @@
 #include "pstd/env.h"
 #include "pstd/pstd_mutex.h"
 #include "storage/slot_indexer.h"
+#include "storage/storage_define.h"
 
 namespace pikiwidb {
 class Binlog;
@@ -53,9 +54,11 @@ using BlockBasedTableOptions = rocksdb::BlockBasedTableOptions;
 using Status = rocksdb::Status;
 using Slice = rocksdb::Slice;
 using Env = rocksdb::Env;
+using SequenceNumber = rocksdb::SequenceNumber;
 using LogIndex = int64_t;
 
 class Redis;
+class PointPairOfRocksDB;
 enum class OptionType;
 
 template <typename T1, typename T2>
@@ -74,12 +77,12 @@ struct StorageOptions {
   size_t small_compaction_duration_threshold = 10000;
   size_t db_instance_num = 3;  // default = 3
   int db_id = 0;
-  AppendLogFunction append_log_function = nullptr;
-  DoSnapshotFunction do_snapshot_function = nullptr;
-
-  uint32_t raft_timeout_s = std::numeric_limits<uint32_t>::max();
-  int64_t max_gap = 1000;
   uint64_t mem_manager_size = 100000000;
+
+  bool raft_mode = false;
+  AppendLogFunction append_log_function = nullptr;
+  uint32_t raft_timeout_s = std::numeric_limits<uint32_t>::max();
+  int64_t max_gap = 40000;
   Status ResetOptions(const OptionType& option_type, const std::unordered_map<std::string, std::string>& options_map);
 };
 
@@ -179,6 +182,155 @@ struct BGTask {
       : type(_type), operation(_opeation), argv(_argv) {}
 };
 
+struct LogIndexSeqnoPair {
+  std::atomic<LogIndex> log_index = 0;
+  std::atomic<SequenceNumber> seqno = 0;
+
+  LogIndex GetLogIndex() const { return log_index.load(std::memory_order_relaxed); }
+
+  SequenceNumber GetSequenceNumber() const { return seqno.load(std::memory_order_relaxed); }
+
+  void SetLogIndexSeqnoPair(LogIndex l, SequenceNumber s) {
+    log_index.store(l, std::memory_order_relaxed);
+    seqno.store(s, std::memory_order_relaxed);
+  }
+
+  void SetMaxLogIndexSeqnoPair(LogIndex l, SequenceNumber s) {
+    log_index.store(std::max(log_index.load(), l));
+    seqno.store(std::max(seqno.load(), s));
+  }
+
+  LogIndexSeqnoPair() = default;
+
+  bool operator==(const LogIndexSeqnoPair& other) const {
+    return seqno.load(std::memory_order_relaxed) == other.seqno.load(std::memory_order_relaxed);
+  }
+
+  bool operator<=(const LogIndexSeqnoPair& other) const {
+    return seqno.load(std::memory_order_relaxed) <= other.seqno.load(std::memory_order_relaxed);
+  }
+
+  bool operator>=(const LogIndexSeqnoPair& other) const {
+    return seqno.load(std::memory_order_relaxed) >= other.seqno.load(std::memory_order_relaxed);
+  }
+
+  bool operator<(const LogIndexSeqnoPair& other) const {
+    return seqno.load(std::memory_order_relaxed) < other.seqno.load(std::memory_order_relaxed);
+  }
+};
+
+struct PointPair {
+  LogIndexSeqnoPair apply_point;  // The location of the latest entry written to the memtable in the braft log.
+  LogIndexSeqnoPair flush_point;  // The location of the latest persisted entry in the braft log.
+
+  bool IsEmpty() const { return flush_point >= apply_point; }
+};
+
+class PointPairOfRocksDB {
+  struct CurrentSmallestPoint {
+    int smallest_applied_log_index_cf = -1;
+    LogIndex smallest_applied_log_index = std::numeric_limits<LogIndex>::max();
+
+    int smallest_flushed_log_index_cf = -1;
+    LogIndex smallest_flushed_log_index = std::numeric_limits<LogIndex>::max();
+    SequenceNumber smallest_flushed_seqno = std::numeric_limits<SequenceNumber>::max();
+  };
+
+ public:
+  PointPairOfRocksDB() = default;
+
+  PointPairOfRocksDB(Redis* db) : db_(db) {}
+  // Read the largest log index of each column family from all sst files
+  rocksdb::Status Init();
+
+  // Find the smallest persisted data location and the smallest written
+  // data location among all column families, while skipping column families
+  // that have no unpersisted data.
+  CurrentSmallestPoint GetCurrentSmallestPoint(int current_flush_cf) const;
+
+  void SetFlushPoint(size_t cf_id, LogIndex log_index, SequenceNumber seqno) {
+    cf_[cf_id].flush_point.SetMaxLogIndexSeqnoPair(log_index, seqno);
+  }
+
+  void UpdataPersistedWatermark(LogIndex log_index, SequenceNumber seqno) {
+    // When the watermark is update, pull up the persistence data points of all Column Families that
+    // are below the watermark.
+    // This is to prevent the position of the persisted data from shrinking when a Column Family that
+    // hasn't been written to for a long time is written to again.
+    SetPersistedWatermark(log_index, seqno);
+    for (int i = 0; i < kColumnFamilyNum; i++) {
+      if (cf_[i].flush_point <= persisted_watermark_) {
+        auto flush_log_index = std::max(cf_[i].flush_point.GetLogIndex(), persisted_watermark_.GetLogIndex());
+        auto flush_sequence_number =
+            std::max(cf_[i].flush_point.GetSequenceNumber(), persisted_watermark_.GetSequenceNumber());
+        cf_[i].flush_point.SetLogIndexSeqnoPair(flush_log_index, flush_sequence_number);
+      }
+    }
+  }
+
+  bool IsApplied(size_t cf_id, LogIndex cur_log_index) const {
+    return cur_log_index < cf_[cf_id].apply_point.GetLogIndex();
+  }
+
+  void Update(size_t cf_id, LogIndex cur_log_index, SequenceNumber cur_seqno) {
+    if (cf_[cf_id].flush_point <= persisted_watermark_ && cf_[cf_id].flush_point == cf_[cf_id].apply_point) {
+      auto flush_log_index = std::max(cf_[cf_id].flush_point.GetLogIndex(), persisted_watermark_.GetLogIndex());
+      auto flush_sequence_number =
+          std::max(cf_[cf_id].flush_point.GetSequenceNumber(), persisted_watermark_.GetSequenceNumber());
+      cf_[cf_id].flush_point.SetLogIndexSeqnoPair(flush_log_index, flush_sequence_number);
+    }
+
+    cf_[cf_id].apply_point.SetLogIndexSeqnoPair(cur_log_index, cur_seqno);
+  }
+
+  void SetPersistedWatermark(LogIndex flushed_logindex, SequenceNumber flushed_seqno) {
+    auto persisted_watermark_log_index = std::max(persisted_watermark_.GetLogIndex(), flushed_logindex);
+    auto persisted_watermark_sequence_number = std::max(persisted_watermark_.GetSequenceNumber(), flushed_seqno);
+    persisted_watermark_.SetLogIndexSeqnoPair(persisted_watermark_log_index, persisted_watermark_sequence_number);
+  }
+
+  bool IsEmpty() const {
+    bool res = true;
+    for (auto& cf : cf_) {
+      if (!cf.IsEmpty()) {
+        res = false;
+        break;
+      }
+    }
+    return res;
+  }
+
+ public:
+  // for gtest
+  LogIndexSeqnoPair& GetPersistedWatermark() { return persisted_watermark_; }
+
+  PointPair& GetPointPair(size_t cf) { return cf_[cf]; }
+
+ private:
+  // Maintain two positions for each Column Family.One position indicates the maximum location of the data
+  // that has already been persisted for the Column Family, and the other position indicates the maximum
+  // location of the data that has been written to the Column Family.
+  //
+  // for example:
+  // logindex  1           3                           8
+  //                                                   |
+  //                                        cf0_applied/flushed_point
+  // logindex         2           4               7          9    ...   15
+  //                  |                                                 |
+  //            cf1_flush_point                                  cf1_applied_point
+  // logindex        /\                 5     6           ...                16
+  //                 |                        |                              |
+  //                 |                  cf2_flush_point                cf2_applied_point
+  //                 |
+  //          persisted_watermark
+  std::array<PointPair, kColumnFamilyNum> cf_;
+  // Maintain a watermark for each RocksDB instance, ensuring that all data below this line has been persisted.
+  // when Column Family's flush operation completes, this value is calculated and updated.
+  //
+  LogIndexSeqnoPair persisted_watermark_;
+  Redis* db_;
+};
+
 class Storage {
  public:
   Storage();
@@ -193,6 +345,10 @@ class Storage {
   std::vector<std::future<Status>> LoadCheckpoint(const std::string& checkpoint_path, const std::string& db_path);
 
   Status LoadCheckpointInternal(const std::string& dump_path, const std::string& db_path, int index);
+
+  std::vector<std::future<Status>> FlushAll();
+
+  Status FlushAllInternal(int index);
 
   Status LoadCursorStartKey(const DataType& dtype, int64_t cursor, char* type, std::string* start_key);
 
@@ -1108,10 +1264,15 @@ class Storage {
 
   Status SetOptions(const OptionType& option_type, const std::unordered_map<std::string, std::string>& options);
   void GetRocksDBInfo(std::string& info);
+
+  // raft
   Status OnBinlogWrite(const pikiwidb::Binlog& log, LogIndex log_idx);
+
+  LogIndex GetTruncateIndex();
 
  private:
   std::vector<std::unique_ptr<Redis>> insts_;
+  std::vector<std::unique_ptr<PointPairOfRocksDB>> points_;
   std::unique_ptr<SlotIndexer> slot_indexer_;
   std::atomic<bool> is_opened_ = false;
 
@@ -1130,6 +1291,10 @@ class Storage {
   std::atomic<bool> scan_keynum_exit_ = false;
   size_t db_instance_num_ = 3;
   int db_id_ = 0;
+
+  // For raft
+  bool raft_mode_ = false;
+  std::atomic<LogIndex> last_truncate_point_ = 0;
 };
 
 }  //  namespace storage
