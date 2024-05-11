@@ -27,8 +27,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build
-        env:
-          CPLUS_INCLUDE_PATH: /opt/homebrew/include
         run: |
           brew install autoconf
           brew install go
