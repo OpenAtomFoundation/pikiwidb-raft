@@ -37,19 +37,7 @@ struct TimeStat {
     process_done_ts_ = 0;
   }
 
-  // uint64_t start_ts() const {
-  //   return enqueue_ts_;
-  // }
-
   uint64_t total_time() const { return process_done_ts_ > enqueue_ts_ ? process_done_ts_ - enqueue_ts_ : 0; }
-
-  // uint64_t queue_time() const {
-  //   return dequeue_ts_ > enqueue_ts_ ? dequeue_ts_ - enqueue_ts_ : 0;
-  // }
-
-  // uint64_t process_time() const {
-  //   return process_done_ts_ > dequeue_ts_ ? process_done_ts_ - dequeue_ts_ : 0;
-  // }
 
   uint64_t enqueue_ts_;
   uint64_t dequeue_ts_;
