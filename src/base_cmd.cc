@@ -7,8 +7,10 @@
 
 #include "base_cmd.h"
 #include "common.h"
+#include "config.h"
 #include "log.h"
 #include "pikiwidb.h"
+#include "praft/praft.h"
 
 namespace pikiwidb {
 
@@ -31,6 +33,11 @@ std::vector<std::string> BaseCmd::CurrentKey(PClient* client) const { return std
 
 void BaseCmd::Execute(PClient* client) {
   DEBUG("execute command: {}", client->CmdName());
+
+  if (!IsAllowedPreRaftInit(client->CmdName())) {
+    DEBUG("drop command: {}", client->CmdName());
+    return client->SetRes(CmdRes::kErrOther, "NOCLUSTER No Raft Cluster");
+  }
 
   auto dbIndex = client->GetCurrentDB();
   if (!HasFlag(kCmdFlagsExclusive)) {
@@ -65,6 +72,16 @@ std::string BaseCmd::Name() const { return name_; }
 // void BaseCommand::SetResp(const std::shared_ptr<std::string>& resp) { resp_ = resp; }
 // std::shared_ptr<std::string> BaseCommand::GetResp() { return resp_.lock(); }
 uint32_t BaseCmd::GetCmdID() const { return cmd_id_; }
+
+bool BaseCmd::IsAllowedPreRaftInit(const std::string& cmd_name) const {
+  // Allow all commands if Raft is not used or if Raft is initialized
+  if (!g_config.use_raft.load() || PRAFT.IsInitialized()) {
+    return true;
+  }
+
+  // Allow only specific commands if Raft is used but not initialized
+  return kPreRaftInitCmds.count(cmd_name) != 0;
+}
 
 // BaseCmdGroup
 BaseCmdGroup::BaseCmdGroup(const std::string& name, uint32_t flag) : BaseCmdGroup(name, -2, flag) {}
