@@ -74,13 +74,8 @@ std::string BaseCmd::Name() const { return name_; }
 uint32_t BaseCmd::GetCmdID() const { return cmd_id_; }
 
 bool BaseCmd::IsAllowedPreRaftInit(const std::string& cmd_name) const {
-  // Allow all commands if Raft is not used or if Raft is initialized
-  if (!g_config.use_raft.load() || PRAFT.IsInitialized()) {
-    return true;
-  }
-
-  // Allow only specific commands if Raft is used but not initialized
-  return kPreRaftInitCmds.count(cmd_name) != 0;
+  // Allow only specific commands if Raft is not initialized
+  return PRAFT.IsInitialized() || kPreRaftInitCmds.count(cmd_name) != 0;
 }
 
 // BaseCmdGroup
