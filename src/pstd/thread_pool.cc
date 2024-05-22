@@ -12,7 +12,7 @@ namespace pstd {
 thread_local bool ThreadPool::working_ = true;
 
 ThreadPool::ThreadPool() : waiters_(0), shutdown_(false) {
-  monitor_ = std::thread([this]() { this->_MonitorRoutine(); });
+  monitor_ = std::thread([this]() { this->MonitorRoutine(); });
   maxIdleThread_ = std::max(1U, std::thread::hardware_concurrency());
   pendingStopSignal_ = 0;
 }
@@ -52,12 +52,12 @@ void ThreadPool::JoinAll() {
   }
 }
 
-void ThreadPool::_CreateWorker() {
-  std::thread t([this]() { this->_WorkerRoutine(); });
+void ThreadPool::CreateWorker() {
+  std::thread t([this]() { this->WorkerRoutine(); });
   worker_threads_.push_back(std::move(t));
 }
 
-void ThreadPool::_WorkerRoutine() {
+void ThreadPool::WorkerRoutine() {
   working_ = true;
 
   while (working_) {
@@ -85,7 +85,7 @@ void ThreadPool::_WorkerRoutine() {
   --pendingStopSignal_;
 }
 
-void ThreadPool::_MonitorRoutine() {
+void ThreadPool::MonitorRoutine() {
   while (!shutdown_) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
 
@@ -100,7 +100,7 @@ void ThreadPool::_MonitorRoutine() {
     nw -= pendingStopSignal_;
 
     while (nw-- > maxIdleThread_) {
-      tasks_.push_back([this]() { working_ = false; });
+      tasks_.emplace_back([this]() { working_ = false; });
       cond_.notify_one();
       ++pendingStopSignal_;
     }

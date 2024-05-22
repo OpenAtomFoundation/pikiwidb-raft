@@ -8,9 +8,8 @@
 #include "cmd_table_manager.h"
 #include "cmd_thread_pool.h"
 #include "common.h"
-#include "event_loop.h"
 #include "io_thread_pool.h"
-#include "tcp_connection.h"
+#include "net/tcp_connection.h"
 
 #define KPIKIWIDB_VERSION "4.0.0"
 
@@ -19,6 +18,10 @@
 #else
 #  define KPIKIWIDB_BUILD_TYPE "RELEASE"
 #endif
+
+namespace pikiwidb {
+class PRaft;
+}  // namespace pikiwidb
 
 class PikiwiDB final {
  public:

@@ -13,9 +13,7 @@
 #include "mutex.h"
 #include "noncopyable.h"
 
-namespace pstd {
-
-namespace lock {
+namespace pstd::lock {
 struct LockMap;
 struct LockMapStripe;
 
@@ -52,5 +50,4 @@ class LockMgr : public pstd::noncopyable {
   void UnLockKey(const std::string& key, const std::shared_ptr<LockMapStripe>& stripe);
 };
 
-}  //  namespace lock
-}  //  namespace pstd
+}  // namespace pstd::lock

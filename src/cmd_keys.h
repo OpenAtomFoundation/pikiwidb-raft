@@ -132,4 +132,26 @@ class PttlCmd : public BaseCmd {
   void DoCmd(PClient* client) override;
 };
 
+class RenameCmd : public BaseCmd {
+ public:
+  RenameCmd(const std::string& name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient* client) override;
+
+ private:
+  void DoCmd(PClient* client) override;
+};
+
+class RenameNXCmd : public BaseCmd {
+ public:
+  RenameNXCmd(const std::string& name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient* client) override;
+
+ private:
+  void DoCmd(PClient* client) override;
+};
+
 }  // namespace pikiwidb

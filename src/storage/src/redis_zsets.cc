@@ -14,6 +14,7 @@
 #include "pstd/log.h"
 #include "src/base_data_value_format.h"
 #include "src/base_key_format.h"
+#include "src/batch.h"
 #include "src/redis.h"
 #include "src/scope_record_lock.h"
 #include "src/scope_snapshot.h"
@@ -216,7 +217,7 @@ Status Redis::ZAdd(const Slice& key, const std::vector<ScoreMember>& score_membe
   char score_buf[8];
   uint64_t version = 0;
   std::string meta_value;
-  rocksdb::WriteBatch batch;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
 
   BaseMetaKey base_meta_key(key);
@@ -250,7 +251,7 @@ Status Redis::ZAdd(const Slice& key, const std::vector<ScoreMember>& score_membe
             continue;
           } else {
             ZSetsScoreKey zsets_score_key(key, version, old_score, sm.member);
-            batch.Delete(handles_[kZsetsScoreCF], zsets_score_key.Encode());
+            batch->Delete(kZsetsScoreCF, zsets_score_key.Encode());
             // delete old zsets_score_key and overwirte zsets_member_key
             // but in different column_families so we accumulative 1
             statistic++;
@@ -263,11 +264,11 @@ Status Redis::ZAdd(const Slice& key, const std::vector<ScoreMember>& score_membe
       const void* ptr_score = reinterpret_cast<const void*>(&sm.score);
       EncodeFixed64(score_buf, *reinterpret_cast<const uint64_t*>(ptr_score));
       BaseDataValue zsets_member_i_val(Slice(score_buf, sizeof(uint64_t)));
-      batch.Put(handles_[kZsetsDataCF], zsets_member_key.Encode(), zsets_member_i_val.Encode());
+      batch->Put(kZsetsDataCF, zsets_member_key.Encode(), zsets_member_i_val.Encode());
 
       ZSetsScoreKey zsets_score_key(key, version, sm.score, sm.member);
       BaseDataValue zsets_score_i_val(Slice{});
-      batch.Put(handles_[kZsetsScoreCF], zsets_score_key.Encode(), zsets_score_i_val.Encode());
+      batch->Put(kZsetsScoreCF, zsets_score_key.Encode(), zsets_score_i_val.Encode());
       if (not_found) {
         cnt++;
       }
@@ -276,30 +277,30 @@ Status Redis::ZAdd(const Slice& key, const std::vector<ScoreMember>& score_membe
       return Status::InvalidArgument("zset size overflow");
     }
     parsed_zsets_meta_value.ModifyCount(cnt);
-    batch.Put(handles_[kZsetsMetaCF], base_meta_key.Encode(), meta_value);
+    batch->Put(kZsetsMetaCF, base_meta_key.Encode(), meta_value);
     *ret = cnt;
   } else if (s.IsNotFound()) {
     char buf[4];
     EncodeFixed32(buf, filtered_score_members.size());
     ZSetsMetaValue zsets_meta_value(Slice(buf, sizeof(int32_t)));
     version = zsets_meta_value.UpdateVersion();
-    batch.Put(handles_[kZsetsMetaCF], base_meta_key.Encode(), zsets_meta_value.Encode());
+    batch->Put(kZsetsMetaCF, base_meta_key.Encode(), zsets_meta_value.Encode());
     for (const auto& sm : filtered_score_members) {
       ZSetsMemberKey zsets_member_key(key, version, sm.member);
       const void* ptr_score = reinterpret_cast<const void*>(&sm.score);
       EncodeFixed64(score_buf, *reinterpret_cast<const uint64_t*>(ptr_score));
       BaseDataValue zsets_member_i_val(Slice(score_buf, sizeof(uint64_t)));
-      batch.Put(handles_[kZsetsDataCF], zsets_member_key.Encode(), zsets_member_i_val.Encode());
+      batch->Put(kZsetsDataCF, zsets_member_key.Encode(), zsets_member_i_val.Encode());
 
       ZSetsScoreKey zsets_score_key(key, version, sm.score, sm.member);
       BaseDataValue zsets_score_i_val(Slice{});
-      batch.Put(handles_[kZsetsScoreCF], zsets_score_key.Encode(), zsets_score_i_val.Encode());
+      batch->Put(kZsetsScoreCF, zsets_score_key.Encode(), zsets_score_i_val.Encode());
     }
     *ret = static_cast<int32_t>(filtered_score_members.size());
   } else {
     return s;
   }
-  s = db_->Write(default_write_options_, &batch);
+  s = batch->Commit();
   UpdateSpecificKeyStatistics(DataType::kZSets, key.ToString(), statistic);
   return s;
 }
@@ -1653,6 +1654,75 @@ Status Redis::ZsetsTTL(const Slice& key, uint64_t* timestamp) {
     }
   } else if (s.IsNotFound()) {
     *timestamp = -2;
+  }
+  return s;
+}
+
+Status Redis::ZsetsRename(const Slice& key, Redis* new_inst, const Slice& newkey) {
+  std::string meta_value;
+  uint32_t statistic = 0;
+  const std::vector<std::string> keys = {key.ToString(), newkey.ToString()};
+  MultiScopeRecordLock ml(lock_mgr_, keys);
+
+  BaseMetaKey base_meta_key(key);
+  BaseMetaKey base_meta_newkey(newkey);
+  Status s = db_->Get(default_read_options_, handles_[kZsetsMetaCF], base_meta_key.Encode(), &meta_value);
+  if (s.ok()) {
+    ParsedZSetsMetaValue parsed_zsets_meta_value(&meta_value);
+    if (parsed_zsets_meta_value.IsStale()) {
+      return Status::NotFound("Stale");
+    } else if (parsed_zsets_meta_value.Count() == 0) {
+      return Status::NotFound();
+    }
+    // copy a new zset with newkey
+    statistic = parsed_zsets_meta_value.Count();
+    s = new_inst->GetDB()->Put(default_write_options_, handles_[kZsetsMetaCF], base_meta_newkey.Encode(), meta_value);
+    new_inst->UpdateSpecificKeyStatistics(DataType::kZSets, newkey.ToString(), statistic);
+
+    // ZsetsDel key
+    parsed_zsets_meta_value.InitialMetaValue();
+    s = db_->Put(default_write_options_, handles_[kZsetsMetaCF], base_meta_key.Encode(), meta_value);
+    UpdateSpecificKeyStatistics(DataType::kZSets, key.ToString(), statistic);
+  }
+  return s;
+}
+
+Status Redis::ZsetsRenamenx(const Slice& key, Redis* new_inst, const Slice& newkey) {
+  std::string meta_value;
+  uint32_t statistic = 0;
+  const std::vector<std::string> keys = {key.ToString(), newkey.ToString()};
+  MultiScopeRecordLock ml(lock_mgr_, keys);
+
+  BaseMetaKey base_meta_key(key);
+  BaseMetaKey base_meta_newkey(newkey);
+  Status s = db_->Get(default_read_options_, handles_[kZsetsMetaCF], base_meta_key.Encode(), &meta_value);
+  if (s.ok()) {
+    ParsedZSetsMetaValue parsed_zsets_meta_value(&meta_value);
+    if (parsed_zsets_meta_value.IsStale()) {
+      return Status::NotFound("Stale");
+    } else if (parsed_zsets_meta_value.Count() == 0) {
+      return Status::NotFound();
+    }
+    // check if newkey exist.
+    std::string new_meta_value;
+    s = new_inst->GetDB()->Get(default_read_options_, handles_[kZsetsMetaCF], base_meta_newkey.Encode(),
+                               &new_meta_value);
+    if (s.ok()) {
+      ParsedSetsMetaValue parsed_zsets_new_meta_value(&new_meta_value);
+      if (!parsed_zsets_new_meta_value.IsStale() && parsed_zsets_new_meta_value.Count() != 0) {
+        return Status::Corruption();  // newkey already exists.
+      }
+    }
+
+    // copy a new zset with newkey
+    statistic = parsed_zsets_meta_value.Count();
+    s = new_inst->GetDB()->Put(default_write_options_, handles_[kZsetsMetaCF], base_meta_newkey.Encode(), meta_value);
+    new_inst->UpdateSpecificKeyStatistics(DataType::kZSets, newkey.ToString(), statistic);
+
+    // ZsetsDel key
+    parsed_zsets_meta_value.InitialMetaValue();
+    s = db_->Put(default_write_options_, handles_[kZsetsMetaCF], base_meta_key.Encode(), meta_value);
+    UpdateSpecificKeyStatistics(DataType::kZSets, key.ToString(), statistic);
   }
   return s;
 }

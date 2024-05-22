@@ -10,7 +10,7 @@ class EventLoop;
 class TcpListener : public EventObject {
  public:
   explicit TcpListener(EventLoop* loop);
-  ~TcpListener();
+  ~TcpListener() override;
 
   bool Bind(const char* ip, int port);
   int Fd() const override;

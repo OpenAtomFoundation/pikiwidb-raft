@@ -34,7 +34,7 @@ class PPubsub {
   std::size_t PUnSubscribe(PClient* client, const PString& pchannel);
 
   // introspect
-  void PubsubChannels(std::vector<PString>& res, const char* pattern = 0) const;
+  void PubsubChannels(std::vector<PString>& res, const char* pattern = nullptr) const;
   std::size_t PubsubNumsub(const PString& channel) const;
   std::size_t PubsubNumpat() const;
 
@@ -42,7 +42,7 @@ class PPubsub {
   void RecycleClients(PString& startChannel, PString& startPattern);
 
  private:
-  PPubsub() {}
+  PPubsub() = default;
 
   using Clients = std::set<std::weak_ptr<PClient>, std::owner_less<std::weak_ptr<PClient> > >;
   using ChannelClients = std::map<PString, Clients>;

@@ -68,6 +68,26 @@ var _ = Describe("Admin", Ordered, func() {
 		Expect(client.Info(ctx).Val()).NotTo(Equal("FooBar"))
 	})
 
+	It("Cmd Shutdown", func() {
+		Expect(client.Shutdown(ctx).Err()).NotTo(HaveOccurred())
+
+		// PikiwiDB does not support the Ping command right now
+		// wait for 5 seconds and then ping server
+		// time.Sleep(5 * time.Second)
+		// Expect(client.Ping(ctx).Err()).To(HaveOccurred())
+
+		// restart server
+		config := util.GetConfPath(false, 0)
+		s = util.StartServer(config, map[string]string{"port": strconv.Itoa(7777)}, true)
+		Expect(s).NotTo(Equal(nil))
+
+		// PikiwiDB does not support the Ping command right now
+		// wait for 5 seconds and then ping server
+		// time.Sleep(5 * time.Second)
+		// client = s.NewClient()
+		// Expect(client.Ping(ctx).Err()).NotTo(HaveOccurred())
+	})
+
 	It("Cmd Select", func() {
 		var outRangeNumber = 100
 
@@ -101,5 +121,42 @@ var _ = Describe("Admin", Ordered, func() {
 		rDel, eDel := client.Del(ctx, DefaultKey).Result()
 		Expect(eDel).NotTo(HaveOccurred())
 		Expect(rDel).To(Equal(int64(1)))
+	})
+
+	It("Cmd Config", func() {
+		res := client.ConfigGet(ctx, "timeout")
+		Expect(res.Err()).NotTo(HaveOccurred())
+		Expect(res.Val()).To(Equal(map[string]string{"timeout": "0"}))
+
+		res = client.ConfigGet(ctx, "daemonize")
+		Expect(res.Err()).NotTo(HaveOccurred())
+		Expect(res.Val()).To(Equal(map[string]string{"daemonize": "no"}))
+
+		resSet := client.ConfigSet(ctx, "timeout", "60")
+		Expect(resSet.Err()).NotTo(HaveOccurred())
+		Expect(resSet.Val()).To(Equal("OK"))
+
+		resSet = client.ConfigSet(ctx, "daemonize", "yes")
+		Expect(resSet.Err()).To(MatchError("ERR Invalid Argument"))
+
+		res = client.ConfigGet(ctx, "timeout")
+		Expect(res.Err()).NotTo(HaveOccurred())
+		Expect(res.Val()).To(Equal(map[string]string{"timeout": "60"}))
+
+		res = client.ConfigGet(ctx, "time*")
+		Expect(res.Err()).NotTo(HaveOccurred())
+		Expect(res.Val()).To(Equal(map[string]string{"timeout": "60"}))
+	})
+
+	It("PING", func() {
+		ping := client.Ping(ctx)
+		Expect(ping.Err()).NotTo(HaveOccurred())
+	})
+
+	It("Cmd Debug", func() {
+		// TODO: enable test after implementing DebugObject
+		// res := client.DebugObject(ctx, "timeout")
+		// Expect(res.Err()).NotTo(HaveOccurred())
+		// Expect(res.Val()).To(Equal(map[string]string{"timeout": "0"}))
 	})
 })

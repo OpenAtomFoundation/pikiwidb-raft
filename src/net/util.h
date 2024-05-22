@@ -55,17 +55,23 @@ class ThreadGuard {
 
   explicit ThreadGuard(std::thread&& t) : thread_(std::move(t)) {}
   ThreadGuard& operator=(std::thread&& t) {
-    if (&t != &thread_) thread_ = std::move(t);
+    if (&t != &thread_) {
+      thread_ = std::move(t);
+    }
 
     return *this;
   }
 
   void join() {
-    if (thread_.joinable()) thread_.join();
+    if (thread_.joinable()) {
+      thread_.join();
+    }
   }
 
   ~ThreadGuard() {
-    if (thread_.joinable()) thread_.join();
+    if (thread_.joinable()) {
+      thread_.join();
+    }
   }
 
  private:
@@ -74,12 +80,12 @@ class ThreadGuard {
 
 inline std::string GetSockaddrIp(const struct sockaddr_in* addr) {
   char tmp[128];
-  const char* ip = inet_ntop(AF_INET, &addr->sin_addr, tmp, (socklen_t)(sizeof tmp));
+  const char* ip = inet_ntop(AF_INET, &addr->sin_addr, tmp, static_cast<socklen_t>(sizeof tmp));
   if (!ip) {
-    return std::string();
+    return {};
   }
 
-  return std::string(ip);
+  return {ip};
 }
 
 inline std::string GetSockaddrIp(const struct sockaddr* sa) {
@@ -137,8 +143,8 @@ inline std::string& Trim(std::string& s) {
     return s;
   }
 
-  s.erase(0, s.find_first_not_of(" "));
-  s.erase(s.find_last_not_of(" ") + 1);
+  s.erase(0, s.find_first_not_of(' '));
+  s.erase(s.find_last_not_of(' ') + 1);
   return s;
 }
 
@@ -208,8 +214,8 @@ struct SocketAddr {
 
   std::string GetIP() const {
     char tmp[32];
-    const char* res = inet_ntop(AF_INET, &addr_.sin_addr, tmp, (socklen_t)(sizeof tmp));
-    return std::string(res);
+    const char* res = inet_ntop(AF_INET, &addr_.sin_addr, tmp, static_cast<socklen_t>(sizeof tmp));
+    return {res};
   }
 
   uint16_t GetPort() const { return ntohs(addr_.sin_port); }

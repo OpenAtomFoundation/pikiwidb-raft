@@ -17,7 +17,7 @@ namespace internal {
 class LibeventReactor : public Reactor {
  public:
   LibeventReactor();
-  virtual ~LibeventReactor() {}
+  ~LibeventReactor() override = default;
 
   bool Register(EventObject* obj, int events) override;
   void Unregister(EventObject* obj) override;
@@ -57,8 +57,8 @@ class LibeventReactor : public Reactor {
     explicit Object(EventObject* evobj) : ev_obj(evobj) {}
     ~Object() = default;
 
-    bool IsReadEnabled() const { return !!read_event.get(); }
-    bool IsWriteEnabled() const { return !!write_event.get(); }
+    bool IsReadEnabled() const { return !!read_event; }
+    bool IsWriteEnabled() const { return !!write_event; }
 
     std::unique_ptr<event, EventDeleter> read_event;
     std::unique_ptr<event, EventDeleter> write_event;

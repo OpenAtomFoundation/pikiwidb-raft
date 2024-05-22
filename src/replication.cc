@@ -60,7 +60,7 @@ void PReplication::OnRdbSaveDone() {
     if (cli->GetSlaveInfo()->state == kPSlaveStateWaitBgsaveEnd) {
       cli->GetSlaveInfo()->state = kPSlaveStateOnline;
 
-      if (!rdb.IsOpen() && !rdb.Open(g_config.rdbfullname.c_str())) {
+      if (!rdb.IsOpen()) {
         ERROR("can not open rdb when replication\n");
         return;  // fatal error;
       }
@@ -175,7 +175,7 @@ void PReplication::Cron() {
   if (masterInfo_.addr.IsValid()) {
     switch (masterInfo_.state) {
       case kPReplStateNone: {
-        if (masterInfo_.addr.GetIP() == g_config.ip && masterInfo_.addr.GetPort() == g_config.port) {
+        if (masterInfo_.addr.GetIP() == g_config.ip.ToString() && masterInfo_.addr.GetPort() == g_config.port) {
           ERROR("Fix config, master addr is self addr!");
           assert(!!!"wrong config for master addr");
         }
@@ -192,12 +192,18 @@ void PReplication::Cron() {
             g_pikiwidb->OnNewConnection(obj);
           }
         };
+
         auto fail_cb = [&](EventLoop*, const char* peer_ip, int port) {
           WARN("OnCallback: Connect master {}:{} failed", peer_ip, port);
 
           PREPL.SetMasterState(kPReplStateNone);
           if (!masterInfo_.downSince) {
             masterInfo_.downSince = ::time(nullptr);
+          }
+
+          if (on_fail_) {
+            on_fail_(EventLoop::Self(), peer_ip, port);
+            on_fail_ = nullptr;
           }
         };
 
@@ -208,20 +214,7 @@ void PReplication::Cron() {
       } break;
 
       case kPReplStateConnected:
-        if (!g_config.masterauth.empty()) {
-          if (auto master = master_.lock()) {
-            UnboundedBuffer req;
-            req.PushData("auth ");
-            req.PushData(g_config.masterauth.data(), g_config.masterauth.size());
-            req.PushData("\r\n");
-            master->SendPacket(req);
-            INFO("send auth with password {}", g_config.masterauth);
-
-            masterInfo_.state = kPReplStateWaitAuth;
-            break;
-          }
-        }
-        // fall through to next case.
+        break;
 
       case kPReplStateWaitAuth: {
         auto master = master_.lock();
@@ -232,11 +225,11 @@ void PReplication::Cron() {
         } else if (master->GetAuth()) {
           // send replconf
           char req[128];
-          auto len = snprintf(req, sizeof req - 1, "replconf listening-port %hu\r\n", g_config.port);
+          auto len = snprintf(req, sizeof req - 1, "replconf listening-port %hu\r\n", g_config.port.load());
           master->SendPacket(req, len);
           masterInfo_.state = kPReplStateWaitReplconf;
 
-          INFO("Send replconf listening-port {}", g_config.port);
+          INFO("Send replconf listening-port {}", g_config.port.load());
         } else {
           WARN("Haven't auth to master yet, or check masterauth password");
         }
@@ -318,7 +311,7 @@ PReplState PReplication::GetMasterState() const { return masterInfo_.state; }
 
 SocketAddr PReplication::GetMasterAddr() const { return masterInfo_.addr; }
 
-void PReplication::SetMasterAddr(const char* ip, unsigned short port) {
+void PReplication::SetMasterAddr(const char* ip, uint16_t port) {
   if (ip) {
     masterInfo_.addr.Init(ip, port);
   } else {
@@ -351,7 +344,7 @@ PError replconf(const std::vector<PString>& params, UnboundedBuffer* reply) {
         info = client->GetSlaveInfo();
         PREPL.AddSlave(client);
       }
-      info->listenPort = static_cast<unsigned short>(port);
+      info->listenPort = static_cast<uint16_t>(port);
     } else {
       break;
     }
@@ -431,7 +424,7 @@ PError slaveof(const std::vector<PString>& params, UnboundedBuffer* reply) {
   } else {
     long tmpPort = 0;
     pstd::String2int(params[2].c_str(), params[2].size(), &tmpPort);
-    unsigned short port = static_cast<unsigned short>(tmpPort);
+    uint16_t port = static_cast<uint16_t>(tmpPort);
 
     SocketAddr reqMaster(params[1].c_str(), port);
 

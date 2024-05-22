@@ -20,9 +20,9 @@ using EventLoopSelector = std::function<EventLoop*()>;
 class EventObject : public std::enable_shared_from_this<EventObject> {
  public:
   /// Constructor, printf is for debug, you can comment it
-  EventObject() {}
+  EventObject() = default;
   /// Destructor, printf is for debug, you can comment it
-  virtual ~EventObject() {}
+  virtual ~EventObject() = default;
 
   EventObject(const EventObject&) = delete;
   void operator=(const EventObject&) = delete;

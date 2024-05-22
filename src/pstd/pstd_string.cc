@@ -652,4 +652,10 @@ bool IsValidNumber(const std::string& str) {
   return true;
 }
 
+void TrimSlash(std::string& dirName) {
+  while (dirName.back() == '/') {
+    dirName.pop_back();
+  }
+}
+
 }  // namespace pstd

@@ -27,7 +27,7 @@ InputMemoryFile::InputMemoryFile() : file_(kInvalidFile), pMemory_(kInvalidAddr)
 
 InputMemoryFile::~InputMemoryFile() { Close(); }
 
-bool InputMemoryFile::_MapReadOnly() {
+bool InputMemoryFile::MapReadOnly() {
   assert(file_ != kInvalidFile);
   assert(size_ == 0);
 
@@ -35,7 +35,7 @@ bool InputMemoryFile::_MapReadOnly() {
   fstat(file_, &st);
   size_ = st.st_size;
 
-  pMemory_ = (char*)::mmap(0, size_, PROT_READ, MAP_PRIVATE, file_, 0);
+  pMemory_ = static_cast<char*>(::mmap(nullptr, size_, PROT_READ, MAP_PRIVATE, file_, 0));
   return pMemory_ != kInvalidAddr;
 }
 
@@ -51,7 +51,7 @@ bool InputMemoryFile::Open(const char* file) {
   }
 
   offset_ = 0;
-  return _MapReadOnly();
+  return MapReadOnly();
 }
 
 void InputMemoryFile::Close() {
@@ -91,7 +91,7 @@ OutputMemoryFile::OutputMemoryFile() : file_(kInvalidFile), pMemory_(kInvalidAdd
 
 OutputMemoryFile::~OutputMemoryFile() { Close(); }
 
-void OutputMemoryFile::_ExtendFileSize(size_t size) {
+void OutputMemoryFile::ExtendFileSize(size_t size) {
   assert(file_ != kInvalidFile);
 
   if (size > size_) {
@@ -123,7 +123,7 @@ bool OutputMemoryFile::Open(const char* file, bool bAppend) {
   }
 
   ::ftruncate(file_, size_);
-  return _MapWriteOnly();
+  return MapWriteOnly();
 }
 
 void OutputMemoryFile::Close() {
@@ -155,7 +155,7 @@ bool OutputMemoryFile::Sync() {
   return true;
 }
 
-bool OutputMemoryFile::_MapWriteOnly() {
+bool OutputMemoryFile::MapWriteOnly() {
   if (size_ == 0 || file_ == kInvalidFile) {
     return false;
   }
@@ -166,7 +166,7 @@ bool OutputMemoryFile::_MapWriteOnly() {
       ::munmap(m_pMemory, m_size);
     }
 #endif
-  pMemory_ = (char*)::mmap(0, size_, PROT_WRITE, MAP_SHARED, file_, 0);
+  pMemory_ = static_cast<char*>(::mmap(nullptr, size_, PROT_WRITE, MAP_SHARED, file_, 0));
   return (pMemory_ != kInvalidAddr);
 }
 
@@ -182,7 +182,7 @@ void OutputMemoryFile::Truncate(std::size_t size) {
     offset_ = size_;
   }
 
-  _MapWriteOnly();
+  MapWriteOnly();
 }
 
 void OutputMemoryFile::TruncateTailZero() {
@@ -191,8 +191,9 @@ void OutputMemoryFile::TruncateTailZero() {
   }
 
   size_t tail = size_;
-  while (tail > 0 && pMemory_[--tail] == '\0')
+  while (tail > 0 && pMemory_[--tail] == '\0') {
     ;
+  }
 
   ++tail;
 
@@ -203,14 +204,14 @@ bool OutputMemoryFile::IsOpen() const { return file_ != kInvalidFile; }
 
 // consumer
 void OutputMemoryFile::Write(const void* data, size_t len) {
-  _AssureSpace(len);
+  AssureSpace(len);
 
   ::memcpy(pMemory_ + offset_, data, len);
   offset_ += len;
   assert(offset_ <= size_);
 }
 
-void OutputMemoryFile::_AssureSpace(size_t size) {
+void OutputMemoryFile::AssureSpace(size_t size) {
   size_t newSize = size_;
 
   while (offset_ + size > newSize) {
@@ -221,7 +222,7 @@ void OutputMemoryFile::_AssureSpace(size_t size) {
     }
   }
 
-  _ExtendFileSize(newSize);
+  ExtendFileSize(newSize);
 }
 
 }  // namespace pstd

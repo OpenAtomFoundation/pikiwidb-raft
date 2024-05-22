@@ -6,7 +6,7 @@
 #ifndef PIKIWIDB_SLOT_H_
 #define PIKIWIDB_SLOT_H_
 
-#include <stdint.h>
+#include <cstdint>
 #include <memory>
 #include <string>
 

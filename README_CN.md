@@ -69,7 +69,6 @@ PikiwiDB 可以和 Redis 之间进行复制，可以读取 Redis 的 rdb 文件�
 这些特性 PikiwiDB 都有:-)
 
 ## 持久化：内存不再是上限
-
 RocksDB 可以配置为 PikiwiDB 的持久化存储引擎，可以存储更多的数据。
 
 ## 命令列表

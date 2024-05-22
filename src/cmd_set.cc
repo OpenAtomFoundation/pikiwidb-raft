@@ -376,4 +376,5 @@ void SScanCmd::DoCmd(PClient* client) {
     client->AppendString(member);
   }
 }
+
 }  // namespace pikiwidb

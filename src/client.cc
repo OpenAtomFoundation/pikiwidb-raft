@@ -5,16 +5,19 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
+#include "client.h"
+
 #include <algorithm>
 #include <memory>
 
-#include "client.h"
+#include "fmt/core.h"
+#include "praft/praft.h"
+#include "pstd/log.h"
+#include "pstd/pstd_string.h"
+
+#include "base_cmd.h"
 #include "config.h"
-#include "log.h"
 #include "pikiwidb.h"
-#include "pstd_string.h"
-#include "slow_log.h"
-#include "store.h"
 
 namespace pikiwidb {
 
@@ -130,6 +133,10 @@ void CmdRes::SetRes(CmdRes::CmdRet _ret, const std::string& content) {
     case kInvalidCursor:
       AppendStringRaw("-ERR invalid cursor");
       break;
+    case kWrongLeader:
+      AppendStringRaw("-ERR wrong leader");
+      AppendStringRaw(content);
+      AppendStringRaw(CRLF);
     default:
       break;
   }
@@ -191,7 +198,6 @@ static int ProcessMaster(const char* start, const char* end) {
       // discard all requests before sync;
       // or continue serve with old data? TODO
       return static_cast<int>(end - start);
-
     case kPReplStateWaitAuth:
       if (end - start >= 5) {
         if (strncasecmp(start, "+OK\r\n", 5) == 0) {
@@ -261,10 +267,19 @@ int PClient::handlePacket(const char* start, int bytes) {
   const char* ptr = start;
 
   if (isPeerMaster()) {
-    //  check slave state
-    auto recved = ProcessMaster(start, end);
-    if (recved != -1) {
-      return recved;
+    if (isClusterCmdTarget()) {
+      // Proccees the packet at one turn.
+      int len = PRAFT.ProcessClusterCmdResponse(this, start, bytes);  // @todo
+      if (len > 0) {
+        return len;
+      }
+    } else {
+      // Proccees the packet at one turn.
+      //  check slave state
+      auto recved = ProcessMaster(start, end);
+      if (recved != -1) {
+        return recved;
+      }
     }
   }
 
@@ -412,7 +427,6 @@ PClient::PClient(TcpConnection* obj)
 
 int PClient::HandlePackets(pikiwidb::TcpConnection* obj, const char* start, int size) {
   int total = 0;
-
   while (total < size) {
     auto processed = handlePacket(start + total, size - total);
     if (processed <= 0) {
@@ -437,8 +451,12 @@ void PClient::OnConnect() {
     SetName("MasterConnection");
     SetFlag(kClientFlagMaster);
 
-    if (g_config.masterauth.empty()) {
+    if (g_config.master_auth.empty()) {
       SetAuth();
+    }
+
+    if (isClusterCmdTarget()) {
+      PRAFT.SendNodeRequest(this);
     }
   } else {
     if (g_config.password.empty()) {
@@ -520,6 +538,10 @@ void PClient::reset() {
 bool PClient::isPeerMaster() const {
   const auto& repl_addr = PREPL.GetMasterAddr();
   return repl_addr.GetIP() == PeerIP() && repl_addr.GetPort() == PeerPort();
+}
+
+bool PClient::isClusterCmdTarget() const {
+  return PRAFT.GetClusterCmdCtx().GetPeerIp() == PeerIP() && PRAFT.GetClusterCmdCtx().GetPort() == PeerPort();
 }
 
 int PClient::uniqueID() const {
@@ -686,6 +708,7 @@ void PClient::FeedMonitors(const std::vector<std::string>& params) {
     }
   }
 }
+
 void PClient::SetKey(std::vector<std::string>& names) {
   keys_ = std::move(names);  // use std::move clear copy expense
 }

@@ -295,4 +295,45 @@ void PttlCmd::DoCmd(PClient* client) {
   }
 }
 
+RenameCmd::RenameCmd(const std::string& name, int16_t arity)
+    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryKeyspace) {}
+
+bool RenameCmd::DoInitial(PClient* client) {
+  client->SetKey(client->argv_[1]);
+  return true;
+}
+
+void RenameCmd::DoCmd(PClient* client) {
+  storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Rename(client->Key(), client->argv_[2]);
+  if (s.ok()) {
+    client->SetRes(CmdRes::kOK);
+  } else if (s.IsNotFound()) {
+    client->SetRes(CmdRes::kNotFound, s.ToString());
+  } else {
+    client->SetRes(CmdRes::kErrOther, s.ToString());
+  }
+}
+
+RenameNXCmd::RenameNXCmd(const std::string& name, int16_t arity)
+    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryKeyspace) {}
+
+bool RenameNXCmd::DoInitial(PClient* client) {
+  client->SetKey(client->argv_[1]);
+  return true;
+}
+
+void RenameNXCmd::DoCmd(PClient* client) {
+  storage::Status s =
+      PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Renamenx(client->Key(), client->argv_[2]);
+  if (s.ok()) {
+    client->SetRes(CmdRes::kOK);
+  } else if (s.IsNotFound()) {
+    client->SetRes(CmdRes::kNotFound, s.ToString());
+  } else if (s.IsCorruption()) {
+    client->AppendInteger(0);  // newkey already exists
+  } else {
+    client->SetRes(CmdRes::kErrOther, s.ToString());
+  }
+}
+
 }  // namespace pikiwidb

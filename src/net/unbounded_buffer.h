@@ -15,7 +15,7 @@ namespace pikiwidb {
 
 class UnboundedBuffer {
  public:
-  UnboundedBuffer() : readPos_(0), writePos_(0) {}
+  UnboundedBuffer() = default;
 
   std::size_t PushDataAt(const void* pData, std::size_t nSize, std::size_t offset = 0);
   std::size_t PushData(const void* pData, std::size_t nSize);

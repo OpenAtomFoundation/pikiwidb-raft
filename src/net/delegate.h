@@ -14,7 +14,7 @@ class Delegate;
 template <typename... Args>
 class Delegate<void(Args...)> {
  public:
-  typedef Delegate<void(Args...)> Self;
+  using Self = Delegate<void(Args...)>;
 
   Delegate() = default;
 
@@ -26,7 +26,7 @@ class Delegate<void(Args...)> {
     connect(std::forward<F>(f));
   }
 
-  Delegate(Self&& other) : funcs_(std::move(other.funcs_)) {}
+  Delegate(Self&& other) noexcept : funcs_(std::move(other.funcs_)) {}
 
   template <typename F>
   Self& operator+=(F&& f) {

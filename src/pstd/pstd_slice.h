@@ -70,7 +70,7 @@ class Slice {
   }
 
   // Return a string that contains the copy of the referenced data.
-  std::string ToString() const { return std::string(data_, size_); }
+  std::string ToString() const { return {data_, size_}; }
 
   // Three-way comparison.  Returns value:
   //   <  0 iff "*this" <  "b",

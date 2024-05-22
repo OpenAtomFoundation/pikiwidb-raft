@@ -27,12 +27,12 @@ class InputMemoryFile {
   bool IsOpen() const;
 
  private:
-  bool _MapReadOnly();
+  bool MapReadOnly();
 
-  int file_;
-  char* pMemory_;
-  std::size_t offset_;
-  std::size_t size_;
+  int file_ = -1;
+  char* pMemory_ = nullptr;
+  std::size_t offset_ = 0;
+  std::size_t size_ = 0;
 };
 
 template <typename T>
@@ -65,15 +65,15 @@ class OutputMemoryFile {
   bool IsOpen() const;
 
  private:
-  bool _MapWriteOnly();
-  void _ExtendFileSize(std::size_t size);
-  void _AssureSpace(std::size_t size);
+  bool MapWriteOnly();
+  void ExtendFileSize(std::size_t size);
+  void AssureSpace(std::size_t size);
 
-  int file_;
-  char* pMemory_;
-  std::size_t offset_;
-  std::size_t size_;
-  std::size_t syncPos_;
+  int file_ = -1;
+  char* pMemory_ = nullptr;
+  std::size_t offset_ = 0;
+  std::size_t size_ = 0;
+  std::size_t syncPos_ = 0;
 };
 
 template <typename T>

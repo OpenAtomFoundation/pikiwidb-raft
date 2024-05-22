@@ -8,27 +8,27 @@
 //
 //  PikiwiDB.cc
 
+#include "pikiwidb.h"
+
 #include <sys/fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <iostream>
 #include <thread>
 
-#include "log.h"
-#include "rocksdb/db.h"
+#include "praft/praft.h"
+#include "pstd/log.h"
+#include "pstd/pstd_util.h"
 
 #include "client.h"
+#include "config.h"
+#include "helper.h"
+#include "pikiwidb_logo.h"
+#include "slow_log.h"
 #include "store.h"
 
-#include "config.h"
-#include "slow_log.h"
-
-#include "helper.h"
-#include "pikiwidb.h"
-#include "pikiwidb_logo.h"
-#include "pstd_util.h"
-
 std::unique_ptr<PikiwiDB> g_pikiwidb;
+using namespace pikiwidb;
 
 static void IntSigHandle(const int sig) {
   INFO("Catch Signal {}, cleanup...", sig);
@@ -66,8 +66,12 @@ bool PikiwiDB::ParseArgs(int ac, char* av[]) {
       std::cerr << "PikiwiDB Server version: " << KPIKIWIDB_VERSION << " bits=" << (sizeof(void*) == 8 ? 64 : 32)
                 << std::endl;
       std::cerr << "PikiwiDB Server Build Type: " << KPIKIWIDB_BUILD_TYPE << std::endl;
+#if defined(KPIKIWIDB_BUILD_DATE)
       std::cerr << "PikiwiDB Server Build Date: " << KPIKIWIDB_BUILD_DATE << std::endl;
+#endif
+#if defined(KPIKIWIDB_GIT_COMMIT_ID)
       std::cerr << "PikiwiDB Server Build GIT SHA: " << KPIKIWIDB_GIT_COMMIT_ID << std::endl;
+#endif
 
       exit(0);
     } else if (strncasecmp(av[i], "-h", 2) == 0 || strncasecmp(av[i], "--help", 6) == 0) {
@@ -77,7 +81,7 @@ bool PikiwiDB::ParseArgs(int ac, char* av[]) {
       if (++i == ac) {
         return false;
       }
-      port_ = static_cast<int16_t>(std::atoi(av[i]));
+      port_ = static_cast<uint16_t>(std::atoi(av[i]));
     } else if (strncasecmp(av[i], "--loglevel", 10) == 0) {
       if (++i == ac) {
         return false;
@@ -97,72 +101,6 @@ bool PikiwiDB::ParseArgs(int ac, char* av[]) {
   }
 
   return true;
-}
-
-static void PdbCron() {
-  //  using namespace pikiwidb;
-  //
-  //  if (g_qdbPid != -1) {
-  //    return;
-  //  }
-  //
-  //  if (Now() > (g_lastPDBSave + static_cast<unsigned>(g_config.saveseconds)) * 1000UL)
-  //  {
-  //    int ret = fork();
-  //    if (ret == 0) {
-  //      {
-  //        PDBSaver qdb;
-  //        qdb.Save(g_config.rdbfullname.c_str());
-  //        std::cerr << "ServerCron child save rdb done, exiting child\n";
-  //      }  //  make qdb to be destructed before exit
-  //      _exit(0);
-  //    } else if (ret == -1) {
-  //      ERROR("fork qdb save process failed");
-  //    } else {
-  //      g_qdbPid = ret;
-  //    }
-  //
-  //    INFO("ServerCron save rdb file {}", g_config.rdbfullname);
-  //  }
-}
-
-static void LoadDBFromDisk() {
-  //  using namespace pikiwidb;
-  //
-  //  PDBLoader loader;
-  //  loader.Load(g_config.rdbfullname.c_str());
-  //}
-  //
-  // static void CheckChild() {
-  //  using namespace pikiwidb;
-  //
-  //  if (g_qdbPid == -1) {
-  //    return;
-  //  }
-  //
-  //  int statloc = 0;
-  //  pid_t pid = wait3(&statloc, WNOHANG, nullptr);
-  //
-  //  if (pid != 0 && pid != -1) {
-  //    int exit = WEXITSTATUS(statloc);
-  //    int signal = 0;
-  //
-  //    if (WIFSIGNALED(statloc)) {
-  //      signal = WTERMSIG(statloc);
-  //    }
-  //
-  //    if (pid == g_qdbPid) {
-  //      PDBSaver::SaveDoneHandler(exit, signal);
-  //      if (PREPL.IsBgsaving()) {
-  //        PREPL.OnRdbSaveDone();
-  //      } else {
-  //        PREPL.TryBgsave();
-  //      }
-  //    } else {
-  //      ERROR("{} is not rdb process", pid);
-  //      assert(!!!"Is there any back process except rdb?");
-  //    }
-  //  }
 }
 
 void PikiwiDB::OnNewConnection(pikiwidb::TcpConnection* obj) {
@@ -186,64 +124,52 @@ void PikiwiDB::OnNewConnection(pikiwidb::TcpConnection* obj) {
 }
 
 bool PikiwiDB::Init() {
-  using namespace pikiwidb;
-
   char runid[kRunidSize + 1] = "";
   getRandomHexChars(runid, kRunidSize);
-  g_config.runid.assign(runid, kRunidSize);
+  g_config.Set("runid", {runid, kRunidSize}, true);
 
   if (port_ != 0) {
-    g_config.port = port_;
+    g_config.Set("port", std::to_string(port_), true);
   }
 
   if (!log_level_.empty()) {
-    g_config.loglevel = log_level_;
-  }
-
-  if (!master_.empty()) {
-    g_config.masterIp = master_;
-    g_config.masterPort = master_port_;
+    g_config.Set("log-level", log_level_, true);
   }
 
   NewTcpConnectionCallback cb = std::bind(&PikiwiDB::OnNewConnection, this, std::placeholders::_1);
-  if (!worker_threads_.Init(g_config.ip.c_str(), g_config.port, cb)) {
+  if (!worker_threads_.Init(g_config.ip.ToString().c_str(), g_config.port.load(), cb)) {
+    ERROR("worker_threads Init failed. IP = {} Port = {}", g_config.ip.ToString(), g_config.port.load());
     return false;
   }
 
-  auto num = g_config.worker_threads_num + g_config.slave_threads_num;
+  auto num = g_config.worker_threads_num.load() + g_config.slave_threads_num.load();
   auto kMaxWorkerNum = IOThreadPool::GetMaxWorkerNum();
   if (num > kMaxWorkerNum) {
     ERROR("number of threads can't exceeds {}, now is {}", kMaxWorkerNum, num);
     return false;
   }
-  worker_threads_.SetWorkerNum(static_cast<size_t>(g_config.worker_threads_num));
-  slave_threads_.SetWorkerNum(static_cast<size_t>(g_config.slave_threads_num));
+  worker_threads_.SetWorkerNum(static_cast<size_t>(g_config.worker_threads_num.load()));
+  slave_threads_.SetWorkerNum(static_cast<size_t>(g_config.slave_threads_num.load()));
 
   // now we only use fast cmd thread pool
-  auto status = cmd_threads_.Init(g_config.fast_cmd_threads_num, 0, "pikiwidb-cmd");
+  auto status = cmd_threads_.Init(g_config.fast_cmd_threads_num.load(), 0, "pikiwidb-cmd");
   if (!status.ok()) {
     ERROR("init cmd thread pool failed: {}", status.ToString());
     return false;
   }
 
-  PSTORE.Init(g_config.databases);
+  PSTORE.Init(g_config.databases.load(std::memory_order_relaxed));
 
-  // Only if there is no backend, load rdb
-  if (g_config.backend == pikiwidb::kBackEndNone) {
-    LoadDBFromDisk();
-  }
-
-  PSlowLog::Instance().SetThreshold(g_config.slowlogtime);
-  PSlowLog::Instance().SetLogLimit(static_cast<std::size_t>(g_config.slowlogmaxlen));
+  PSlowLog::Instance().SetThreshold(g_config.slow_log_time.load());
+  PSlowLog::Instance().SetLogLimit(static_cast<std::size_t>(g_config.slow_log_max_len.load()));
 
   // init base loop
   auto loop = worker_threads_.BaseLoop();
-  loop->ScheduleRepeatedly(1000 / pikiwidb::g_config.hz, PdbCron);
   loop->ScheduleRepeatedly(1000, &PReplication::Cron, &PREPL);
 
   // master ip
-  if (!g_config.masterIp.empty()) {
-    PREPL.SetMasterAddr(g_config.masterIp.c_str(), g_config.masterPort);
+  if (!g_config.ip.empty()) {
+    PREPL.SetMasterAddr(g_config.master_ip.ToString().c_str(), g_config.master_port.load());
   }
 
   //  cmd_table_manager_.InitCmdTable();
@@ -272,6 +198,9 @@ void PikiwiDB::Run() {
 }
 
 void PikiwiDB::Stop() {
+  pikiwidb::PRAFT.ShutDown();
+  pikiwidb::PRAFT.Join();
+  pikiwidb::PRAFT.Clear();
   slave_threads_.Exit();
   worker_threads_.Exit();
   cmd_threads_.Stop();
@@ -308,16 +237,14 @@ static void closeStd() {
 }
 
 int main(int ac, char* av[]) {
-  [[maybe_unused]] rocksdb::DB* db;
   g_pikiwidb = std::make_unique<PikiwiDB>();
-
   if (!g_pikiwidb->ParseArgs(ac - 1, av + 1)) {
     Usage();
     return -1;
   }
 
   if (!g_pikiwidb->GetConfigName().empty()) {
-    if (!LoadPikiwiDBConfig(g_pikiwidb->GetConfigName().c_str(), pikiwidb::g_config)) {
+    if (!g_config.LoadFromFile(g_pikiwidb->GetConfigName())) {
       std::cerr << "Load config file [" << g_pikiwidb->GetConfigName() << "] failed!\n";
       return -1;
     }
@@ -326,10 +253,10 @@ int main(int ac, char* av[]) {
   // output logo to console
   char logo[512] = "";
   snprintf(logo, sizeof logo - 1, pikiwidbLogo, KPIKIWIDB_VERSION, static_cast<int>(sizeof(void*)) * 8,
-           static_cast<int>(pikiwidb::g_config.port));
+           static_cast<int>(g_config.port));
   std::cout << logo;
 
-  if (pikiwidb::g_config.daemonize) {
+  if (g_config.daemonize.load()) {
     daemonize();
   }
 
@@ -337,7 +264,7 @@ int main(int ac, char* av[]) {
   SignalSetup();
   InitLogs();
 
-  if (pikiwidb::g_config.daemonize) {
+  if (g_config.daemonize.load()) {
     closeStd();
   }
 

@@ -95,4 +95,6 @@ bool StringHasSpaces(const std::string& str);
 
 bool IsValidNumber(const std::string& str);
 
+void TrimSlash(std::string& dirName);
+
 }  // namespace pstd

@@ -178,4 +178,5 @@ class SScanCmd : public BaseCmd {
   static constexpr const char *kMatchSymbol = "match";
   static constexpr const char *kCountSymbol = "count";
 };
+
 }  // namespace pikiwidb

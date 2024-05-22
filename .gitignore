@@ -62,7 +62,8 @@ src/build_version.cc
 
 
 #build
-build/
+build-release/
+build-debug/
 buildtrees
 deps
 
@@ -80,3 +81,6 @@ compile_commands.json
 # build support
 build_support/__pycache__
 build_support/clang_format_exclusions.txt
+
+# pkg
+pkg

@@ -29,7 +29,7 @@ using TcpDisconnectCallback = std::function<void(TcpConnection*)>;
 class TcpConnection : public EventObject {
  public:
   explicit TcpConnection(EventLoop* loop);
-  ~TcpConnection();
+  ~TcpConnection() override;
 
   // init tcp object by result of ::accept
   void OnAccept(int fd, const std::string& peer_ip, int peer_port);

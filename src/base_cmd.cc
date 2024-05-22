@@ -7,6 +7,7 @@
 
 #include "base_cmd.h"
 #include "common.h"
+#include "log.h"
 #include "pikiwidb.h"
 
 namespace pikiwidb {
@@ -29,8 +30,10 @@ bool BaseCmd::CheckArg(size_t num) const {
 std::vector<std::string> BaseCmd::CurrentKey(PClient* client) const { return std::vector<std::string>{client->Key()}; }
 
 void BaseCmd::Execute(PClient* client) {
+  DEBUG("execute command: {}", client->CmdName());
+
   auto dbIndex = client->GetCurrentDB();
-  if (!isExclusive()) {
+  if (!HasFlag(kCmdFlagsExclusive)) {
     PSTORE.GetBackend(dbIndex)->LockShared();
   }
 
@@ -39,7 +42,7 @@ void BaseCmd::Execute(PClient* client) {
   }
   DoCmd(client);
 
-  if (!isExclusive()) {
+  if (!HasFlag(kCmdFlagsExclusive)) {
     PSTORE.GetBackend(dbIndex)->UnLockShared();
   }
 }

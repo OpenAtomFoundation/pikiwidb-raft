@@ -7,16 +7,20 @@
 
 #pragma once
 
+#include <filesystem>
 #include <string>
 
-#include "log.h"
+#include "pstd/log.h"
 #include "pstd/noncopyable.h"
 #include "storage/storage.h"
 
 namespace pikiwidb {
+
 class DB {
  public:
-  DB(int db_id, const std::string& db_path);
+  DB(int db_index, const std::string& db_path);
+
+  rocksdb::Status Open();
 
   std::unique_ptr<storage::Storage>& GetStorage() { return storage_; }
 
@@ -28,10 +32,15 @@ class DB {
 
   void UnLockShared() { storage_mutex_.unlock_shared(); }
 
- private:
-  const int db_id_ = 0;
-  const std::string db_path_;
+  void CreateCheckpoint(const std::string& path, bool sync);
 
+  void LoadDBFromCheckpoint(const std::string& path, bool sync = true);
+
+  int GetDbIndex() { return db_index_; }
+
+ private:
+  const int db_index_ = 0;
+  const std::string db_path_;
   /**
    * If you want to change the pointer that points to storage,
    * you must first acquire a mutex lock.
@@ -41,17 +50,6 @@ class DB {
   std::shared_mutex storage_mutex_;
   std::unique_ptr<storage::Storage> storage_;
   bool opened_ = false;
-
-  /**
-   * If you want to change the status below，you must first acquire
-   * a mutex lock.
-   * If you only want to access the status below,
-   * you just need to obtain a shared lock.
-   */
-  std::shared_mutex checkpoint_mutex_;
-  bool checkpoint_in_process_ = false;
-  int64_t last_checkpoint_time_ = -1;
-  bool last_checkpoint_success_ = false;
 };
 
 }  // namespace pikiwidb

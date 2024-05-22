@@ -11,13 +11,11 @@
 
 #include <memory>
 
-namespace pstd {
-namespace lock {
+namespace pstd::lock {
 // Default implementation of MutexFactory.
 class MutexFactoryImpl : public MutexFactory {
  public:
   std::shared_ptr<Mutex> AllocateMutex() override;
   std::shared_ptr<CondVar> AllocateCondVar() override;
 };
-}  //  namespace lock
-}  //  namespace pstd
+}  // namespace pstd::lock

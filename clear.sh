@@ -9,10 +9,6 @@
 # FILE    : clear.sh
 # ******************************************************
 
-rm -rf ./cmake-build-debug
-rm -rf ./deps
-rm -rf ./buildtrees
-rm -rf ./build
+rm -rf ./build-release
+rm -rf ./build-debug
 rm -rf ./bin
-rm -rf ./dbsync
-

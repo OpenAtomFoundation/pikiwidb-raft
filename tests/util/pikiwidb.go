@@ -62,9 +62,8 @@ func GetConfPath(copy bool, t int64) string {
 
 func checkCondition(c *redis.Client) bool {
 	ctx := context.TODO()
-	//TODO(dingxiaoshuai) use Cmd PING
-	r, e := c.Set(ctx, "key", "value", 0).Result()
-	return r == "OK" && e == nil
+	_, err := c.Ping(ctx).Result()
+	return err == nil
 }
 
 type Server struct {
@@ -168,20 +167,36 @@ func StartServer(config string, options map[string]string, delete bool) *Server 
 		}
 
 		if runtime.GOOS == "darwin" {
-			cmd = exec.Command("sed", "-i", "", "s|db-path ./db|db-path "+d+"/db"+"|", n)
+			cmd = exec.Command("sed", "-i", "", "s|db-path ./db|db-path "+d+"/db|", n)
 		} else {
-			cmd = exec.Command("sed", "-i", "s|db-path ./db|db-path "+d+"/db"+"|", n)
+			cmd = exec.Command("sed", "-i", "s|db-path ./db|db-path "+d+"/db|", n)
 		}
 		err = cmd.Run()
 		if err != nil {
 			log.Println("The configuration file cannot be used.", err.Error())
 			return nil
 		}
+		value, is_exist := options["use-raft"]
+		if is_exist && value == "yes" {
+			if runtime.GOOS == "darwin" {
+				cmd = exec.Command("sed", "-i", "", "s|use-raft no|use-raft yes|", n)
+			} else {
+				cmd = exec.Command("sed", "-i", "s|use-raft no|use-raft yes|", n)
+			}
+			err = cmd.Run()
+			if err != nil {
+				log.Println("use-raft don't change success.", err.Error())
+				return nil
+			}
+		}
 
 		c.Args = append(c.Args, n)
 	}
 
 	for k, v := range options {
+		if k == "use-raft" {
+			continue
+		}
 		c.Args = append(c.Args, fmt.Sprintf("--%s", k), v)
 	}
 

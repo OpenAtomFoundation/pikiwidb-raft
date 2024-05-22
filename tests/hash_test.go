@@ -12,7 +12,6 @@ import (
 	"log"
 	"strconv"
 	"time"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/redis/go-redis/v9"
@@ -343,5 +342,22 @@ var _ = Describe("Hash", Ordered, func() {
 		hExists = client.HExists(ctx, "hash", "key1")
 		Expect(hExists.Err()).NotTo(HaveOccurred())
 		Expect(hExists.Val()).To(Equal(false))
+	})
+
+	It("should HScan", func() {
+		hSet := client.HSet(ctx, "hScanTest", "key1", "value1")
+		Expect(hSet.Err()).NotTo(HaveOccurred())
+
+		hSet = client.HSet(ctx, "hScanTest", "key2", "value2")
+		Expect(hSet.Err()).NotTo(HaveOccurred())
+
+		hSet = client.HSet(ctx, "hScanTest", "key3", "value3")
+		Expect(hSet.Err()).NotTo(HaveOccurred())
+
+		hScan := client.HScan(ctx, "hScanTest", 0, "key*", 3)
+		Expect(hScan.Err()).NotTo(HaveOccurred())
+		keys, cursor := hScan.Val()
+		Expect(cursor).To(Equal(uint64(0)))
+		Expect(keys).To(ConsistOf([]string{"key1", "value1", "key2", "value2", "key3", "value3"}))
 	})
 })

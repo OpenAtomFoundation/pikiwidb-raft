@@ -5,6 +5,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
+#include "cmd_table_manager.h"
+
 #include <memory>
 
 #include "cmd_admin.h"
@@ -12,8 +14,8 @@
 #include "cmd_keys.h"
 #include "cmd_kv.h"
 #include "cmd_list.h"
+#include "cmd_raft.h"
 #include "cmd_set.h"
-#include "cmd_table_manager.h"
 #include "cmd_zset.h"
 
 namespace pikiwidb {
@@ -22,6 +24,20 @@ namespace pikiwidb {
   do {                                                                              \
     std::unique_ptr<BaseCmd> ptr = std::make_unique<cmd##Cmd>(kCmdName##cmd, argc); \
     cmds_->insert(std::make_pair(kCmdName##cmd, std::move(ptr)));                   \
+  } while (0)
+
+#define ADD_COMMAND_GROUP(cmd, argc)                                                \
+  do {                                                                              \
+    std::unique_ptr<BaseCmd> ptr = std::make_unique<Cmd##cmd>(kCmdName##cmd, argc); \
+    cmds_->insert(std::make_pair(kCmdName##cmd, std::move(ptr)));                   \
+  } while (0)
+
+#define ADD_SUBCOMMAND(cmd, subcmd, argc)                                                                 \
+  do {                                                                                                    \
+    auto it##cmd = cmds_->find(kCmdName##cmd);                                                            \
+    auto ptr##cmd = std::unique_ptr<BaseCmdGroup>(static_cast<BaseCmdGroup*>(it##cmd->second.release())); \
+    ptr##cmd->AddSubCmd(std::make_unique<Cmd##cmd##subcmd>(kSubCmdName##cmd##subcmd, argc));              \
+    it##cmd->second = std::move(ptr##cmd);                                                                \
   } while (0)
 
 CmdTableManager::CmdTableManager() {
@@ -33,15 +49,27 @@ void CmdTableManager::InitCmdTable() {
   std::unique_lock wl(mutex_);
 
   // admin
-  auto configPtr = std::make_unique<CmdConfig>(kCmdNameConfig, -2);
-  configPtr->AddSubCmd(std::make_unique<CmdConfigGet>("get", -3));
-  configPtr->AddSubCmd(std::make_unique<CmdConfigSet>("set", -4));
-  cmds_->insert(std::make_pair(kCmdNameConfig, std::move(configPtr)));
+  ADD_COMMAND_GROUP(Config, -2);
+  ADD_SUBCOMMAND(Config, Get, -3);
+  ADD_SUBCOMMAND(Config, Set, -4);
+  ADD_COMMAND(Ping, 0);
+  ADD_COMMAND_GROUP(Debug, -2);
+  ADD_SUBCOMMAND(Debug, Help, 2);
+  ADD_SUBCOMMAND(Debug, OOM, 2);
+  ADD_SUBCOMMAND(Debug, Segfault, 2);
 
   // server
   ADD_COMMAND(Flushdb, 1);
   ADD_COMMAND(Flushall, 1);
   ADD_COMMAND(Select, 2);
+  ADD_COMMAND(Shutdown, 1);
+
+  // info
+  ADD_COMMAND(Info, -1);
+
+  // raft
+  ADD_COMMAND(RaftCluster, -1);
+  ADD_COMMAND(RaftNode, -2);
 
   // keyspace
   ADD_COMMAND(Del, -2);
@@ -55,6 +83,8 @@ void CmdTableManager::InitCmdTable() {
   ADD_COMMAND(Pttl, 2);
   ADD_COMMAND(Persist, 2);
   ADD_COMMAND(Keys, 2);
+  ADD_COMMAND(Rename, 3);
+  ADD_COMMAND(RenameNX, 3);
 
   // kv
   ADD_COMMAND(Get, 2);
@@ -129,6 +159,7 @@ void CmdTableManager::InitCmdTable() {
   ADD_COMMAND(LPop, 2);
   ADD_COMMAND(LIndex, 3);
   ADD_COMMAND(LLen, 2);
+  ADD_COMMAND(RPoplpush, 3);
 
   // zset
   ADD_COMMAND(ZAdd, -4);

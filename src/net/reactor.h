@@ -1,13 +1,14 @@
 #pragma once
 
-#include <stdio.h>
+#include <cstdio>
 
+#include <functional>
 #include <memory>
 
 // #include "util.h"
 
 namespace pikiwidb {
-typedef int64_t TimerId;
+using TimerId = int64_t;
 
 class EventObject;
 /// Reactor interface

@@ -57,7 +57,7 @@ class IOThreadPool {
   // HTTP client
   std::shared_ptr<HttpClient> ConnectHTTP(const char* ip, int port, EventLoop* loop = nullptr);
 
-  virtual void PushWriteTask(std::shared_ptr<PClient>){};
+  virtual void PushWriteTask(std::shared_ptr<PClient> /*unused*/){};
 
   // for unittest only
   void Reset();

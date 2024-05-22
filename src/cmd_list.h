@@ -118,6 +118,22 @@ class RPushxCmd : public BaseCmd {
   void DoCmd(PClient* client) override;
 };
 
+class RPoplpushCmd : public BaseCmd {
+ public:
+  RPoplpushCmd(const std::string& name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient* client) override;
+
+ private:
+  void DoCmd(PClient* client) override;
+
+ private:
+  std::string source_;
+  std::string receiver_;
+  std::string value_poped_from_source_;
+};
+
 class LPopCmd : public BaseCmd {
  public:
   LPopCmd(const std::string& name, int16_t arity);

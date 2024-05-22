@@ -5,7 +5,7 @@
 
 INCLUDE_GUARD()
 
-FetchContent_Declare(
+FETCHCONTENT_DECLARE(
         rocksdb
         GIT_REPOSITORY https://github.com/facebook/rocksdb.git
         GIT_TAG v8.3.3

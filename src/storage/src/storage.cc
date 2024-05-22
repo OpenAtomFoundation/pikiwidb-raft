@@ -4,11 +4,18 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 
 #include <algorithm>
+#include <filesystem>
+#include <future>
+#include <string_view>
 #include <utility>
+#include <vector>
 
+#include "binlog.pb.h"
 #include "config.h"
 #include "pstd/log.h"
 #include "pstd/pikiwidb_slot.h"
+#include "pstd/pstd_string.h"
+#include "rocksdb/utilities/checkpoint.h"
 #include "scope_snapshot.h"
 #include "src/lru_cache.h"
 #include "src/mutex_impl.h"
@@ -19,6 +26,9 @@
 #include "storage/slot_indexer.h"
 #include "storage/storage.h"
 #include "storage/util.h"
+
+#define PRAFT_SNAPSHOT_META_FILE "__raft_snapshot_meta"
+#define SST_FILE_EXTENSION ".sst"
 
 namespace storage {
 extern std::string BitOpOperate(BitOpType op, const std::vector<std::string>& src_values, int64_t max_len);
@@ -61,13 +71,14 @@ Storage::Storage() {
 }
 
 Storage::~Storage() {
-  bg_tasks_should_exit_ = true;
+  bg_tasks_should_exit_.store(true);
   bg_tasks_cond_var_.notify_one();
-
-  if (is_opened_) {
-    for (auto& inst : insts_) {
-      inst.reset();
+  if (is_opened_.load()) {
+    int ret = 0;
+    if (ret = pthread_join(bg_tasks_thread_id_, nullptr); ret != 0) {
+      ERROR("pthread_join failed with bgtask thread error : {}", ret);
     }
+    insts_.clear();
   }
 }
 
@@ -79,9 +90,49 @@ static std::string AppendSubDirectory(const std::string& db_path, int index) {
   }
 }
 
+static int RecursiveLinkAndCopy(const std::filesystem::path& source, const std::filesystem::path& destination) {
+  if (std::filesystem::is_regular_file(source)) {
+    if (source.filename() == PRAFT_SNAPSHOT_META_FILE) {
+      return 0;
+    } else if (source.extension() == SST_FILE_EXTENSION) {
+      // Create a hard link
+      if (::link(source.c_str(), destination.c_str()) != 0) {
+        WARN("hard link file {} fail", source.string());
+        return -1;
+      }
+      DEBUG("hard link success! source_file = {} , destination_file = {}", source.string(), destination.string());
+    } else {
+      // Copy the file
+      if (!std::filesystem::copy_file(source, destination, std::filesystem::copy_options::overwrite_existing)) {
+        WARN("copy file {} fail", source.string());
+        return -1;
+      }
+      DEBUG("copy success! source_file = {} , destination_file = {}", source.string(), destination.string());
+    }
+  } else {
+    if (!pstd::FileExists(destination)) {
+      if (pstd::CreateDir(destination) != 0) {
+        WARN("create dir {} fail", destination.string());
+        return -1;
+      }
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(source)) {
+      if (RecursiveLinkAndCopy(entry.path(), destination / entry.path().filename()) != 0) {
+        return -1;
+      }
+    }
+  }
+  return 0;
+}
+
 Status Storage::Open(const StorageOptions& storage_options, const std::string& db_path) {
   mkpath(db_path.c_str(), 0755);
   db_instance_num_ = storage_options.db_instance_num;
+  // Temporarily set to 100000
+  LogIndexAndSequenceCollector::max_gap_.store(storage_options.max_gap);
+  storage_options.options.write_buffer_manager =
+      std::make_shared<rocksdb::WriteBufferManager>(storage_options.mem_manager_size);
   for (size_t index = 0; index < db_instance_num_; index++) {
     insts_.emplace_back(std::make_unique<Redis>(this, index));
     Status s = insts_.back()->Open(storage_options, AppendSubDirectory(db_path, index));
@@ -96,6 +147,119 @@ Status Storage::Open(const StorageOptions& storage_options, const std::string& d
   db_id_ = storage_options.db_id;
 
   is_opened_.store(true);
+  return Status::OK();
+}
+
+std::vector<std::future<Status>> Storage::CreateCheckpoint(const std::string& checkpoint_path) {
+  INFO("DB{} begin to generate a checkpoint to {}", db_id_, checkpoint_path);
+  //  auto source_dir = AppendSubDirectory(checkpoint_path, db_id_);
+
+  std::vector<std::future<Status>> result;
+  result.reserve(db_instance_num_);
+  for (int i = 0; i < db_instance_num_; ++i) {
+    // In a new thread, create a checkpoint for the specified rocksdb i.
+    auto res = std::async(std::launch::async, &Storage::CreateCheckpointInternal, this, checkpoint_path, i);
+    result.push_back(std::move(res));
+  }
+  return result;
+}
+
+Status Storage::CreateCheckpointInternal(const std::string& checkpoint_path, int index) {
+  auto source_dir = AppendSubDirectory(checkpoint_path, index);
+
+  auto tmp_dir = source_dir + ".tmp";
+  // 1) Make sure the temporary directory does not exist
+  if (!pstd::DeleteDirIfExist(tmp_dir)) {
+    WARN("DB{}'s RocksDB {} delete directory fail!", db_id_, index);
+    return Status::IOError("DeleteDirIfExist() fail! dir_name : {} ", tmp_dir);
+  }
+
+  // 2) Create checkpoint object of this RocksDB
+  rocksdb::Checkpoint* checkpoint = nullptr;
+  auto db = insts_[index]->GetDB();
+  rocksdb::Status s = rocksdb::Checkpoint::Create(db, &checkpoint);
+  if (!s.ok()) {
+    WARN("DB{}'s RocksDB {} create checkpoint object failed!. Error: ", db_id_, index, s.ToString());
+    return s;
+  }
+
+  // 3) Create a checkpoint
+  std::unique_ptr<rocksdb::Checkpoint> checkpoint_guard(checkpoint);
+  s = checkpoint->CreateCheckpoint(tmp_dir, kFlush, nullptr);
+  if (!s.ok()) {
+    WARN("DB{}'s RocksDB {} create checkpoint failed!. Error: {}", db_id_, index, s.ToString());
+    return s;
+  }
+
+  // 4) Make sure the source directory does not exist
+  if (!pstd::DeleteDirIfExist(source_dir)) {
+    WARN("DB{}'s RocksDB {} delete directory {} fail!", db_id_, index, source_dir);
+    if (!pstd::DeleteDirIfExist(tmp_dir)) {
+      WARN("DB{}'s RocksDB {} fail to delete the temporary directory {} ", db_id_, index, tmp_dir);
+    }
+    return Status::IOError("DeleteDirIfExist() fail! dir_name : {} ", source_dir);
+  }
+
+  // 5) Rename the temporary directory to source directory
+  if (auto status = pstd::RenameFile(tmp_dir, source_dir); status != 0) {
+    WARN("DB{}'s RocksDB {} rename temporary directory {} to source directory {} fail!", db_id_, index, tmp_dir,
+         source_dir);
+    if (!pstd::DeleteDirIfExist(tmp_dir)) {
+      WARN("DB{}'s RocksDB {} fail to delete the rename failed directory {} ", db_id_, index, tmp_dir);
+    }
+    return Status::IOError("Rename directory {} fail!", tmp_dir);
+  }
+
+  INFO("DB{}'s RocksDB {} create checkpoint {} success!", db_id_, index, source_dir);
+  return Status::OK();
+}
+
+std::vector<std::future<Status>> Storage::LoadCheckpoint(const std::string& checkpoint_sub_path,
+                                                         const std::string& db_sub_path) {
+  INFO("DB{} begin to load a checkpoint from {} to {}", db_id_, checkpoint_sub_path, db_sub_path);
+  std::vector<std::future<Status>> result;
+  result.reserve(db_instance_num_);
+  for (int i = 0; i < db_instance_num_; ++i) {
+    // In a new thread, Load a checkpoint for the specified rocksdb i
+    auto res =
+        std::async(std::launch::async, &Storage::LoadCheckpointInternal, this, checkpoint_sub_path, db_sub_path, i);
+    result.push_back(std::move(res));
+  }
+  return result;
+}
+
+Status Storage::LoadCheckpointInternal(const std::string& checkpoint_sub_path, const std::string& db_sub_path,
+                                       int index) {
+  auto rocksdb_path = AppendSubDirectory(db_sub_path, index);  // ./db/db_id/index
+  auto tmp_rocksdb_path = rocksdb_path + ".tmp";               // ./db/db_id/index.tmp
+  insts_[index].reset();
+
+  auto source_dir = AppendSubDirectory(checkpoint_sub_path, index);
+  // 1) Rename the original db to db.tmp, and only perform the maximum possible recovery of data
+  // when loading the checkpoint fails.
+  if (auto status = pstd::RenameFile(rocksdb_path, tmp_rocksdb_path); status != 0) {
+    WARN("DB{}'s RocksDB {} rename db directory {} to temporary directory {} fail!", db_id_, index, rocksdb_path,
+         tmp_rocksdb_path);
+    return Status::IOError("Rename directory {} fail!", rocksdb_path);
+  }
+
+  // 2) Create a db directory to save the checkpoint.
+  if (0 != pstd::CreatePath(rocksdb_path)) {
+    pstd::RenameFile(tmp_rocksdb_path, rocksdb_path);
+    WARN("DB{}'s RocksDB {} load a checkpoint from {} fail!", db_id_, index, checkpoint_sub_path);
+    return Status::IOError("Create directory {} fail!", rocksdb_path);
+  }
+  if (RecursiveLinkAndCopy(source_dir, rocksdb_path) != 0) {
+    pstd::DeleteDir(rocksdb_path);
+    pstd::RenameFile(tmp_rocksdb_path, rocksdb_path);
+    WARN("DB{}'s RocksDB {} load a checkpoint from {} fail!", db_id_, index, source_dir);
+    return Status::IOError("recursive link and copy directory {} fail!", rocksdb_path);
+  }
+
+  // 3) Destroy the db.tmp directory.
+  if (auto s = rocksdb::DestroyDB(tmp_rocksdb_path, rocksdb::Options()); !s.ok()) {
+    WARN("Failure to destroy the old DB, path = {}", tmp_rocksdb_path);
+  }
   return Status::OK();
 }
 
@@ -1754,6 +1918,102 @@ Status Storage::Keys(const DataType& data_type, const std::string& pattern, std:
   return Status::OK();
 }
 
+Status Storage::Rename(const std::string& key, const std::string& newkey) {
+  Status ret = Status::NotFound();
+  auto& inst = GetDBInstance(key);
+  auto& new_inst = GetDBInstance(newkey);
+
+  // Strings
+  Status s = inst->StringsRename(key, new_inst.get(), newkey);
+  if (s.ok()) {
+    ret = Status::OK();
+  } else if (!s.IsNotFound()) {
+    return s;
+  }
+
+  // Hashes
+  s = inst->HashesRename(key, new_inst.get(), newkey);
+  if (s.ok()) {
+    ret = Status::OK();
+  } else if (!s.IsNotFound()) {
+    return s;
+  }
+
+  // Sets
+  s = inst->SetsRename(key, new_inst.get(), newkey);
+  if (s.ok()) {
+    ret = Status::OK();
+  } else if (!s.IsNotFound()) {
+    return s;
+  }
+
+  // Lists
+  s = inst->ListsRename(key, new_inst.get(), newkey);
+  if (s.ok()) {
+    ret = Status::OK();
+  } else if (!s.IsNotFound()) {
+    return s;
+  }
+
+  // ZSets
+  s = inst->ZsetsRename(key, new_inst.get(), newkey);
+  if (s.ok()) {
+    ret = Status::OK();
+  } else if (!s.IsNotFound()) {
+    return s;
+  }
+
+  return ret;
+}
+
+Status Storage::Renamenx(const std::string& key, const std::string& newkey) {
+  Status ret = Status::NotFound();
+  auto& inst = GetDBInstance(key);
+  auto& new_inst = GetDBInstance(newkey);
+
+  // Strings
+  Status s = inst->StringsRenamenx(key, new_inst.get(), newkey);
+  if (s.ok()) {
+    ret = Status::OK();
+  } else if (!s.IsNotFound()) {
+    return s;
+  }
+
+  // Hashes
+  s = inst->HashesRenamenx(key, new_inst.get(), newkey);
+  if (s.ok()) {
+    ret = Status::OK();
+  } else if (!s.IsNotFound()) {
+    return s;
+  }
+
+  // Sets
+  s = inst->SetsRenamenx(key, new_inst.get(), newkey);
+  if (s.ok()) {
+    ret = Status::OK();
+  } else if (!s.IsNotFound()) {
+    return s;
+  }
+
+  // Lists
+  s = inst->ListsRenamenx(key, new_inst.get(), newkey);
+  if (s.ok()) {
+    ret = Status::OK();
+  } else if (!s.IsNotFound()) {
+    return s;
+  }
+
+  // ZSets
+  s = inst->ZsetsRenamenx(key, new_inst.get(), newkey);
+  if (s.ok()) {
+    ret = Status::OK();
+  } else if (!s.IsNotFound()) {
+    return s;
+  }
+
+  return ret;
+}
+
 void Storage::ScanDatabase(const DataType& type) {
   for (const auto& inst : insts_) {
     switch (type) {
@@ -1923,9 +2183,9 @@ Status Storage::AddBGTask(const BGTask& bg_task) {
 
 Status Storage::RunBGTask() {
   BGTask task;
-  while (!bg_tasks_should_exit_) {
+  while (!bg_tasks_should_exit_.load()) {
     std::unique_lock<std::mutex> lock(bg_tasks_mutex_);
-    bg_tasks_cond_var_.wait(lock, [this]() { return !bg_tasks_queue_.empty() || bg_tasks_should_exit_; });
+    bg_tasks_cond_var_.wait(lock, [this]() { return !bg_tasks_queue_.empty() || bg_tasks_should_exit_.load(); });
 
     if (!bg_tasks_queue_.empty()) {
       task = bg_tasks_queue_.front();
@@ -1933,7 +2193,7 @@ Status Storage::RunBGTask() {
     }
     lock.unlock();
 
-    if (bg_tasks_should_exit_) {
+    if (bg_tasks_should_exit_.load()) {
       return Status::Incomplete("bgtask return with bg_tasks_should_exit true");
     }
 
@@ -2197,6 +2457,51 @@ void Storage::DisableWal(const bool is_wal_disable) {
   for (const auto& inst : insts_) {
     inst->SetWriteWalOptions(is_wal_disable);
   }
+}
+
+Status Storage::OnBinlogWrite(const pikiwidb::Binlog& log, LogIndex log_idx) {
+  auto& inst = insts_[log.slot_idx()];
+
+  rocksdb::WriteBatch batch;
+  bool is_finished_start = true;
+  auto seqno = inst->GetDB()->GetLatestSequenceNumber();
+  for (const auto& entry : log.entries()) {
+    if (inst->IsRestarting() && inst->IsApplied(entry.cf_idx(), log_idx)) [[unlikely]] {
+      // If the starting phase is over, the log must not have been applied
+      // If the starting phase is not over and the log has been applied, skip it.
+      WARN("Log {} has been applied", log_idx);
+      is_finished_start = false;
+      continue;
+    }
+
+    switch (entry.op_type()) {
+      case pikiwidb::OperateType::kPut: {
+        assert(entry.has_value());
+        batch.Put(inst->GetColumnFamilyHandles()[entry.cf_idx()], entry.key(), entry.value());
+      } break;
+      case pikiwidb::OperateType::kDelete: {
+        assert(!entry.has_value());
+        batch.Delete(inst->GetColumnFamilyHandles()[entry.cf_idx()], entry.key());
+      } break;
+      default:
+        static constexpr std::string_view msg = "Unknown operate type in binlog";
+        ERROR(msg);
+        return Status::Incomplete(msg);
+    }
+    inst->UpdateAppliedLogIndexOfColumnFamily(entry.cf_idx(), log_idx, ++seqno);
+  }
+  if (inst->IsRestarting() && is_finished_start) [[unlikely]] {
+    INFO("Redis {} finished start phase", inst->GetIndex());
+    inst->StartingPhaseEnd();
+  }
+  auto first_seqno = inst->GetDB()->GetLatestSequenceNumber() + 1;
+  auto s = inst->GetDB()->Write(inst->GetWriteOptions(), &batch);
+  if (!s.ok()) {
+    // TODO(longfar): What we should do if the write operation failed ? 💥
+    return s;
+  }
+  inst->UpdateLogIndex(log_idx, first_seqno);
+  return s;
 }
 
 }  //  namespace storage

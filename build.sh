@@ -6,7 +6,13 @@ C_GREEN="\033[32m"
 
 C_END="\033[0m"
 
-BUILD_TYPE=release
+BUILD_TIME=$(git log -1 --format=%ai)
+BUILD_TIME=${BUILD_TIME: 0: 10}
+
+COMMIT_ID=$(git rev-parse HEAD)
+SHORT_COMMIT_ID=${COMMIT_ID: 0: 8}
+
+BUILD_TYPE=Release
 VERBOSE=0
 CMAKE_FLAGS=""
 MAKE_FLAGS=""
@@ -63,6 +69,12 @@ echo "cpu core ${CPU_CORE}"
 echo "BUILD_TYPE:" $BUILD_TYPE
 echo "CMAKE_FLAGS:" $CMAKE_FLAGS
 echo "MAKE_FLAGS:" $MAKE_FLAGS
+
+if [ "${BUILD_TYPE}" == "Release" ]; then
+  PREFIX="${PREFIX}-release"
+else
+  PREFIX="${PREFIX}-debug"
+fi
 
 cmake -DCMAKE_BUILD_TYPE=${BUILD_TYPE} ${CMAKE_FLAGS} -S . -B ${PREFIX}
 cmake --build ${PREFIX} -- ${MAKE_FLAGS} -j ${CPU_CORE}

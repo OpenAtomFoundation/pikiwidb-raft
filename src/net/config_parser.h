@@ -18,12 +18,16 @@
 
 class ConfigParser {
  public:
+  using Data = std::map<std::string, std::vector<std::string>>;
+
   bool Load(const char* FileName);
 
   template <typename T>
   T GetData(const char* key, const T& default_ = T()) const;
 
   const std::vector<std::string>& GetDataVector(const char* key) const;
+
+  const Data& GetMap() { return data_; }
 
 #ifdef CONFIG_DEBUG
   void Print() {
@@ -37,8 +41,6 @@ class ConfigParser {
 #endif
 
  private:
-  typedef std::map<std::string, std::vector<std::string> > Data;
-
   Data data_;
 
   template <typename T>

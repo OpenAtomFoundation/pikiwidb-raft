@@ -317,4 +317,40 @@ var _ = Describe("Keyspace", Ordered, func() {
 		Expect(client.Do(ctx, "pexpire", DefaultKey, "err").Err()).To(MatchError("ERR value is not an integer or out of range"))
 	})
 
+	It("should Rename", func ()  {
+		client.Set(ctx, "mykey", "hello", 0)
+		client.Rename(ctx, "mykey", "mykey1")
+		client.Rename(ctx, "mykey1", "mykey2")
+		Expect(client.Get(ctx, "mykey2").Val()).To(Equal("hello"))
+
+		Expect(client.Exists(ctx, "mykey").Val()).To(Equal(int64(0)))
+	
+		client.Set(ctx, "mykey", "foo", 0)
+		Expect(client.Rename(ctx, "mykey", "mykey").Val()).To(Equal(OK))
+	
+		client.Del(ctx, "mykey", "mykey2")
+		client.Set(ctx, "mykey", "foo", 0)
+		client.Set(ctx, "mykey2", "bar", 0)
+		client.Expire(ctx, "mykey2", 100 * time.Second)
+		Expect(client.TTL(ctx, "mykey").Val()).To(Equal(-1 * time.Nanosecond))
+		Expect(client.TTL(ctx, "mykey2").Val()).NotTo(Equal(-1 * time.Nanosecond))
+		client.Rename(ctx, "mykey", "mykey2")
+		Expect(client.TTL(ctx, "mykey2").Val()).To(Equal(-1 * time.Nanosecond))
+	})
+
+	It("should RenameNX", func ()  {
+		client.Del(ctx, "mykey", "mykey1", "mykey2")
+		client.Set(ctx, "mykey", "hello", 0)
+		client.RenameNX(ctx, "mykey", "mykey1")
+		client.RenameNX(ctx, "mykey1", "mykey2")
+		Expect(client.Get(ctx, "mykey2").Val()).To(Equal("hello"))
+
+		client.Set(ctx, "mykey", "foo", 0)
+		client.Set(ctx, "mykey2", "bar", 0)
+		Expect(client.RenameNX(ctx, "mykey", "mykey2").Val()).To(Equal(false))
+
+		client.Set(ctx, "mykey", "foo", 0)
+		Expect(client.RenameNX(ctx, "mykey", "mykey").Val()).To(Equal(false))
+	})
+
 })

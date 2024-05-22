@@ -2,13 +2,12 @@
 
 #include "event_obj.h"
 
-namespace pikiwidb {
-namespace internal {
+namespace pikiwidb::internal {
 
 class PipeObject : public EventObject {
  public:
   PipeObject();
-  ~PipeObject();
+  ~PipeObject() override;
 
   PipeObject(const PipeObject&) = delete;
   void operator=(const PipeObject&) = delete;
@@ -25,5 +24,4 @@ class PipeObject : public EventObject {
   int write_fd_;
 };
 
-}  // end namespace internal
-}  // namespace pikiwidb
+}  // namespace pikiwidb::internal

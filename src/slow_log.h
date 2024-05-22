@@ -22,7 +22,7 @@ struct SlowLogItem {
 
   SlowLogItem() : used(0) {}
 
-  SlowLogItem(SlowLogItem&& item) : used(item.used), cmds(std::move(item.cmds)) {}
+  SlowLogItem(SlowLogItem&& item) noexcept : used(item.used), cmds(std::move(item.cmds)) {}
 };
 
 class PSlowLog {

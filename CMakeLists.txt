@@ -1,7 +1,12 @@
+# Copyright (c) 2023-present, Qihoo, Inc.  All rights reserved.
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree. An additional grant
+# of patent rights can be found in the PATENTS file in the same directory.
+
 CMAKE_MINIMUM_REQUIRED(VERSION 3.14)
 PROJECT(PikiwiDB)
 
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated -g -D'GIT_COMMIT_ID=\"${GIT_COMMIT_ID}\"'")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=return-type -D'GIT_COMMIT_ID=\"${GIT_COMMIT_ID}\"'")
 
 # Avoid warning about DOWNLOAD_EXTRACT_TIMESTAMP in CMake 3.24:
 IF (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
@@ -24,27 +29,23 @@ ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     ENDIF ()
 ENDIF ()
 
-# get current date and time
-EXECUTE_PROCESS(COMMAND date "+%Y-%m-%d_%H:%M:%S" OUTPUT_VARIABLE BUILD_TIMESTAMP OUTPUT_STRIP_TRAILING_WHITESPACE)
-ADD_DEFINITIONS(-DKPIKIWIDB_BUILD_DATE="${BUILD_TIMESTAMP}")
+IF(CMAKE_BUILD_TYPE STREQUAL "Release")
+    MESSAGE("Building in Release mode")
+ELSE()
+    MESSAGE("Building in Debug mode")
+    OPTION(ADDRESS_SANITIZER "Enable AddressSanitizer (default sanitizer)" ON)
+    OPTION(THREAD_SANITIZER "Enable ThreadSanitizer" OFF)
 
-message(STATUS "Build timestamp: ${BUILD_TIMESTAMP}")
-
-# get git commit id
-EXECUTE_PROCESS(COMMAND git rev-parse HEAD OUTPUT_VARIABLE GIT_COMMIT_ID OUTPUT_STRIP_TRAILING_WHITESPACE)
-ADD_DEFINITIONS(-DKPIKIWIDB_GIT_COMMIT_ID="${GIT_COMMIT_ID}")
-MESSAGE(STATUS "Git commit id: ${GIT_COMMIT_ID}")
-
-############# You should enable sanitizer if you are developing pika #############
-# Uncomment the following two lines to enable AddressSanitizer to detect memory leaks and other memory-related bugs.
-# SET(CMAKE_BUILD_TYPE "Debug")
-# SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address  -O0 -fno-omit-frame-pointer -fno-optimize-sibling-calls")
-
-# [Notice] AddressSanitizer and ThreadSanitizer can not be enabled at the same time.
-
-# Uncomment the following two lines to enable ThreadSanitizer to detect data race and other thread-related issue.
-# SET(CMAKE_BUILD_TYPE "Debug")
-# SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=thread -O0 -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+    IF(THREAD_SANITIZER)
+        # enable ThreadSanitizer to detect data race and other thread-related issue.
+        SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=thread -O0 -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+        MESSAGE(STATUS "ThreadSanitizer is enabled.")
+    ELSEIF(ADDRESS_SANITIZER)
+        # enable AddressSanitizer to detect memory leaks and other memory-related bugs.
+        SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address  -O0 -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+        MESSAGE(STATUS "AddressSanitizer is enabled.")
+    ENDIF()
+ENDIF()
 
 EXECUTE_PROCESS(COMMAND uname -p OUTPUT_VARIABLE HOST_ARCH)
 STRING(TOLOWER ${HOST_ARCH} HOST_ARCH)
@@ -78,7 +79,7 @@ ELSEIF (CMAKE_SYSTEM_NAME MATCHES "Linux")
         set(CMAKE_THREAD_LIBS_INIT "-lpthread")
     ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         SET(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
-        SET(CMAKE_CXX_FLAGS "-pthread -Wl,--no-as-needed -ldl -Wno-restrict")
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -Wl,--no-as-needed -ldl")
     ENDIF ()
     ADD_DEFINITIONS(-DOS_LINUX)
 ELSE ()
@@ -91,7 +92,12 @@ ELSEIF (HOST_ARCH MATCHES "arm")
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv8-a+crc+crypto -moutline-atomics")
 ENDIF ()
 
-SET(EP_BASE_SUFFIX "buildtrees")
+IF (CMAKE_BUILD_TYPE STREQUAL "Release")
+    SET(EP_BASE_SUFFIX "build-release/buildtrees")
+ELSE ()
+    SET(EP_BASE_SUFFIX "build-debug/buildtrees")
+ENDIF ()
+
 SET_PROPERTY(DIRECTORY PROPERTY EP_BASE ${CMAKE_CURRENT_SOURCE_DIR}/${EP_BASE_SUFFIX})
 SET(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake/modules/")
 SET(STAGED_INSTALL_PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/deps)
@@ -101,28 +107,69 @@ SET(INSTALL_LIBDIR ${STAGED_INSTALL_PREFIX}/lib)
 SET(INSTALL_LIBDIR_64 ${STAGED_INSTALL_PREFIX}/lib64)
 SET(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${STAGED_INSTALL_PREFIX})
 SET(BUILD_SUPPORT_DIR ${PROJECT_SOURCE_DIR}/build_support)
+# make sure we use the same compiler for all dependencies
+SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 MESSAGE(STATUS "${PROJECT_NAME} staged install: ${STAGED_INSTALL_PREFIX}")
 MESSAGE(STATUS "Current platform: ${OS_VERSION} ")
 CMAKE_HOST_SYSTEM_INFORMATION(RESULT CPU_CORE QUERY NUMBER_OF_LOGICAL_CORES)
 MESSAGE(STATUS "CPU core ${CPU_CORE}")
 
+SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+SET(THIRD_PARTY_PATH ${CMAKE_CURRENT_BINARY_DIR}/third-party)
+SET(THIRD_PARTY_BUILD_TYPE ${CMAKE_BUILD_TYPE})
+SET(EXTERNAL_PROJECT_LOG_ARGS
+        LOG_DOWNLOAD 0
+        LOG_UPDATE 1
+        LOG_CONFIGURE 0
+        LOG_BUILD 0
+        LOG_TEST 1
+        LOG_INSTALL 0)
+
+IF(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    SET(LIB rt)
+ELSEIF(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    SET(LIB
+            pthread
+            "-framework CoreFoundation"
+            "-framework CoreGraphics"
+            "-framework CoreData"
+            "-framework CoreText"
+            "-framework Security"
+            "-framework Foundation"
+            "-Wl,-U,_MallocExtension_ReleaseFreeMemory"
+            "-Wl,-U,_ProfilerStart"
+            "-Wl,-U,_ProfilerStop"
+            "-Wl,-U,__Z13GetStackTracePPvii")
+ENDIF()
+SET(LIB ${LIB} CACHE INTERNAL "libs which should be linked for executable target")
 
 INCLUDE(FetchContent)
-#include(cmake/CmakeLists.txt)
 
-include(cmake/findTools.cmake)
-include(cmake/libevent.cmake)
-include(cmake/llhttp.cmake)
-include(cmake/fmt.cmake)
-include(cmake/spdlog.cmake)
-include(cmake/gtest.cmake)
-include(cmake/rocksdb.cmake)
+INCLUDE(cmake/openssl.cmake)
+INCLUDE(cmake/gflags.cmake)
+INCLUDE(cmake/findTools.cmake)
+INCLUDE(cmake/leveldb.cmake)
+INCLUDE(cmake/libevent.cmake)
+INCLUDE(cmake/llhttp.cmake)
+INCLUDE(cmake/fmt.cmake)
+INCLUDE(cmake/spdlog.cmake)
+INCLUDE(cmake/gtest.cmake)
+INCLUDE(cmake/rocksdb.cmake)
+INCLUDE(cmake/zlib.cmake)
+INCLUDE(cmake/protobuf.cmake)
+INCLUDE(cmake/brpc.cmake)
+INCLUDE(cmake/braft.cmake)
 
-enable_testing()
+ENABLE_TESTING()
+
+SET(PROTO_OUTPUT_DIR "${CMAKE_BINARY_DIR}/generated_pb")
+FILE(MAKE_DIRECTORY "${PROTO_OUTPUT_DIR}")
 
 ADD_SUBDIRECTORY(src/pstd)
 ADD_SUBDIRECTORY(src/net)
+ADD_SUBDIRECTORY(src/praft)
 ADD_SUBDIRECTORY(src/storage)
 ADD_SUBDIRECTORY(src)
 
@@ -177,4 +224,3 @@ ADD_CUSTOM_TARGET(cpplint echo '${LINT_FILES}' | xargs -n12 -P8
   --linelength=120
   --filter=-legal/copyright,-build/header_guard,-runtime/references
 )
-

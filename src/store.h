@@ -9,17 +9,35 @@
 
 #define GLOG_NO_ABBREVIATED_SEVERITIES
 
+#include <map>
+#include <shared_mutex>
+#include <vector>
+
 #include "common.h"
 #include "db.h"
 #include "storage/storage.h"
 
-#include <map>
-#include <memory>
-#include <mutex>
-#include <shared_mutex>
-#include <vector>
-
 namespace pikiwidb {
+
+enum TaskType { kCheckpoint = 0, kLoadDBFromCheckpoint, kEmpty };
+
+enum TaskArg {
+  kCheckpointPath = 0,
+};
+
+struct TaskContext {
+  TaskType type = kEmpty;
+  int db = -1;
+  std::map<TaskArg, std::string> args;
+  bool sync = false;
+  TaskContext() = delete;
+  TaskContext(TaskType t, bool s = false) : type(t), sync(s) {}
+  TaskContext(TaskType t, int d, bool s = false) : type(t), db(d), sync(s) {}
+  TaskContext(TaskType t, int d, const std::map<TaskArg, std::string>& a, bool s = false)
+      : type(t), db(d), args(a), sync(s) {}
+};
+
+using TasksVector = std::vector<TaskContext>;
 
 class PStore {
  public:
@@ -28,21 +46,17 @@ class PStore {
   PStore(const PStore&) = delete;
   void operator=(const PStore&) = delete;
 
-  void Init(int dbNum);
+  void Init(int db_number);
 
   std::unique_ptr<DB>& GetBackend(int32_t index) { return backends_[index]; };
 
-  std::shared_mutex& SharedMutex() { return dbs_mutex_; }
+  void HandleTaskSpecificDB(const TasksVector& tasks);
+
+  int GetDBNumber() const { return db_number_; }
 
  private:
   PStore() = default;
-
-  /**
-   * If you want to access all the DBs at the same time,
-   * then you must hold the lock.
-   * For example: you want to execute flushall or bgsave.
-   */
-  std::shared_mutex dbs_mutex_;
+  int db_number_ = 0;
   std::vector<std::unique_ptr<DB>> backends_;
 };
 
