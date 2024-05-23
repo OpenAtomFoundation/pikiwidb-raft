@@ -7,6 +7,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.14)
 PROJECT(PikiwiDB)
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=return-type -D'GIT_COMMIT_ID=\"${GIT_COMMIT_ID}\"'")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CSS_FLAGS} -Wno-deprecated-declarations")
 
 # Avoid warning about DOWNLOAD_EXTRACT_TIMESTAMP in CMake 3.24:
 IF (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
@@ -161,6 +162,7 @@ INCLUDE(cmake/zlib.cmake)
 INCLUDE(cmake/protobuf.cmake)
 INCLUDE(cmake/brpc.cmake)
 INCLUDE(cmake/braft.cmake)
+INCLUDE(cmake/VectorSimilarity.cmake)
 
 ENABLE_TESTING()
 

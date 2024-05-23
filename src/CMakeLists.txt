@@ -29,9 +29,10 @@ TARGET_INCLUDE_DIRECTORIES(pikiwidb
         PRIVATE ${rocksdb_SOURCE_DIR}/include
         PRIVATE ${BRAFT_INCLUDE_DIR}
         PRIVATE ${BRPC_INCLUDE_DIR}
+        PRIVAET ${VecsimLib_SOURCE_DIR}
         )
 
 
-TARGET_LINK_LIBRARIES(pikiwidb net; dl; fmt; storage; rocksdb; pstd braft brpc ssl crypto zlib protobuf leveldb gflags  z praft praft_pb "${LIB}")
+TARGET_LINK_LIBRARIES(pikiwidb net; dl; fmt; storage; rocksdb; pstd braft brpc ssl crypto zlib protobuf leveldb gflags  z praft praft_pb VectorSimilarity "${LIB}")
 
 SET_TARGET_PROPERTIES(pikiwidb PROPERTIES LINKER_LANGUAGE CXX)

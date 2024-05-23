@@ -73,6 +73,7 @@
 
 #include "pstd_hash.h"
 #include <cstdio>
+#include <cstdint>
 #include <cstring>
 
 namespace pstd {
