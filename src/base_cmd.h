@@ -10,7 +10,6 @@
 #include <atomic>
 #include <map>
 #include <memory>
-#include <set>
 #include <span>
 #include <string>
 #include <unordered_map>
@@ -161,10 +160,6 @@ const std::string kCmdNameZRank = "zrank";
 const std::string kCmdNameZRevrank = "zrevrank";
 const std::string kCmdNameZRem = "zrem";
 const std::string kCmdNameZIncrby = "zincrby";
-
-// If Raft is used but not initialized, only allow specific commands
-const std::set<std::string> kPreRaftInitCmds = {kCmdNameRaftCluster, kCmdNamePing, kCmdNameConfig,
-                                                kCmdNameAuth,        kCmdNameInfo, kCmdNameShutdown};
 
 enum CmdFlags {
   kCmdFlagsWrite = (1 << 0),             // May modify the dataset
@@ -319,8 +314,6 @@ class BaseCmd : public std::enable_shared_from_this<BaseCmd> {
   //  std::shared_ptr<std::string> GetResp();
 
   uint32_t GetCmdID() const;
-
-  bool IsAllowedPreRaftInit(const std::string& cmd_name) const;
 
  protected:
   // Execute a specific command

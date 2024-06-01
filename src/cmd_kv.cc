@@ -532,7 +532,7 @@ void SetNXCmd::DoCmd(PClient* client) {
 }
 
 GetBitCmd::GetBitCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryString) {}
+    : BaseCmd(name, arity, kCmdFlagsReadonly | kCmdFlagsFast, kAclCategoryRead | kAclCategoryBitmap) {}
 
 bool GetBitCmd::DoInitial(PClient* client) {
   client->SetKey(client->argv_[1]);

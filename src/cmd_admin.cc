@@ -129,8 +129,7 @@ void ShutdownCmd::DoCmd(PClient* client) {
   client->SetRes(CmdRes::kNone);
 }
 
-PingCmd::PingCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryList) {}
+PingCmd::PingCmd(const std::string& name, int16_t arity) : BaseCmd(name, arity, kCmdFlagsFast, kAclCategoryFast) {}
 
 bool PingCmd::DoInitial(PClient* client) { return true; }
 

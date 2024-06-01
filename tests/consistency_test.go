@@ -52,6 +52,7 @@ var _ = Describe("Consistency", Ordered, func() {
 				c := s.NewClient()
 				Expect(c).NotTo(BeNil())
 				// Expect(c.FlushDB(ctx).Err()).NotTo(HaveOccurred())
+				Expect(c.FlushDB(ctx).Err().Error()).To(Equal("ERR PRAFT is not initialized"))
 				followers = append(followers, c)
 			}
 		}
@@ -92,11 +93,11 @@ var _ = Describe("Consistency", Ordered, func() {
 			if i == 0 {
 				leader = s.NewClient()
 				Expect(leader).NotTo(BeNil())
-				// Expect(leader.FlushDB(ctx).Err()).NotTo(HaveOccurred())
+				Expect(leader.FlushDB(ctx).Err()).NotTo(HaveOccurred())
 			} else {
 				c := s.NewClient()
 				Expect(c).NotTo(BeNil())
-				//Expect(c.FlushDB(ctx).Err().Error()).To(Equal("ERR MOVED 127.0.0.1:12111"))
+				Expect(c.FlushDB(ctx).Err().Error()).To(Equal("ERR MOVED 127.0.0.1:12111"))
 				followers = append(followers, c)
 			}
 		}

@@ -34,9 +34,17 @@ std::vector<std::string> BaseCmd::CurrentKey(PClient* client) const { return std
 void BaseCmd::Execute(PClient* client) {
   DEBUG("execute command: {}", client->CmdName());
 
-  if (!IsAllowedPreRaftInit(client->CmdName())) {
-    DEBUG("drop command: {}", client->CmdName());
-    return client->SetRes(CmdRes::kErrOther, "NOCLUSTER No Raft Cluster");
+  if (g_config.use_raft.load()) {
+    // 1. 如果 PRAFT 还没有初始化，对于读写命令，应该返回客户端一个初始化未完成的提示信息。
+    if (!PRAFT.IsInitialized() && (HasFlag(kCmdFlagsReadonly) || HasFlag(kCmdFlagsWrite))) {
+      DEBUG("drop command: {}", client->CmdName());
+      return client->SetRes(CmdRes::kErrOther, "PRAFT is not initialized");
+    }
+
+    // 2. 如果 PRAFT 初始化完成了，对于写命令，如果自身的角色不是 leader，返回一个重定向的信息。
+    if (!PRAFT.IsLeader() && HasFlag(kCmdFlagsWrite)) {
+      return client->SetRes(CmdRes::kErrOther, fmt::format("MOVED {}", PRAFT.GetLeaderAddress()));
+    }
   }
 
   auto dbIndex = client->GetCurrentDB();
@@ -72,11 +80,6 @@ std::string BaseCmd::Name() const { return name_; }
 // void BaseCommand::SetResp(const std::shared_ptr<std::string>& resp) { resp_ = resp; }
 // std::shared_ptr<std::string> BaseCommand::GetResp() { return resp_.lock(); }
 uint32_t BaseCmd::GetCmdID() const { return cmd_id_; }
-
-bool BaseCmd::IsAllowedPreRaftInit(const std::string& cmd_name) const {
-  // Allow only specific commands if Raft is not initialized
-  return PRAFT.IsInitialized() || kPreRaftInitCmds.count(cmd_name) != 0;
-}
 
 // BaseCmdGroup
 BaseCmdGroup::BaseCmdGroup(const std::string& name, uint32_t flag) : BaseCmdGroup(name, -2, flag) {}
