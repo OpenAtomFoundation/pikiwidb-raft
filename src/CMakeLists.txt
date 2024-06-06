@@ -29,7 +29,7 @@ TARGET_INCLUDE_DIRECTORIES(pikiwidb
         PRIVATE ${rocksdb_SOURCE_DIR}/include
         PRIVATE ${BRAFT_INCLUDE_DIR}
         PRIVATE ${BRPC_INCLUDE_DIR}
-        PRIVAET ${VecsimLib_SOURCE_DIR}
+        PRIVATE ${VecsimLib_SOURCE_DIR}
         )
 
 
