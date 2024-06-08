@@ -24,6 +24,7 @@ class GetCmd : public BaseCmd {
 
 class SetCmd : public BaseCmd {
  public:
+  enum SetCondition { kNONE, kNX, kXX, kEXORPX };
   SetCmd(const std::string &name, int16_t arity);
 
  protected:
@@ -31,6 +32,11 @@ class SetCmd : public BaseCmd {
 
  private:
   void DoCmd(PClient *client) override;
+
+  std::string value_;
+  std::string target_;
+  int64_t sec_ = 0;
+  SetCmd::SetCondition condition_{kNONE};
 };
 
 class BitOpCmd : public BaseCmd {

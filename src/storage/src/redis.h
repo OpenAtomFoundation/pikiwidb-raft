@@ -100,6 +100,8 @@ class Redis {
   // Common Commands
   Status Open(const StorageOptions& storage_options, const std::string& db_path);
 
+  void SetNeedClose(bool need_close) { need_close_.store(need_close); }
+
   virtual Status CompactRange(const DataType& option_type, const rocksdb::Slice* begin, const rocksdb::Slice* end,
                               const ColumnFamilyType& type = kMetaAndData);
 
@@ -362,6 +364,7 @@ class Redis {
 
  private:
   int32_t index_ = 0;
+  std::atomic<bool> need_close_ = false;
   Storage* const storage_;
   std::shared_ptr<LockMgr> lock_mgr_;
   rocksdb::DB* db_ = nullptr;

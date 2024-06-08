@@ -163,6 +163,10 @@ void CmdTableManager::InitCmdTable() {
 
   // zset
   ADD_COMMAND(ZAdd, -4);
+  ADD_COMMAND(ZPopMin, -2);
+  ADD_COMMAND(ZPopMax, -2);
+  ADD_COMMAND(ZInterstore, -4);
+  ADD_COMMAND(ZUnionstore, -4);
   ADD_COMMAND(ZRevrange, -4);
   ADD_COMMAND(ZRangebyscore, -4);
   ADD_COMMAND(ZRemrangebyscore, 4);

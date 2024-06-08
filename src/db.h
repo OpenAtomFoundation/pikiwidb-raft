@@ -19,6 +19,7 @@ namespace pikiwidb {
 class DB {
  public:
   DB(int db_index, const std::string& db_path);
+  ~DB();
 
   rocksdb::Status Open();
 

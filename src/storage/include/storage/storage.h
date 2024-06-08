@@ -186,6 +186,8 @@ class Storage {
 
   Status Open(const StorageOptions& storage_options, const std::string& db_path);
 
+  Status Close();
+
   std::vector<std::future<Status>> CreateCheckpoint(const std::string& checkpoint_path);
 
   Status CreateCheckpointInternal(const std::string& checkpoint_path, int db_index);

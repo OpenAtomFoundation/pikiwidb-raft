@@ -103,7 +103,7 @@ RocksDB 可以配置为 PikiwiDB 的持久化存储引擎，可以存储更多�
 
 #### sorted set commands
 
-- zadd zcard zrank zrevrank zrem zincrby zscore zrange zrevrange zrangebyscore zrevrangebyscore zremrangebyrank zremrangebyscore
+- zadd zcard zrank zrevrank zrem zincrby zscore zrange zrevrange zrangebyscore zrevrangebyscore zremrangebyrank zremrangebyscore zpopmin zpopmax zunionstore zinterstore
 
 #### pubsub commands
 

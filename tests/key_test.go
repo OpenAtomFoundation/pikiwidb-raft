@@ -65,6 +65,104 @@ var _ = Describe("Keyspace", Ordered, func() {
 		}
 	})
 
+	It("Set", func() {
+		{
+			// set px
+			res, err := client.Set(ctx, "a", "a", time.Millisecond*1001).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal("OK"))
+			time.Sleep(time.Millisecond * 2000)
+
+			n, err := client.Exists(ctx, "a").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(0)))
+		}
+		{
+			// set ex
+			res, err := client.Set(ctx, "a", "a", time.Second*60).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal("OK"))
+
+			n, err := client.Exists(ctx, "a").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(1)))
+		}
+		{
+			// set xx
+			res, err := client.SetXX(ctx, "a", "a", 0).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal(true))
+
+			n, err := client.Exists(ctx, "a").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(1)))
+		}
+		{
+			// set ex xx
+			res, err := client.SetXX(ctx, "a", "a", time.Second*30).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal(true))
+
+			n, err := client.Exists(ctx, "a").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(1)))
+		}
+		{
+			// set px xx
+			res, err := client.SetXX(ctx, "a", "a", time.Millisecond*1001).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal(true))
+			time.Sleep(time.Millisecond * 2000)
+
+			n, err := client.Exists(ctx, "a").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(0)))
+		}
+		{
+			// set ex nx
+			res, err := client.SetNX(ctx, "a", "a", time.Second).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal(true))
+			time.Sleep(time.Second * 2)
+
+			n, err := client.Exists(ctx, "a").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(0)))
+		}
+		{
+			// set px nx
+			res, err := client.SetNX(ctx, "a", "a", time.Millisecond*1001).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal(true))
+			time.Sleep(time.Millisecond * 2000)
+
+			n, err := client.Exists(ctx, "a").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(0)))
+		}
+		{
+			// set nx
+			res, err := client.SetNX(ctx, "a", "a", 0).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal(true))
+
+			n, err := client.Exists(ctx, "a").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(1)))
+		}
+		{
+			// setex
+			res, err := client.SetEx(ctx, "a", "a", time.Second).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal("OK"))
+			time.Sleep(time.Second * 2)
+
+			n, err := client.Exists(ctx, "a").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(0)))
+		}
+	})
+
 	//TODO(dingxiaoshuai) Add more test cases.
 	It("Exists", func() {
 		n, err := client.Exists(ctx, "key1").Result()
@@ -317,28 +415,28 @@ var _ = Describe("Keyspace", Ordered, func() {
 		Expect(client.Do(ctx, "pexpire", DefaultKey, "err").Err()).To(MatchError("ERR value is not an integer or out of range"))
 	})
 
-	It("should Rename", func ()  {
+	It("should Rename", func() {
 		client.Set(ctx, "mykey", "hello", 0)
 		client.Rename(ctx, "mykey", "mykey1")
 		client.Rename(ctx, "mykey1", "mykey2")
 		Expect(client.Get(ctx, "mykey2").Val()).To(Equal("hello"))
 
 		Expect(client.Exists(ctx, "mykey").Val()).To(Equal(int64(0)))
-	
+
 		client.Set(ctx, "mykey", "foo", 0)
 		Expect(client.Rename(ctx, "mykey", "mykey").Val()).To(Equal(OK))
-	
+
 		client.Del(ctx, "mykey", "mykey2")
 		client.Set(ctx, "mykey", "foo", 0)
 		client.Set(ctx, "mykey2", "bar", 0)
-		client.Expire(ctx, "mykey2", 100 * time.Second)
+		client.Expire(ctx, "mykey2", 100*time.Second)
 		Expect(client.TTL(ctx, "mykey").Val()).To(Equal(-1 * time.Nanosecond))
 		Expect(client.TTL(ctx, "mykey2").Val()).NotTo(Equal(-1 * time.Nanosecond))
 		client.Rename(ctx, "mykey", "mykey2")
 		Expect(client.TTL(ctx, "mykey2").Val()).To(Equal(-1 * time.Nanosecond))
 	})
 
-	It("should RenameNX", func ()  {
+	It("should RenameNX", func() {
 		client.Del(ctx, "mykey", "mykey1", "mykey2")
 		client.Set(ctx, "mykey", "hello", 0)
 		client.RenameNX(ctx, "mykey", "mykey1")

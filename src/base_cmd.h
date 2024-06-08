@@ -142,6 +142,10 @@ const std::string kCmdNameRPoplpush = "rpoplpush";
 
 // zset cmd
 const std::string kCmdNameZAdd = "zadd";
+const std::string kCmdNameZPopMin = "zpopmin";
+const std::string kCmdNameZPopMax = "zpopmax";
+const std::string kCmdNameZInterstore = "zinterstore";
+const std::string kCmdNameZUnionstore = "zunionstore";
 const std::string kCmdNameZRevrange = "zrevrange";
 const std::string kCmdNameZRangebyscore = "zrangebyscore";
 const std::string kCmdNameZRemrangebyscore = "zremrangebyscore";

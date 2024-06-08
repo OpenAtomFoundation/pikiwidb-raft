@@ -37,15 +37,72 @@ void GetCmd::DoCmd(PClient* client) {
 SetCmd::SetCmd(const std::string& name, int16_t arity)
     : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryString) {}
 
+// SET key value [NX | XX] [EX seconds | PX milliseconds]
 bool SetCmd::DoInitial(PClient* client) {
   client->SetKey(client->argv_[1]);
+
+  auto argv_ = client->argv_;
+  value_ = argv_[2];
+  condition_ = SetCmd::kNONE;
+  sec_ = 0;
+  size_t index = 3;
+
+  while (index != argv_.size()) {
+    std::string opt = argv_[index];
+    if (strcasecmp(opt.data(), "xx") == 0) {
+      condition_ = SetCmd::kXX;
+    } else if (strcasecmp(opt.data(), "nx") == 0) {
+      condition_ = SetCmd::kNX;
+    } else if ((strcasecmp(opt.data(), "ex") == 0) || (strcasecmp(opt.data(), "px") == 0)) {
+      condition_ = (condition_ == SetCmd::kNONE) ? SetCmd::kEXORPX : condition_;
+      index++;
+      if (index == argv_.size()) {
+        client->SetRes(CmdRes::kSyntaxErr);
+        return false;
+      }
+      if (pstd::String2int(argv_[index].data(), argv_[index].size(), &sec_) == 0) {
+        client->SetRes(CmdRes::kInvalidInt);
+        return false;
+      }
+
+      if (strcasecmp(opt.data(), "px") == 0) {
+        sec_ /= 1000;
+      }
+    } else {
+      client->SetRes(CmdRes::kSyntaxErr);
+      return false;
+    }
+    index++;
+  }
+
   return true;
 }
 
 void SetCmd::DoCmd(PClient* client) {
-  storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Set(client->Key(), client->argv_[2]);
-  if (s.ok()) {
-    client->SetRes(CmdRes::kOK);
+  int32_t res = 1;
+  storage::Status s;
+  auto key_ = client->Key();
+  switch (condition_) {
+    case SetCmd::kXX:
+      s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Setxx(key_, value_, &res, sec_);
+      break;
+    case SetCmd::kNX:
+      s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Setnx(key_, value_, &res, sec_);
+      break;
+    case SetCmd::kEXORPX:
+      s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Setex(key_, value_, sec_);
+      break;
+    default:
+      s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Set(key_, value_);
+      break;
+  }
+
+  if (s.ok() || s.IsNotFound()) {
+    if (res == 1) {
+      client->SetRes(CmdRes::kOK);
+    } else {
+      client->AppendStringLen(-1);
+    }
   } else {
     client->SetRes(CmdRes::kErrOther, s.ToString());
   }

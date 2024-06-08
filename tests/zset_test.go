@@ -477,4 +477,182 @@ var _ = Describe("Zset", Ordered, func() {
 			Member: "three",
 		}}))
 	})
+
+	item1 := redis.Z{
+		Score:  1,
+		Member: "one",
+	}
+
+	item2 := redis.Z{
+		Score:  2,
+		Member: "two",
+	}
+
+	It("should ZPopMin", func() {
+		{
+			err := client.ZAdd(ctx, "ZPopMin", item1, item2).Err()
+			Expect(err).NotTo(HaveOccurred())
+			vals, err := client.ZPopMin(ctx, "ZPopMin").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vals).To(Equal([]redis.Z{item1}))
+		}
+		{
+			err := client.ZAdd(ctx, "ZPopMin", item1, item2).Err()
+			Expect(err).NotTo(HaveOccurred())
+			vals, err := client.ZPopMin(ctx, "ZPopMin", 2).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vals).To(Equal([]redis.Z{item1, item2}))
+		}
+		{
+			err := client.ZAdd(ctx, "ZPopMin", item1, item2).Err()
+			Expect(err).NotTo(HaveOccurred())
+			vals, err := client.ZPopMin(ctx, "ZPopMin", 10).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vals).To(Equal([]redis.Z{item1, item2}))
+		}
+
+	})
+
+	It("should ZPopMax", func() {
+
+		{
+			err := client.ZAdd(ctx, "ZPopMax", item1, item2).Err()
+			Expect(err).NotTo(HaveOccurred())
+			vals, err := client.ZPopMax(ctx, "ZPopMax").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vals).To(Equal([]redis.Z{item2}))
+		}
+		{
+			err := client.ZAdd(ctx, "ZPopMax", item1, item2).Err()
+			Expect(err).NotTo(HaveOccurred())
+			vals, err := client.ZPopMax(ctx, "ZPopMax", 2).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vals).To(Equal([]redis.Z{item2, item1}))
+		}
+		{
+			err := client.ZAdd(ctx, "ZPopMax", item1, item2).Err()
+			Expect(err).NotTo(HaveOccurred())
+			vals, err := client.ZPopMax(ctx, "ZPopMax", 10).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vals).To(Equal([]redis.Z{item2, item1}))
+		}
+	})
+
+	item20 := redis.Z{
+		Score:  20,
+		Member: "two",
+	}
+	item30 := redis.Z{
+		Score:  30,
+		Member: "three",
+	}
+	It("should ZInterstore", func() {
+		err := client.ZAdd(ctx, "in1", item1, item2).Err()
+		Expect(err).NotTo(HaveOccurred())
+		err = client.ZAdd(ctx, "in2", item20, item30).Err()
+		Expect(err).NotTo(HaveOccurred())
+
+		res, err := client.ZInterStore(ctx, "out", &redis.ZStore{
+			Keys:      []string{"in1", "in2"},
+			Weights:   []float64{2, 3},
+			Aggregate: "SUM",
+		}).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(Equal(int64(1)))
+
+		vals, err := client.ZRangeWithScores(ctx, "out", 0, -1).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(vals).To(Equal([]redis.Z{{
+			Score:  64,
+			Member: "two",
+		}}))
+
+		res, err = client.ZInterStore(ctx, "out", &redis.ZStore{
+			Keys:      []string{"in1", "in2"},
+			Weights:   []float64{1, 1},
+			Aggregate: "MIN",
+		}).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(Equal(int64(1)))
+
+		vals, err = client.ZRangeWithScores(ctx, "out", 0, -1).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(vals).To(Equal([]redis.Z{{
+			Score:  2,
+			Member: "two",
+		}}))
+
+		res, err = client.ZInterStore(ctx, "out", &redis.ZStore{
+			Keys:      []string{"in1", "in2"},
+			Weights:   []float64{20, 1},
+			Aggregate: "MAX",
+		}).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(Equal(int64(1)))
+
+		vals, err = client.ZRangeWithScores(ctx, "out", 0, -1).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(vals).To(Equal([]redis.Z{{
+			Score:  40,
+			Member: "two",
+		}}))
+	})
+
+	It("should ZUnionstore && ZInterStore", func() {
+		err := client.ZAdd(ctx, "in1", item1, item2).Err()
+		Expect(err).NotTo(HaveOccurred())
+		err = client.ZAdd(ctx, "in2", item20, item30).Err()
+		Expect(err).NotTo(HaveOccurred())
+
+		res, err := client.ZUnionStore(ctx, "out", &redis.ZStore{
+			Keys:      []string{"in1", "in2"},
+			Weights:   []float64{1, 1},
+			Aggregate: "SUM",
+		}).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(Equal(int64(3)))
+
+		vals, err := client.ZRangeWithScores(ctx, "out", 0, -1).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(vals).To(Equal([]redis.Z{{
+			Score:  1,
+			Member: "one",
+		}, {
+			Score:  22,
+			Member: "two",
+		}, {
+			Score:  30,
+			Member: "three",
+		}}))
+
+		res, err = client.ZInterStore(ctx, "out", &redis.ZStore{
+			Keys:      []string{"in1", "in2"},
+			Weights:   []float64{1, 1},
+			Aggregate: "MIN",
+		}).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(Equal(int64(1)))
+
+		vals, err = client.ZRangeWithScores(ctx, "out", 0, -1).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(vals).To(Equal([]redis.Z{{
+			Score:  2,
+			Member: "two",
+		}}))
+
+		res, err = client.ZInterStore(ctx, "out", &redis.ZStore{
+			Keys:      []string{"in1", "in2"},
+			Weights:   []float64{2, 3},
+			Aggregate: "MAX",
+		}).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res).To(Equal(int64(1)))
+
+		vals, err = client.ZRangeWithScores(ctx, "out", 0, -1).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(vals).To(Equal([]redis.Z{{
+			Score:  60,
+			Member: "two",
+		}}))
+	})
 })

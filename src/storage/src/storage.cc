@@ -71,15 +71,28 @@ Storage::Storage() {
 }
 
 Storage::~Storage() {
+  INFO("Storage begin to clear storage!");
   bg_tasks_should_exit_.store(true);
   bg_tasks_cond_var_.notify_one();
   if (is_opened_.load()) {
+    INFO("Storage begin to clear all instances!");
     int ret = 0;
     if (ret = pthread_join(bg_tasks_thread_id_, nullptr); ret != 0) {
       ERROR("pthread_join failed with bgtask thread error : {}", ret);
     }
     insts_.clear();
   }
+}
+
+Status Storage::Close() {
+  if (!is_opened_.load()) {
+    return Status::OK();
+  }
+  is_opened_.store(false);
+  for (auto& inst : insts_) {
+    inst->SetNeedClose(true);
+  }
+  return Status::OK();
 }
 
 static std::string AppendSubDirectory(const std::string& db_path, int index) {

@@ -81,7 +81,7 @@ Run this command, compare with redis use pipeline commands, try it.
 - sadd scard srem sismember smembers sdiff sdiffstore sinter sinterstore sunion sunionstore smove spop srandmember sscan
 
 #### sorted set commands
-- zadd zcard zrank zrevrank zrem zincrby zscore zrange zrevrange zrangebyscore zrevrangebyscore zremrangebyrank zremrangebyscore
+- zadd zcard zrank zrevrank zrem zincrby zscore zrange zrevrange zrangebyscore zrevrangebyscore zremrangebyrank zremrangebyscore zpopmin zpopmax zunionstore zinterstore
 
 #### pubsub commands
 - subscribe unsubscribe publish psubscribe punsubscribe pubsub

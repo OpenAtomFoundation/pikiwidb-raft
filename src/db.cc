@@ -6,6 +6,7 @@
  */
 
 #include "db.h"
+#include <algorithm>
 
 #include "config.h"
 #include "praft/praft.h"
@@ -17,6 +18,8 @@ namespace pikiwidb {
 
 DB::DB(int db_index, const std::string& db_path)
     : db_index_(db_index), db_path_(db_path + std::to_string(db_index_) + '/') {}
+
+DB::~DB() { INFO("DB{} is closing...", db_index_); }
 
 rocksdb::Status DB::Open() {
   storage::StorageOptions storage_options;
@@ -41,6 +44,11 @@ rocksdb::Status DB::Open() {
   storage_options.db_instance_num = g_config.db_instance_num.load();
   storage_options.db_id = db_index_;
 
+  std::unique_ptr<storage::Storage> old_storage = std::move(storage_);
+  if (old_storage != nullptr) {
+    old_storage->Close();
+    old_storage.reset();
+  }
   storage_ = std::make_unique<storage::Storage>();
 
   if (auto s = storage_->Open(storage_options, db_path_); !s.ok()) {

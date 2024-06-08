@@ -15,6 +15,7 @@ ExternalProject_Add(
         ${EXTERNAL_PROJECT_LOG_ARGS}
         GIT_REPOSITORY  "https://github.com/madler/zlib.git"
         GIT_TAG         "v1.2.8"
+        GIT_SHALLOW true
         PREFIX          ${ZLIB_SOURCES_DIR}
         UPDATE_COMMAND  ""
         CMAKE_ARGS      -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}

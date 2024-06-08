@@ -17,6 +17,8 @@
 
 namespace pikiwidb {
 
+PStore::~PStore() { INFO("STORE is closing..."); }
+
 PStore& PStore::Instance() {
   static PStore store;
   return store;

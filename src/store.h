@@ -45,6 +45,7 @@ class PStore {
 
   PStore(const PStore&) = delete;
   void operator=(const PStore&) = delete;
+  ~PStore();
 
   void Init(int db_number);
 

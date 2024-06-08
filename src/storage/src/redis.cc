@@ -5,10 +5,12 @@
 
 #include <sstream>
 
+#include "pstd/log.h"
 #include "rocksdb/env.h"
 
 #include "src/base_filter.h"
 #include "src/lists_filter.h"
+#include "src/mutex.h"
 #include "src/redis.h"
 #include "src/strings_filter.h"
 #include "src/zsets_filter.h"
@@ -45,19 +47,20 @@ Redis::Redis(Storage* const s, int32_t index)
 }
 
 Redis::~Redis() {
-  rocksdb::CancelAllBackgroundWork(db_, true);
-  std::vector<rocksdb::ColumnFamilyHandle*> tmp_handles = handles_;
-  handles_.clear();
-  for (auto handle : tmp_handles) {
-    delete handle;
+  if (need_close_.load()) {
+    rocksdb::CancelAllBackgroundWork(db_, true);
+    std::vector<rocksdb::ColumnFamilyHandle*> tmp_handles = handles_;
+    handles_.clear();
+    for (auto& handle : tmp_handles) {
+      delete handle;
+    }
+    // delete env_;
+    delete db_;
+    db_ = nullptr;
   }
-  // delete env_;
-  delete db_;
-
-  if (default_compact_range_options_.canceled) {
-    delete default_compact_range_options_.canceled;
-  }
-}
+  delete default_compact_range_options_.canceled;
+  default_compact_range_options_.canceled = nullptr;
+};
 
 Status Redis::Open(const StorageOptions& storage_options, const std::string& db_path) {
   append_log_function_ = storage_options.append_log_function;

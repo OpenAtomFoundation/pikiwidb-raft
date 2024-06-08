@@ -23,6 +23,64 @@ class ZAddCmd : public BaseCmd {
   void DoCmd(PClient *client) override;
 };
 
+class ZPopMinCmd : public BaseCmd {
+ public:
+  ZPopMinCmd(const std::string &name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient *client) override;
+
+ private:
+  void DoCmd(PClient *client) override;
+};
+
+class ZPopMaxCmd : public BaseCmd {
+ public:
+  ZPopMaxCmd(const std::string &name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient *client) override;
+
+ private:
+  void DoCmd(PClient *client) override;
+};
+
+class ZsetUIstoreParentCmd : public BaseCmd {
+ public:
+  ZsetUIstoreParentCmd(const std::string &name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient *client) override;
+
+  std::string dest_key_;
+  int64_t num_keys_ = 0;
+  storage::AGGREGATE aggregate_{storage::SUM};
+  std::vector<std::string> keys_;
+  std::vector<double> weights_;
+};
+
+class ZInterstoreCmd : public ZsetUIstoreParentCmd {
+ public:
+  ZInterstoreCmd(const std::string &name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient *client) override;
+
+ private:
+  void DoCmd(PClient *client) override;
+};
+
+class ZUnionstoreCmd : public ZsetUIstoreParentCmd {
+ public:
+  ZUnionstoreCmd(const std::string &name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient *client) override;
+
+ private:
+  void DoCmd(PClient *client) override;
+};
+
 class ZRevrangeCmd : public BaseCmd {
  public:
   ZRevrangeCmd(const std::string &name, int16_t arity);

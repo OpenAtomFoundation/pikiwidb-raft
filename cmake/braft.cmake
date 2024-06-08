@@ -18,6 +18,7 @@ ExternalProject_Add(
         DEPENDS brpc
         GIT_REPOSITORY "https://github.com/pikiwidb/braft.git"
         GIT_TAG master
+        GIT_SHALLOW true
         PREFIX ${BRAFT_SOURCES_DIR}
         UPDATE_COMMAND ""
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
@@ -38,7 +39,7 @@ ExternalProject_Add(
         -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE}
         BUILD_IN_SOURCE 1
         BUILD_COMMAND $(MAKE) -j ${CPU_CORE} braft-static
-        INSTALL_COMMAND mkdir -p ${BRAFT_INSTALL_DIR}/lib/ COMMAND cp ${BRAFT_SOURCES_DIR}/src/extern_braft/output/lib/libbraft.a ${BRAFT_LIBRARIES} COMMAND cp -r ${BRAFT_SOURCES_DIR}/src/extern_braft/output/include ${BRAFT_INCLUDE_DIR}/
+        INSTALL_COMMAND mkdir -p ${BRAFT_INSTALL_DIR}/lib/ COMMAND cp ${BRAFT_SOURCES_DIR}/src/extern_braft/output/lib/libbraft.a ${BRAFT_LIBRARIES} COMMAND rm -rf ${BRAFT_INCLUDE_DIR} COMMAND cp -r ${BRAFT_SOURCES_DIR}/src/extern_braft/output/include ${BRAFT_INCLUDE_DIR}
 )
 ADD_DEPENDENCIES(extern_braft brpc)
 ADD_LIBRARY(braft STATIC IMPORTED GLOBAL)
