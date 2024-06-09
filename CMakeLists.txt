@@ -33,7 +33,7 @@ IF(CMAKE_BUILD_TYPE STREQUAL "Release")
     MESSAGE("Building in Release mode")
 ELSE()
     MESSAGE("Building in Debug mode")
-    OPTION(ADDRESS_SANITIZER "Enable AddressSanitizer (default sanitizer)" ON)
+    OPTION(ADDRESS_SANITIZER "Enable AddressSanitizer (default sanitizer)" OFF)
     OPTION(THREAD_SANITIZER "Enable ThreadSanitizer" OFF)
 
     IF(THREAD_SANITIZER)
