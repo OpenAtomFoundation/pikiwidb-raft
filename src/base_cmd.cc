@@ -35,14 +35,15 @@ void BaseCmd::Execute(PClient* client) {
   DEBUG("execute command: {}", client->CmdName());
 
   if (g_config.use_raft.load()) {
-    // 1. 如果 PRAFT 还没有初始化，对于读写命令，应该返回客户端一个初始化未完成的提示信息。
+    // 1. If PRAFT is not initialized yet, return an error message to the client for both read and write commands.
     if (!PRAFT.IsInitialized() && (HasFlag(kCmdFlagsReadonly) || HasFlag(kCmdFlagsWrite))) {
       DEBUG("drop command: {}", client->CmdName());
       return client->SetRes(CmdRes::kErrOther, "PRAFT is not initialized");
     }
 
-    // 2. 如果 PRAFT 初始化完成了，对于写命令，如果自身的角色不是 leader，返回一个重定向的信息。
-    if (!PRAFT.IsLeader() && HasFlag(kCmdFlagsWrite)) {
+    // 2. If PRAFT is initialized and the current node is not the leader, return a redirection message for write
+    // commands.
+    if (HasFlag(kCmdFlagsWrite) && !PRAFT.IsLeader()) {
       return client->SetRes(CmdRes::kErrOther, fmt::format("MOVED {}", PRAFT.GetLeaderAddress()));
     }
   }
