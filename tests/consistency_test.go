@@ -47,11 +47,10 @@ var _ = Describe("Consistency", Ordered, func() {
 			if i == 0 {
 				leader = s.NewClient()
 				Expect(leader).NotTo(BeNil())
-				// Expect(leader.FlushDB(ctx).Err()).NotTo(HaveOccurred())
+				Expect(leader.FlushDB(ctx).Err().Error()).To(Equal("ERR PRAFT is not initialized"))
 			} else {
 				c := s.NewClient()
 				Expect(c).NotTo(BeNil())
-				// Expect(c.FlushDB(ctx).Err()).NotTo(HaveOccurred())
 				Expect(c.FlushDB(ctx).Err().Error()).To(Equal("ERR PRAFT is not initialized"))
 				followers = append(followers, c)
 			}
