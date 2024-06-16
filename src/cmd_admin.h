@@ -140,20 +140,10 @@ class CmdClientList: public BaseCmd{
   void DoCmd(PClient* client) override;
 };
 
-class CmdClientAddr: public BaseCmd{
- public:
-  CmdClientList(const std::string& name, int16_t arity);
-
- protected:
-  bool DoInitial(PClient* client) override;
-
- private:
-  void DoCmd(PClient* client) override;
-};
 
 class CmdClientKill: public BaseCmd{
  public:
-  CmdClientList(const std::string& name, int16_t arity);
+  CmdClientKill(const std::string& name, int16_t arity);
 
  protected:
   bool DoInitial(PClient* client) override;
