@@ -258,4 +258,17 @@ void CmdDebugSegfault::DoCmd(PClient* client) {
   *ptr = 0;
 }
 
+CmdClient::ClientCmd(const std::string & name, int arity):BaseCmdGroup(name,  kCmdFlagsReadOnly|kCmdFlagsAdmin, kAclCategoryAdmin){}
+
+bool CmdClient::HasSubCommand() const { return true; }
+
+CmdClientGetname::CmdClientGetname(const std::string& name, int16_t arity) 
+  : BaseCmd(name, arity, kCmdFlagsAdmin | kCmdFlagsReadOnly, kAclCategoryAdmin) {}
+
+bool CmdClientGetname::DoInitial(PClient* client) { return false; }
+
+void CmdClientGetname::DoCmd(PClient* client) {
+  std::string result = client->GetName();
+  client->AppendString(result);
+}
 }  // namespace pikiwidb

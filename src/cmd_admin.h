@@ -79,6 +79,89 @@ class FlushallCmd : public BaseCmd {
   void DoCmd(PClient* client) override;
 };
 
+class CmdClient : public BaseCmdGroup {
+ public:
+  ClientCmd(const std::string& name, int arity);
+  bool HasSubCommand() const override;
+
+ protected:
+  std::string operation_, info_;
+  void DoInitial(PClient* client) override{return true;}
+
+private:
+  const static std::string CLIENT_LIST_S;
+  const static std::string CLIENT_KILL_S;
+
+  void DoCmd(PClient* client) override{}
+};
+
+class CmdClientGetname: public BaseCmd{
+ public:
+  CmdClientGetname(const std::string& name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient* client) override;
+
+ private:
+  void DoCmd(PClient* client) override;
+};
+
+class CmdClientSetname: public BaseCmd{
+ public:
+  CmdClientSetname(const std::string& name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient* client) override;
+
+ private:
+  void DoCmd(PClient* client) override;
+};
+
+
+class CmdClientSetname: public BaseCmd{
+ public:
+  CmdClientSetname(const std::string& name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient* client) override;
+
+ private:
+  void DoCmd(PClient* client) override;
+};
+
+class CmdClientList: public BaseCmd{
+ public:
+  CmdClientList(const std::string& name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient* client) override;
+
+ private:
+  void DoCmd(PClient* client) override;
+};
+
+class CmdClientAddr: public BaseCmd{
+ public:
+  CmdClientList(const std::string& name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient* client) override;
+
+ private:
+  void DoCmd(PClient* client) override;
+};
+
+class CmdClientKill: public BaseCmd{
+ public:
+  CmdClientList(const std::string& name, int16_t arity);
+
+ protected:
+  bool DoInitial(PClient* client) override;
+
+ private:
+  void DoCmd(PClient* client) override;
+};
+
 class SelectCmd : public BaseCmd {
  public:
   SelectCmd(const std::string& name, int16_t arity);
