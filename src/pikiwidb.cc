@@ -111,8 +111,6 @@ void PikiwiDB::OnNewConnection(pikiwidb::TcpConnection* obj) {
 
   client->OnConnect();
 
-  //add new PClient to clients 
-  clients[client->GetUniqueId()] = client.get();
 
   auto msg_cb = std::bind(&pikiwidb::PClient::HandlePackets, client.get(), std::placeholders::_1, std::placeholders::_2,
                           std::placeholders::_3);
@@ -125,6 +123,10 @@ void PikiwiDB::OnNewConnection(pikiwidb::TcpConnection* obj) {
   obj->SetNodelay(true);
   obj->SetEventLoopSelector([this]() { return worker_threads_.ChooseNextWorkerEventLoop(); });
   obj->SetSlaveEventLoopSelector([this]() { return slave_threads_.ChooseNextWorkerEventLoop(); });
+
+  //add new PClient to clients 
+  clients[client->GetUniqueId()] = client.get();
+  INFO("new client id{}", obj->GetUniqueId());
 }
 
 uint32_t PikiwiDB::GetAllClientInfos(std::vector<ClientInfo>& results)
