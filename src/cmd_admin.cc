@@ -17,6 +17,7 @@
 
 #include "store.h"
 
+
 namespace pikiwidb {
 
 CmdConfig::CmdConfig(const std::string& name, int arity) : BaseCmdGroup(name, kCmdFlagsAdmin, kAclCategoryAdmin) {}
@@ -382,10 +383,14 @@ void CmdClientList::DoCmd(PClient* client) {
   {
     std::vector<pikiwidb::ClientInfo> client_infos;
     g_pikiwidb->GetAllClientInfos(client_infos);
+    client->AppendArrayLen(client_infos.size());
+    if(client_infos.size() == 0){
+      return;
+    }
+    char buf[128];
     for(auto &client_info : client_infos){
       // client->
-      char buf[128];
-      snprintf(buf, sizeof(buf), "ID=%d IP=%s PORT=%d FD=%d\n", 
+      snprintf(buf, sizeof(buf), "ID=%d IP=%s PORT=%d FD=%d", 
               client_info.client_id, client_info.ip.c_str(), client_info.port, client_info.fd);
       client->AppendString(std::string(buf));
     }
@@ -403,14 +408,14 @@ void CmdClientList::DoCmd(PClient* client) {
         snprintf(buf, sizeof(buf), "ID=%d IP=%s PORT=%d FD=%d\n", 
                 client_info.client_id, client_info.ip.c_str(), client_info.port, client_info.fd);
         client->AppendString(std::string(buf));
-        break;
       }
       catch(const std::exception& e)
       {
         client->SetRes(CmdRes::kErrOther, "Invalid client id");
-        std::cerr << e.what() << '\n';
+        return;
       }
     }
+    break;
   }
   default:
     break;
