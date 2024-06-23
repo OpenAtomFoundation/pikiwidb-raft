@@ -54,7 +54,7 @@ class PikiwiDB final {
   bool RemoveClientMetaById(int id);
 
   bool KillAllClients();
-  bool KillClientsByAddrPort(const std::string& addr_port);
+  bool KillClientByAddrPort(const std::string& addr_port);
   bool KillClientById(int client_id);
 
  public:

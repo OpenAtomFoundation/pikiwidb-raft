@@ -17,6 +17,7 @@
 
 #include "store.h"
 
+
 namespace pikiwidb {
 
 CmdConfig::CmdConfig(const std::string& name, int arity) : BaseCmdGroup(name, kCmdFlagsAdmin, kAclCategoryAdmin) {}
@@ -303,10 +304,10 @@ bool CmdClientKill::DoInitial(PClient* client) {
   if(strcasecmp(client->argv_[2].data(), "all")== 0){
     kill_type_ = Type::ALL;
     return true;
-  }else if(client->argv_[2].size() == 3 && strcasecmp(client->argv_[2].data(), "addr")== 0){
+  }else if(client->argv_.size() == 4 && strcasecmp(client->argv_[2].data(), "addr")== 0){
     kill_type_ = Type::ADDR;
     return true;
-  }else if(client->argv_[2].size() == 3 && strcasecmp(client->argv_[2].data(), "id")== 0){
+  }else if(client->argv_.size() == 4 && strcasecmp(client->argv_[2].data(), "id")== 0){
     kill_type_ = Type::ID;
     return true;
   }else{
@@ -325,21 +326,23 @@ void CmdClientKill::DoCmd(PClient* client) {
     }
     case Type::ADDR:
     {
-      ret = g_pikiwidb->KillClientsByAddrPort(client->argv_[3]);
+      ret = g_pikiwidb->KillClientByAddrPort(client->argv_[3]);
       break;
     }
     case Type::ID:
     {
-      ret = g_pikiwidb->KillClientsByAddrPort(client->argv_[3]);
+      try {
+        int client_id = stoi(client->argv_[3]);
+        ret = g_pikiwidb->KillClientById(client_id);
+      } catch (const std::exception& e) {
+        client->SetRes(CmdRes::kErrOther, "Invalid client id");
+        return;
+      }
     }
     default:
       break;
   }
-  if(ret){
-
-  }
-
-  ret == true ? client->SetRes(CmdRes::kOK) : client->SetRes(CmdRes::kErrOther, "no such client");
+  ret == true ? client->SetRes(CmdRes::kOK) : client->SetRes(CmdRes::kErrOther, "No such client");
 }
 
 CmdClientList::CmdClientList(const std::string& name, int16_t arity)
@@ -354,23 +357,6 @@ bool CmdClientList::DoInitial(PClient * client){
     list_type_ = Type:: ID;
     return true;
   }
-  // if (client->argv_.size() == 5 && (strcasecmp(client->argv_[2].data(), "order") == 0) && (strcasecmp(client->argv_[3].data(), "by") == 0)) {
-  //   if(strcasecmp(client->argv_[4].data(), "addr")==0){
-  //     list_type_ = ListType::ADDR;
-  //     info_ = client->argv_[4];
-  //     return true;
-  //   }else if(strcasecmp(client->argv_[4].data(), "idle")==0){
-  //     list_type_ = ListType::IDLE;
-  //     info_ = client->argv_[4];
-  //     return true;
-  //   } else {
-  //     client->SetRes(CmdRes::kErrOther, "Syntax error, try CLIENT (LIST [order by [addr|idle])");
-  //     return false;
-  //   }
-  // } else {
-  //     client->SetRes(CmdRes::kErrOther, "Syntax error, try CLIENT (LIST [order by [addr|idle])");
-  //     return false;
-  // }
   client->SetRes(CmdRes::kErrOther, "Syntax error, try CLIENT (LIST [ID client_id_1, client_id_2...])");
   return false; 
 }
@@ -382,9 +368,13 @@ void CmdClientList::DoCmd(PClient* client) {
   {
     std::vector<pikiwidb::ClientInfo> client_infos;
     g_pikiwidb->GetAllClientInfos(client_infos);
+    client->AppendArrayLen(client_infos.size());
+    if(client_infos.size() == 0){
+      return;
+    }
+    char buf[128];
     for(auto &client_info : client_infos){
       // client->
-      char buf[128];
       snprintf(buf, sizeof(buf), "ID=%d IP=%s PORT=%d FD=%d\n", 
               client_info.client_id, client_info.ip.c_str(), client_info.port, client_info.fd);
       client->AppendString(std::string(buf));
@@ -393,6 +383,7 @@ void CmdClientList::DoCmd(PClient* client) {
   }
   case Type::ID:
   {
+    client->AppendArrayLen(client->argv_.size() - 3);
 
     for(size_t i = 3; i < client->argv_.size(); i++){
       try
@@ -403,14 +394,14 @@ void CmdClientList::DoCmd(PClient* client) {
         snprintf(buf, sizeof(buf), "ID=%d IP=%s PORT=%d FD=%d\n", 
                 client_info.client_id, client_info.ip.c_str(), client_info.port, client_info.fd);
         client->AppendString(std::string(buf));
-        break;
       }
       catch(const std::exception& e)
       {
         client->SetRes(CmdRes::kErrOther, "Invalid client id");
-        std::cerr << e.what() << '\n';
+        return;
       }
     }
+    break;
   }
   default:
     break;
