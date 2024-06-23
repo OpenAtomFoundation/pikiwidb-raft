@@ -21,6 +21,9 @@
 
 namespace pikiwidb {
 
+
+const ClientInfo ClientInfo::invalidClientInfo = {-1, "", -1, -1};
+
 void CmdRes::RedisAppendLen(std::string& str, int64_t ori, const std::string& prefix) {
   str.append(prefix);
   str.append(pstd::Int2string(ori));
@@ -144,6 +147,7 @@ void CmdRes::SetRes(CmdRes::CmdRet _ret, const std::string& content) {
 CmdRes::~CmdRes() { message_.clear(); }
 
 thread_local PClient* PClient::s_current = nullptr;
+
 
 std::mutex monitors_mutex;
 std::set<std::weak_ptr<PClient>, std::owner_less<std::weak_ptr<PClient> > > monitors;
@@ -482,6 +486,13 @@ int PClient::PeerPort() const {
   return -1;
 }
 
+const int PClient::GetFd() const {
+  if (auto c = getTcpConnection(); c) {
+    return c->Fd();
+  }
+  return -1;
+}
+
 bool PClient::SendPacket(const std::string& buf) {
   if (auto c = getTcpConnection(); c) {
     return c->SendPacket(buf);
@@ -544,12 +555,19 @@ bool PClient::isClusterCmdTarget() const {
   return PRAFT.GetClusterCmdCtx().GetPeerIp() == PeerIP() && PRAFT.GetClusterCmdCtx().GetPort() == PeerPort();
 }
 
-int PClient::uniqueID() const {
+int PClient::GetUniqueId() const {
   if (auto c = getTcpConnection(); c) {
     return c->GetUniqueId();
   }
 
   return -1;
+}
+
+ClientInfo PClient::GetClientInfo() const { 
+  if(auto c = getTcpConnection(); c) {
+    return {GetUniqueId(), PeerIP().c_str(), PeerPort(), GetFd()};
+  }
+  return ClientInfo::invalidClientInfo;
 }
 
 bool PClient::Watch(int dbno, const std::string& key) {
@@ -559,12 +577,12 @@ bool PClient::Watch(int dbno, const std::string& key) {
 
 bool PClient::NotifyDirty(int dbno, const std::string& key) {
   if (IsFlagOn(kClientFlagDirty)) {
-    INFO("client is already dirty {}", uniqueID());
+    INFO("client is already dirty {}", GetUniqueId());
     return true;
   }
 
   if (watch_keys_[dbno].contains(key)) {
-    INFO("{} client become dirty because key {} in db {}", uniqueID(), key, dbno);
+    INFO("{} client become dirty because key {} in db {}", GetUniqueId(), key, dbno);
     SetFlag(kClientFlagDirty);
     return true;
   } else {
