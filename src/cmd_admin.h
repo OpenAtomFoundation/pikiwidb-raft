@@ -81,12 +81,12 @@ class FlushallCmd : public BaseCmd {
 
 class CmdClient : public BaseCmdGroup {
  public:
-  ClientCmd(const std::string& name, int arity);
+  CmdClient(const std::string& name, int arity);
   bool HasSubCommand() const override;
 
  protected:
   std::string operation_, info_;
-  void DoInitial(PClient* client) override{return true;}
+  bool DoInitial(PClient* client) override{return true;}
 
 private:
   const static std::string CLIENT_LIST_S;
@@ -117,10 +117,9 @@ class CmdClientSetname: public BaseCmd{
   void DoCmd(PClient* client) override;
 };
 
-
-class CmdClientSetname: public BaseCmd{
+class CmdClientId: public BaseCmd{
  public:
-  CmdClientSetname(const std::string& name, int16_t arity);
+  CmdClientId(const std::string& name, int16_t arity);
 
  protected:
   bool DoInitial(PClient* client) override;
@@ -129,7 +128,15 @@ class CmdClientSetname: public BaseCmd{
   void DoCmd(PClient* client) override;
 };
 
+
+
+
 class CmdClientList: public BaseCmd{
+ private:
+  enum class Type{
+    DEFAULT, IDLE,  ADDR, ID 
+  } list_type_;
+  std::string info_;
  public:
   CmdClientList(const std::string& name, int16_t arity);
 
@@ -142,6 +149,10 @@ class CmdClientList: public BaseCmd{
 
 
 class CmdClientKill: public BaseCmd{
+ private:
+  enum class Type{
+    ALL, ADDR, ID 
+  } kill_type_;
  public:
   CmdClientKill(const std::string& name, int16_t arity);
 
@@ -151,6 +162,8 @@ class CmdClientKill: public BaseCmd{
  private:
   void DoCmd(PClient* client) override;
 };
+
+
 
 class SelectCmd : public BaseCmd {
  public:

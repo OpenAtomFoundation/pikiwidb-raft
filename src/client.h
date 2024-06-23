@@ -19,7 +19,6 @@
 #include "storage/storage.h"
 
 namespace pikiwidb {
-
 class CmdRes {
  public:
   enum CmdRet {
@@ -110,6 +109,14 @@ enum class ClientState {
 class DB;
 struct PSlaveInfo;
 
+struct ClientInfo{
+  int client_id;
+  std::string ip;
+  int port;
+  int fd;
+  static const ClientInfo invalidClientInfo;
+  bool operator==(ClientInfo& ci) const{return client_id == ci.client_id;}
+}; 
 class PClient : public std::enable_shared_from_this<PClient>, public CmdRes {
  public:
   PClient() = delete;
@@ -121,6 +128,9 @@ class PClient : public std::enable_shared_from_this<PClient>, public CmdRes {
 
   const std::string& PeerIP() const;
   int PeerPort() const;
+  const int GetFd() const;
+  int GetUniqueId() const;
+  ClientInfo GetClientInfo() const;
 
   bool SendPacket(const std::string& buf);
   bool SendPacket(const void* data, size_t size);
@@ -216,13 +226,12 @@ class PClient : public std::enable_shared_from_this<PClient>, public CmdRes {
   std::span<std::string> argv_;
 
  private:
-  std::shared_ptr<TcpConnection> getTcpConnection() const { return tcp_connection_.lock(); }
+std::shared_ptr<TcpConnection> getTcpConnection() const { return tcp_connection_.lock(); }
   int handlePacket(const char*, int);
   void executeCommand();
   int processInlineCmd(const char*, size_t, std::vector<std::string>&);
   void reset();
   bool isPeerMaster() const;
-  int uniqueID() const;
 
   bool isClusterCmdTarget() const;
 
@@ -263,6 +272,7 @@ class PClient : public std::enable_shared_from_this<PClient>, public CmdRes {
   time_t last_auth_ = 0;
 
   ClientState state_;
+
 
   static thread_local PClient* s_current;
 };
