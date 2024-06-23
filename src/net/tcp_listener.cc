@@ -92,11 +92,11 @@ void TcpListener::OnNewConnection(struct evconnlistener*, evutil_socket_t fd, st
     auto on_create = acceptor->on_new_conn_;  // cpp11 doesn't support lambda capture initializers
     auto create_conn = [loop, on_create, fd, ipstr, port]() {
       auto conn(std::make_shared<TcpConnection>(loop));
-      conn->SetNewConnCallback(on_create);
-      conn->OnAccept(fd, ipstr, port);
       if (!loop->Register(conn, 0)) {
         ERROR("Failed to register socket {}", fd);
       }
+      conn->SetNewConnCallback(on_create);
+      conn->OnAccept(fd, ipstr, port);
     };
     loop->Execute(std::move(create_conn));
   } else {
