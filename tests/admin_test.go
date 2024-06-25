@@ -159,4 +159,23 @@ var _ = Describe("Admin", Ordered, func() {
 		// Expect(res.Err()).NotTo(HaveOccurred())
 		// Expect(res.Val()).To(Equal(map[string]string{"timeout": "0"}))
 	})
+
+	It("Cmd Client", func() {
+		get := client.ClientGetName(ctx)
+		Expect(get.Err()).NotTo(HaveOccurred())
+		Expect(get.Val()).To(Equal("clientxxx"))
+
+		resId := client.ClientID(ctx).Err()
+		Expect(resId).NotTo(HaveOccurred())
+		Expect(client.ClientID(ctx).Val()).To(BeNumerically(">=", 0))
+
+		resKillFilter := client.ClientKillByFilter(ctx, "ADDR", "1.1.1.1:1111")
+		Expect(resKillFilter.Err()).To(MatchError("ERR No such client"))
+		Expect(resKillFilter.Val()).To(Equal(int64(0)))
+
+		resKillFilter = client.ClientKillByFilter(ctx, "ID", "1")
+		Expect(resKillFilter.Err()).To(MatchError("ERR No such client"))
+		Expect(resKillFilter.Val()).To(Equal(int64(0)))
+	})
+
 })
