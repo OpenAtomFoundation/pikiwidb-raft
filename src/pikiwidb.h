@@ -10,7 +10,6 @@
 #include "common.h"
 #include "io_thread_pool.h"
 #include "net/tcp_connection.h"
-#include <optional>
 
 #define KPIKIWIDB_VERSION "4.0.0"
 
