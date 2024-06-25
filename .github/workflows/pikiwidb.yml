@@ -67,4 +67,4 @@ jobs:
         run: |
           cd ../tests
           go mod tidy
-          go test
+          go test -timeout 15
