@@ -7,33 +7,49 @@ FILE(GLOB STORAGE_SRC
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/storage/*.h"
-        )
+)
 SET(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 ADD_LIBRARY(storage ${STORAGE_SRC})
 
 TARGET_INCLUDE_DIRECTORIES(storage
         PUBLIC ${CMAKE_SOURCE_DIR}/src
-        PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} 
-        PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include 
-        PRIVATE ${rocksdb_SOURCE_DIR}/
-        PRIVATE ${rocksdb_SOURCE_DIR}/include
+        PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
+        PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
+        PRIVATE ${ROCKSDB_SOURCES_DIR}
+        PRIVATE ${ROCKSDB_SOURCES_DIR}/include
         PRIVATE ${PROTO_OUTPUT_DIR}
+        PRIVATE ${PROTOBUF_INCLUDE_DIR}
+        PRIVATE ${SPDLOG_INCLUDE_DIR}
 )
 
-TARGET_LINK_LIBRARIES (storage 
-  pstd 
-  braft 
-  brpc 
-  ssl 
-  crypto 
-  zlib 
-  leveldb 
-  gflags 
-  rocksdb 
-  binlog_pb
-  protobuf 
+TARGET_LINK_LIBRARIES(storage
+        pstd
+        braft
+        brpc
+        ssl
+        crypto
+        zlib
+        leveldb
+        gflags
+        rocksdb
+        protobuf
+        spdlog
 )
 
 SET_TARGET_PROPERTIES(storage PROPERTIES LINKER_LANGUAGE CXX)
 
 ADD_SUBDIRECTORY(tests)
+
+ADD_DEPENDENCIES(storage
+        pstd
+        braft
+        brpc
+        ssl
+        crypto
+        zlib
+        leveldb
+        gflags
+        rocksdb
+        protobuf
+        spdlog
+)

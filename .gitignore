@@ -66,6 +66,8 @@ build-release/
 build-debug/
 buildtrees
 deps
+deps-debug/
+deps-release/
 
 #develop container
 .devcontainer

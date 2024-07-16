@@ -3,29 +3,47 @@
 # LICENSE file in the root directory of this source tree. An additional grant
 # of patent rights can be found in the PATENTS file in the same directory.
 
-INCLUDE(ExternalProject)
-
-SET(OPENSSL_SOURCE_DIR ${THIRD_PARTY_PATH}/openssl)
-SET(OPENSSL_INSTALL_DIR ${THIRD_PARTY_PATH}/install/openssl)
-SET(OPENSSL_INCLUDE_DIR ${OPENSSL_INSTALL_DIR}/include)
-SET(OPENSSL_CONFIGURE_COMMAND ${OPENSSL_SOURCE_DIR}/config)
+SET(OPENSSL_SOURCE_DIR ${LIB_INSTALL_PREFIX})
+SET(OPENSSL_INSTALL_DIR "${LIB_INSTALL_PREFIX}")
+SET(OPENSSL_INCLUDE_DIR "${LIB_INCLUDE_DIR}" CACHE PATH "Openssl include directory." FORCE)
 
 FILE(MAKE_DIRECTORY ${OPENSSL_INCLUDE_DIR})
 
+#ExternalProject_Add(
+#        OpenSSL
+#        URL https://github.com/openssl/openssl/archive/refs/tags/openssl-3.2.1.tar.gz
+#        URL_HASH SHA256=75cc6803ffac92625c06ea3c677fb32ef20d15a1b41ecc8dddbc6b9d6a2da84c
+#        USES_TERMINAL_DOWNLOAD TRUE
+#        CONFIGURE_COMMAND
+#        <SOURCE_DIR>/config
+#        --prefix=${OPENSSL_INSTALL_DIR}
+#        --openssldir=${OPENSSL_INSTALL_DIR}
+#        --libdir=${OPENSSL_INSTALL_DIR}/lib
+#        no-apps
+#        no-shared
+#        BUILD_COMMAND make -j${CPU_CORE}
+#        TEST_COMMAND ""
+#        INSTALL_COMMAND make install_sw
+#        INSTALL_DIR ${OPENSSL_INSTALL_DIR}
+#)
+
 ExternalProject_Add(
         OpenSSL
-        SOURCE_DIR ${OPENSSL_SOURCE_DIR}
+        #        SOURCE_DIR ${OPENSSL_SOURCE_DIR}
         URL https://github.com/openssl/openssl/archive/refs/tags/openssl-3.2.1.tar.gz
         URL_HASH SHA256=75cc6803ffac92625c06ea3c677fb32ef20d15a1b41ecc8dddbc6b9d6a2da84c
         USES_TERMINAL_DOWNLOAD TRUE
         CONFIGURE_COMMAND
-        ${OPENSSL_CONFIGURE_COMMAND}
+        <SOURCE_DIR>/config
         --prefix=${OPENSSL_INSTALL_DIR}
         --openssldir=${OPENSSL_INSTALL_DIR}
         --libdir=${OPENSSL_INSTALL_DIR}/lib
-        BUILD_COMMAND make
+#        no-apps
+        no-docs
+#        no-shared
+        BUILD_COMMAND make -j${CPU_CORE}
         TEST_COMMAND ""
-        INSTALL_COMMAND make install
+        INSTALL_COMMAND make install_sw
         INSTALL_DIR ${OPENSSL_INSTALL_DIR}
 )
 
@@ -42,5 +60,5 @@ SET_PROPERTY(TARGET crypto PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${OPENSSL_INCL
 ADD_DEPENDENCIES(crypto OpenSSL)
 SET(OPENSSL_CRYPTO_LIBRARY ${OPENSSL_INSTALL_DIR}/${OPENSSL_LIB}/libcrypto.a)
 
-SET(OPENSSL_INCLUDE_DIR ${THIRD_PARTY_PATH}/install/openssl/include)
-SET(OPENSSL_ROOT_DIR ${THIRD_PARTY_PATH}/install/openssl/bin/openssl)
+SET(OPENSSL_INCLUDE_DIR ${LIB_INCLUDE_DIR})
+#SET(OPENSSL_ROOT_DIR ${THIRD_PARTY_PATH}/install/openssl/bin/openssl)
