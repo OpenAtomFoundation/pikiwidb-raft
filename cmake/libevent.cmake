@@ -4,6 +4,8 @@
 # of patent rights can be found in the PATENTS file in the same directory.
 
 # libevent
+INCLUDE(FetchContent)
+
 FETCHCONTENT_DECLARE(
         libevent
         GIT_REPOSITORY https://github.com/libevent/libevent.git

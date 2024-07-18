@@ -3,11 +3,24 @@
 # LICENSE file in the root directory of this source tree. An additional grant
 # of patent rights can be found in the PATENTS file in the same directory.
 
-FETCHCONTENT_DECLARE(
-        gtest
+SET(GTEST_INCLUDE_DIR "${LIB_INCLUDE_DIR}/leveldb" CACHE PATH "leveldb include directory." FORCE)
+
+set(GTEST_LIBRARIES "${LIB_INSTALL_DIR}/libgtest.a" CACHE FILEPATH "gtest lib directory." FORCE)
+set(GTEST_MAIN_LIBRARIES "${LIB_INSTALL_DIR}/libgtest_main.a" CACHE FILEPATH "gtest main include directory." FORCE)
+set(GMOCK_LIBRARIES "${LIB_INSTALL_DIR}/libgmock.a" CACHE FILEPATH "gmock directory." FORCE)
+
+ExternalProject_Add(
+        extern_gtest
         GIT_REPOSITORY https://github.com/google/googletest.git
         GIT_TAG v1.14.0
+        CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${LIB_INSTALL_PREFIX}
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
 )
 
-SET(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FETCHCONTENT_MAKEAVAILABLE(gtest)
+ADD_DEPENDENCIES(extern_gtest snappy gflags zlib)
+ADD_LIBRARY(gtest STATIC IMPORTED GLOBAL)
+ADD_LIBRARY(gtest_main STATIC IMPORTED GLOBAL)
+SET_PROPERTY(TARGET gtest PROPERTY IMPORTED_LOCATION ${GTEST_LIBRARIES})
+SET_PROPERTY(TARGET gtest_main PROPERTY IMPORTED_LOCATION ${GTEST_MAIN_LIBRARIES})
+ADD_DEPENDENCIES(gtest extern_gtest)

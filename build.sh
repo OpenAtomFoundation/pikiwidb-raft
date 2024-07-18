@@ -16,7 +16,7 @@ BUILD_TYPE=Release
 VERBOSE=0
 CMAKE_FLAGS=""
 MAKE_FLAGS=""
-PREFIX="build"
+PREFIX="cmake-build"
 
 ARGS=`getopt -a -o h -l help,debug,verbose,prefix: -- "$@"`
 function show_help() {
@@ -75,6 +75,9 @@ if [ "${BUILD_TYPE}" == "Release" ]; then
 else
   PREFIX="${PREFIX}-debug"
 fi
+
+CMAKE_FLAGS="${CMAKE_FLAGS} -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON"
+MAKE_FLAGS="${MAKE_FLAGS} VERBOSE=1"
 
 cmake -DCMAKE_BUILD_TYPE=${BUILD_TYPE} ${CMAKE_FLAGS} -S . -B ${PREFIX}
 cmake --build ${PREFIX} -- ${MAKE_FLAGS} -j ${CPU_CORE}

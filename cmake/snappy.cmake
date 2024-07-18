@@ -6,7 +6,6 @@
 SET(Snappy_SOURCES_DIR ${LIB_INSTALL_PREFIX})
 SET(Snappy_INCLUDE_DIRS "${LIB_INCLUDE_DIR}" CACHE PATH "Snappy include directory." FORCE)
 SET(Snappy_LIBRARIES "${LIB_INSTALL_DIR}/libsnappy.a" CACHE FILEPATH "Snappy install directory." FORCE)
-#SET(SNAPPY_INSTALL_LIBDIR "${LIB_INSTALL_PREFIX}/lib")
 
 ExternalProject_Add(
         extern_snappy
@@ -14,8 +13,6 @@ ExternalProject_Add(
         GIT_REPOSITORY "https://github.com/google/snappy.git"
         GIT_TAG "1.2.1"
         CMAKE_ARGS
-#        -DCMAKE_INSTALL_LIBDIR=${SNAPPY_INSTALL_LIBDIR}
-#        -DCMAKE_INSTALL_INCLUDEDIR=${LIB_INCLUDE_DIR}
         -DCMAKE_INSTALL_PREFIX=${LIB_INSTALL_PREFIX}
         -DCMAKE_BUILD_TYPE=${LIB_BUILD_TYPE}
         -DSNAPPY_BUILD_TESTS=OFF

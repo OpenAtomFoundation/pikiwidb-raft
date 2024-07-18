@@ -41,15 +41,12 @@ ExternalProject_Add(
         cmake
         DEPENDS
         zlib
-#        URL "https://github.com/protocolbuffers/protobuf/archive/v3.15.7.tar.gz"
-#        URL_HASH SHA256=efdd6b932a2c0a88a90c4c80f88e4b2e1bf031e7514dbb5a5db5d0bf4f295504
         URL "https://github.com/protocolbuffers/protobuf/archive/v3.18.0.tar.gz"
         URL_HASH SHA256=14e8042b5da37652c92ef6a2759e7d2979d295f60afd7767825e3de68c856c54
         CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${LIB_INSTALL_PREFIX}
         -DCMAKE_BUILD_TYPE=${LIB_BUILD_TYPE}
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-#        -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
         -DBUILD_SHARED_LIBS=OFF
         -Dprotobuf_BUILD_TESTS=OFF
         -Dprotobuf_BUILD_LIBPROTOC=ON

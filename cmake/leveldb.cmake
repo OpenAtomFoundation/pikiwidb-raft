@@ -3,15 +3,9 @@
 # LICENSE file in the root directory of this source tree. An additional grant
 # of patent rights can be found in the PATENTS file in the same directory.
 
-#SET(LEVELDB_INSTALL_DIR ${THIRD_PARTY_PATH}/install/leveldb)
-#SET(LEVELDB_INCLUDE_DIR "${LEVELDB_INSTALL_DIR}/include" CACHE PATH "leveldb include directory." FORCE)
-#SET(LEVELDB_LIBRARIES "${LEVELDB_INSTALL_DIR}/lib/libleveldb.a" CACHE FILEPATH "leveldb library." FORCE)
-
-SET(LEVELDB_SOURCES_DIR ${LIB_INSTALL_PREFIX})
+#SET(LEVELDB_SOURCES_DIR ${LIB_INSTALL_PREFIX})
 SET(LEVELDB_INCLUDE_DIR "${LIB_INCLUDE_DIR}/leveldb" CACHE PATH "leveldb include directory." FORCE)
-#SET(LEVELDB_INCLUDE_PATH "${LIB_INCLUDE_DIR}/leveldb" CACHE PATH "leveldb include directory." FORCE)
 SET(LEVELDB_LIBRARIES "${LIB_INSTALL_DIR}/libleveldb.a" CACHE FILEPATH "leveldb include directory." FORCE)
-#SET(LEVELDB_LIB "${LIB_INSTALL_DIR}/libleveldb.a" CACHE FILEPATH "leveldb include directory." FORCE)
 SET(LEVELDB_INSTALL_LIBDIR "${LIB_INSTALL_PREFIX}/lib")
 
 ExternalProject_Add(

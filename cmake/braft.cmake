@@ -52,7 +52,7 @@ ExternalProject_Add(
         -DPROTOBUF_PROTOC_EXECUTABLE=${PROTOBUF_PROTOC}
         -DOPENSSL_INCLUDE_DIR=${OPENSSL_INCLUDE_DIR}
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-        BUILD_COMMAND make -j${CPU_CORE} braft-static
+        BUILD_COMMAND make -j${CPU_CORE}
 #        INSTALL_COMMAND mkdir -p ${BRAFT_INSTALL_DIR}/lib/ COMMAND cp ${BRAFT_SOURCES_DIR}/src/extern_braft/output/lib/libbraft.a ${BRAFT_LIBRARIES} COMMAND rm -rf ${BRAFT_INCLUDE_DIR} COMMAND cp -r ${BRAFT_SOURCES_DIR}/src/extern_braft/output/include ${BRAFT_INCLUDE_DIR}
 )
 
