@@ -3,13 +3,13 @@
 # LICENSE file in the root directory of this source tree. An additional grant
 # of patent rights can be found in the PATENTS file in the same directory.
 
-if(${LIB_BUILD_TYPE} STREQUAL DEBUG)
-    set(LIB_GFLAGS libgflags_debug.a)
-else()
-    set(LIB_GFLAGS libgflags.a)
-endif()
+IF (${LIB_BUILD_TYPE} STREQUAL DEBUG)
+    SET(LIB_GFLAGS libgflags_debug.a)
+ELSE ()
+    SET(LIB_GFLAGS libgflags.a)
+ENDIF ()
 
-SET(GFLAGS_ROOT  ${LIB_INSTALL_PREFIX} CACHE PATH "gflags source directory." FORCE)
+SET(GFLAGS_ROOT ${LIB_INSTALL_PREFIX} CACHE PATH "gflags source directory." FORCE)
 SET(GFLAGS_INCLUDE_DIR "${LIB_INCLUDE_DIR}" CACHE PATH "gflags include directory." FORCE)
 SET(GFLAGS_LIBRARIES "${LIB_INSTALL_DIR}/${LIB_GFLAGS}" CACHE FILEPATH "gflags library." FORCE)
 SET(GFLAGS_LIBRARY "${LIB_INSTALL_DIR}/${LIB_GFLAGS}" CACHE FILEPATH "gflags library." FORCE)
@@ -31,8 +31,7 @@ ExternalProject_Add(
         -DGFLAGS_NAMESPACE=gflags
         -DGFLAGS_BUILD_TESTING=OFF
         -DCMAKE_INSTALL_PREFIX=${LIB_INSTALL_PREFIX}
-        BUILD_COMMAND
-        make -j${CPU_CORE}
+        BUILD_COMMAND make -j${CPU_CORE}
 )
 
 ADD_LIBRARY(gflags STATIC IMPORTED GLOBAL)

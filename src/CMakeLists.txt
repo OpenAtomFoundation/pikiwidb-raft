@@ -52,6 +52,8 @@ TARGET_LINK_LIBRARIES(pikiwidb
         fmt
         rocksdb
         snappy
+        lz4
+        zstd
         storage
         gflags
         spdlog

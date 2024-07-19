@@ -4,11 +4,11 @@
 # of patent rights can be found in the PATENTS file in the same directory.
 
 
-if(${LIB_BUILD_TYPE} STREQUAL DEBUG)
-    set(LIB_FMT libfmtd.a)
-else()
-    set(LIB_FMT libfmt.a)
-endif()
+IF (${LIB_BUILD_TYPE} STREQUAL DEBUG)
+    SET(LIB_FMT libfmtd.a)
+ELSE ()
+    SET(LIB_FMT libfmt.a)
+ENDIF ()
 
 SET(FMT_INCLUDE_DIR "${LIB_INCLUDE_DIR}" CACHE PATH "fmt include directory." FORCE)
 SET(FMT_LIBRARIES "${LIB_INSTALL_DIR}/${LIB_FMT}" CACHE FILEPATH "fmt library directory." FORCE)

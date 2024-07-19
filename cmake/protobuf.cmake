@@ -5,13 +5,13 @@
 
 # Always invoke `FIND_PACKAGE(Protobuf)` for importing function protobuf_generate_cpp
 
-IF(${LIB_BUILD_TYPE} STREQUAL DEBUG)
+IF (${LIB_BUILD_TYPE} STREQUAL DEBUG)
     SET(LIB_PROTOBUF "libprotobufd.a")
     SET(LIB_PROTOC "libprotocd.a")
-ELSE()
+ELSE ()
     SET(LIB_PROTOBUF "libprotobuf.a")
     SET(LIB_PROTOC "libprotoc.a")
-ENDIF()
+ENDIF ()
 
 SET(PROTOBUF_INCLUDE_DIR "${LIB_INCLUDE_DIR}" CACHE PATH "protobuf include directory." FORCE)
 SET(PROTOBUF_LIBRARY "${LIB_INSTALL_DIR}/${LIB_PROTOBUF}" CACHE FILEPATH "protobuf install directory." FORCE)
@@ -20,20 +20,13 @@ SET(PROTOBUF_PROTOC "${LIB_INSTALL_PREFIX}/bin/protoc")
 
 ExternalProject_Add(
         extern_protobuf
-        DOWNLOAD_NO_PROGRESS
-        1
-        UPDATE_COMMAND
-        ""
-        LOG_CONFIGURE
-        1
-        LOG_BUILD
-        1
-        LOG_INSTALL
-        1
-        SOURCE_SUBDIR
-        cmake
-        DEPENDS
-        zlib
+        DOWNLOAD_NO_PROGRESS 1
+        UPDATE_COMMAND ""
+        LOG_CONFIGURE 1
+        LOG_BUILD 1
+        LOG_INSTALL 1
+        SOURCE_SUBDIR cmake
+        DEPENDS zlib
         URL "https://github.com/protocolbuffers/protobuf/archive/v3.18.0.tar.gz"
         URL_HASH SHA256=14e8042b5da37652c92ef6a2759e7d2979d295f60afd7767825e3de68c856c54
         CMAKE_ARGS
@@ -43,8 +36,7 @@ ExternalProject_Add(
         -DBUILD_SHARED_LIBS=OFF
         -Dprotobuf_BUILD_TESTS=OFF
         -Dprotobuf_BUILD_LIBPROTOC=ON
-        BUILD_COMMAND
-        make -j${CPU_CORE}
+        BUILD_COMMAND make -j${CPU_CORE}
 )
 
 ADD_LIBRARY(protobuf STATIC IMPORTED GLOBAL)

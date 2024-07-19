@@ -155,6 +155,8 @@ INCLUDE(ExternalProject)
 
 INCLUDE(cmake/findTools.cmake)
 INCLUDE(cmake/openssl.cmake)
+INCLUDE(cmake/lz4.cmake)
+INCLUDE(cmake/zstd.cmake)
 INCLUDE(cmake/gflags.cmake)
 INCLUDE(cmake/snappy.cmake)
 INCLUDE(cmake/zlib.cmake)

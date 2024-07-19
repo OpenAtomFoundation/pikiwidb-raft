@@ -16,6 +16,8 @@ ExternalProject_Add(
         gflags
         snappy
         zlib
+        lz4
+        zstd
         CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${LIB_INSTALL_PREFIX}
         -DCMAKE_BUILD_TYPE=${LIB_BUILD_TYPE}
@@ -31,17 +33,16 @@ ExternalProject_Add(
         -DFAIL_ON_WARNINGS=OFF
         -DWITH_LIBURING=OFF
         -DWITH_TESTS=OFF
-        -DWITH_LZ4=OFF
+        -DWITH_LZ4=ON
         -DWITH_SNAPPY=ON
         -DWITH_ZLIB=ON
-        -DWITH_ZSTD=OFF
+        -DWITH_ZSTD=ON
         -DWITH_GFLAGS=ON
         -DUSE_RTTI=ON
-        BUILD_COMMAND
-        make -j${CPU_CORE}
+        BUILD_COMMAND make -j${CPU_CORE}
 )
 
-ADD_DEPENDENCIES(extern_rocksdb snappy gflags zlib)
+ADD_DEPENDENCIES(extern_rocksdb snappy gflags zlib lz4)
 ADD_LIBRARY(rocksdb STATIC IMPORTED GLOBAL)
 SET_PROPERTY(TARGET rocksdb PROPERTY IMPORTED_LOCATION ${ROCKSDB_LIBRARIES})
 ADD_DEPENDENCIES(rocksdb extern_rocksdb)
