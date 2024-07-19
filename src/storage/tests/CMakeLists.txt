@@ -33,6 +33,8 @@ FOREACH (TEST_SOURCE ${TEST_SOURCES})
             PRIVATE pstd
             PRIVATE rocksdb
             PRIVATE snappy
+            PRIVATE lz4
+            PRIVATE zstd
             PRIVATE binlog_pb
     )
 ENDFOREACH ()
