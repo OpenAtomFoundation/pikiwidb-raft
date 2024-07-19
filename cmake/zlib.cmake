@@ -4,7 +4,7 @@
 # of patent rights can be found in the PATENTS file in the same directory.
 
 SET(ZLIB_SOURCES_DIR ${LIB_INSTALL_PREFIX})
-SET(ZLIB_INCLUDE_DIR "${LIB_INCLUDE_DIR}" CACHE PATH "gflags include directory." FORCE)
+SET(ZLIB_INCLUDE_DIR "${LIB_INCLUDE_DIR}" CACHE PATH "zlib include directory." FORCE)
 SET(ZLIB_LIBRARIES "${LIB_INSTALL_DIR}/libz.a" CACHE FILEPATH "zlib library." FORCE)
 
 ExternalProject_Add(

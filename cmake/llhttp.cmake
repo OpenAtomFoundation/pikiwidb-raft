@@ -4,7 +4,7 @@
 # of patent rights can be found in the PATENTS file in the same directory.
 
 # nodejs/llhttp
-SET(LLHTTP_INCLUDE_DIR "${LIB_INCLUDE_DIR}" CACHE PATH "rocksdb include directory." FORCE)
+SET(LLHTTP_INCLUDE_DIR "${LIB_INCLUDE_DIR}" CACHE PATH "llhttp include directory." FORCE)
 SET(LLHTTP_LIBRARIES "${LIB_INSTALL_DIR}/libllhttp.a" CACHE FILEPATH "llhttp library." FORCE)
 ExternalProject_Add(
         extern_llhttp
