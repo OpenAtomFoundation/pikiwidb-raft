@@ -20,6 +20,7 @@ foreach (pstd_test_source ${PSTD_TEST_SOURCE})
     add_executable(${pstd_test_name} ${pstd_test_source})
     target_include_directories(${pstd_test_name}
             PUBLIC ${PROJECT_SOURCE_DIR}/src
+            PRIVATE ${GTEST_INCLUDE_DIR}
             )
 
     add_dependencies(${pstd_test_name} pstd gtest)
