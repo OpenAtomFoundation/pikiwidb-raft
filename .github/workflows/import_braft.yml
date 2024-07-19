@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build
+      - name: Build --verbose
         env: 
           CPLUS_INCLUDE_PATH: /opt/homebrew/include
         run: |
@@ -50,7 +50,7 @@ jobs:
 
       - name: Build
         run: |
-          bash build.sh
+          bash build.sh --verbose
 
       - name: Run Go E2E Tests
         working-directory: ${{ github.workspace }}/build-release

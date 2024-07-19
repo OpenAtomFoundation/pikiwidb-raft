@@ -4,7 +4,6 @@
 # of patent rights can be found in the PATENTS file in the same directory.
 
 # Always invoke `FIND_PACKAGE(Protobuf)` for importing function protobuf_generate_cpp
-#custom_protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 
 IF(${LIB_BUILD_TYPE} STREQUAL DEBUG)
     SET(LIB_PROTOBUF "libprotobufd.a")
@@ -18,12 +17,6 @@ SET(PROTOBUF_INCLUDE_DIR "${LIB_INCLUDE_DIR}" CACHE PATH "protobuf include direc
 SET(PROTOBUF_LIBRARY "${LIB_INSTALL_DIR}/${LIB_PROTOBUF}" CACHE FILEPATH "protobuf install directory." FORCE)
 SET(PROTOC_LIBRARY "${LIB_INSTALL_DIR}/${LIB_PROTOC}" CACHE FILEPATH "protoc install directory." FORCE)
 SET(PROTOBUF_PROTOC "${LIB_INSTALL_PREFIX}/bin/protoc")
-
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=1")
-
-#set(CMAKE_CXX_STANDARD 11)
-#set(CMAKE_CXX_STANDARD_REQUIRED ON)
-#set(CMAKE_CXX_EXTENSIONS OFF)
 
 ExternalProject_Add(
         extern_protobuf
