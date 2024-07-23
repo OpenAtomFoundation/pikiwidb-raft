@@ -7,7 +7,7 @@ C++20 实现的增强版 Redis 服务器,使用 RocksDB 作为持久化存储引
 ## 环境需求
 
 * C++20、CMake
-* Linux 或 MAC OS
+* Linux 或 MAC OS 或 FreeBSD
 
 ## 编译
 
@@ -28,14 +28,14 @@ scl enable devtoolset-11 bash
 执行以下命令开始编译 PikiwiDB:
 
 ```bash
-./build.sh
+sh ./etc/script/build.sh
 ```
 
 PikiwiDB 默认以 release 模式编译，不支持调试。如果需要调试，请以 debug 模式编译。
 
 ```bash
-./clear.sh
-./build.sh --debug
+sh ./etc/script/build.sh --clear
+sh ./etc/script/build.sh --debug
 ```
 
 ## 与 Redis 完全兼容

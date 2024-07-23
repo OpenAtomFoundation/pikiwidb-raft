@@ -35,7 +35,7 @@ jobs:
 
       - name: Build
         run: |
-          bash build.sh
+          bash ./etc/script/build.sh
 
       - name: Calculate checksum and rename binary
         working-directory: ${{ github.workspace }}/bin

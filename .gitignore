@@ -7,9 +7,14 @@
 *.obj
 *pb.cc
 *pb.h
-build
-cmake-build-debug
-cmake-build-release
+deps-debug/
+deps-release/
+cmake-build-debug/
+cmake-build-release/
+cmake-build-release-release/
+build/
+build-debug/
+build-release/
 
 # Precompiled Headers
 *.gch

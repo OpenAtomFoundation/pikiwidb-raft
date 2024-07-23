@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build
-        run: bash ci/build.sh
+        run: bash etc/script/ci/build.sh
 
       - name: Check Format
         working-directory: ${{ github.workspace }}/build
@@ -32,7 +32,7 @@ jobs:
         run: |
           brew install autoconf
           brew install go
-          sh build.sh
+          bash ./etc/script/build.sh
 
       - name: Run Go E2E Tests
         working-directory: ${{ github.workspace }}/build-release
@@ -50,7 +50,7 @@ jobs:
 
       - name: Build
         run: |
-          bash build.sh --verbose
+          bash ./etc/script/build.sh --verbos
 
       - name: Run Go E2E Tests
         working-directory: ${{ github.workspace }}/build-release

@@ -3,8 +3,13 @@
 killall -9 pikiwidb
 mkdir leader follower1
 
-cd leader && ulimit -n 99999  && rm -fr *  && ../bin/pikiwidb ../pikiwidb.conf --port 7777 &
-cd follower1 && ulimit -n 99999 && rm -fr * && ../bin/pikiwidb ../pikiwidb.conf --port 8888 &
+
+PWD=`pwd`
+PROJECT_HOME="${PWD}/../"
+BIN="${PROJECT_HOME}/bin/pikiwidb"
+CONF="${PROJECT_HOME}/etc/conf/pikiwidb.conf"
+cd leader    && ulimit -n 99999  && rm -fr *  && ${BIN} ${CONF} --port 7777 &
+cd follower1 && ulimit -n 99999 && rm -fr *   && ${BIN} ${CONF} --port 8888 &
 sleep 5
 
 redis-cli -p 7777 raft.cluster init

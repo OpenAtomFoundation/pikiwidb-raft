@@ -7,7 +7,7 @@ A C++20 implementation of Redis Server, use RocksDB for persist storage.(not inc
 ## Requirements
 
 * C++20
-* Linux or OS X
+* Linux or OS X or FreeBSD
 
 ## compile
 
@@ -28,14 +28,14 @@ scl enable devtoolset-11 bash
 Execute this command to start compiling Pikiwidb:
 
 ```bash
-./build.sh
+sh ./etc/script/build.sh 
 ```
 
 Pikiwidb is compiled by default in release mode, which does not support debugging. If debugging is needed, compile in debug mode.
 
 ```bash
-./clear.sh
-./build.sh --debug
+sh ./etc/script/build.sh --clear
+sh ./etc/script/build.sh --debug
 ```
 
 ## Support module for write your own extensions

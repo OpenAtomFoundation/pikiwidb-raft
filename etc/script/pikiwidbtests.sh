@@ -30,7 +30,7 @@ function setup_pikiwidb_bin {
         exit 1
     fi
     cp $PIKIWIDB_BIN src/redis-server
-    cp ./pikiwidb.conf tests/assets/default.conf
+    cp ./etc/conf/pikiwidb.conf tests/assets/default.conf
 }
 
 
