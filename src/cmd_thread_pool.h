@@ -23,7 +23,7 @@ namespace pikiwidb {
 // then submit the task to the thread pool
 class CmdThreadPoolTask {
  public:
-  CmdThreadPoolTask(std::shared_ptr<PClient> client) : client_(std::move(client)) {}
+  explicit CmdThreadPoolTask(std::shared_ptr<PClient> client) : client_(std::move(client)) {}
   void Run(BaseCmd *cmd);
   const std::string &CmdName();
   std::shared_ptr<PClient> Client();

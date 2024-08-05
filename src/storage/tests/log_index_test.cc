@@ -23,7 +23,7 @@
 #include "pstd/thread_pool.h"
 #include "src/log_index.h"
 #include "src/redis.h"
-#include "storage/storage.h"
+// #include "storage/storage.h"
 #include "storage/util.h"
 
 using namespace storage;  // NOLINT
@@ -167,7 +167,7 @@ TEST_F(LogIndexTest, SimpleTest) {  // NOLINT
     }
   };
   auto flushdb = [&]() {
-    auto s = redis->GetDB()->Flush(rocksdb::FlushOptions(), redis->GetColumnFamilyHandles()[kHashesMetaCF]);
+    auto s = redis->GetDB()->Flush(rocksdb::FlushOptions(), redis->GetColumnFamilyHandles()[kMetaCF]);
     ASSERT_TRUE(s.ok());
     s = redis->GetDB()->Flush(rocksdb::FlushOptions(), redis->GetColumnFamilyHandles()[kHashesDataCF]);
     ASSERT_TRUE(s.ok());
@@ -179,7 +179,7 @@ TEST_F(LogIndexTest, SimpleTest) {  // NOLINT
     flushdb();
 
     rocksdb::TablePropertiesCollection properties;
-    auto s = redis->GetDB()->GetPropertiesOfAllTables(redis->GetColumnFamilyHandles()[kHashesMetaCF], &properties);
+    auto s = redis->GetDB()->GetPropertiesOfAllTables(redis->GetColumnFamilyHandles()[kMetaCF], &properties);
     ASSERT_TRUE(s.ok());
     ASSERT_TRUE(properties.size() == 1);
     auto res = LogIndexTablePropertiesCollector::GetLargestLogIndexFromTableCollection(properties);
@@ -205,7 +205,7 @@ TEST_F(LogIndexTest, SimpleTest) {  // NOLINT
     flushdb();
 
     rocksdb::TablePropertiesCollection properties;
-    auto s = redis->GetDB()->GetPropertiesOfAllTables(redis->GetColumnFamilyHandles()[kHashesMetaCF], &properties);
+    auto s = redis->GetDB()->GetPropertiesOfAllTables(redis->GetColumnFamilyHandles()[kMetaCF], &properties);
     ASSERT_TRUE(s.ok());
     auto res = LogIndexTablePropertiesCollector::GetLargestLogIndexFromTableCollection(properties);
     EXPECT_TRUE(res.has_value());
@@ -214,7 +214,7 @@ TEST_F(LogIndexTest, SimpleTest) {  // NOLINT
     EXPECT_EQ(res->GetSequenceNumber(), 19999);
 
     properties.clear();
-    s = redis->GetDB()->GetPropertiesOfAllTables(redis->GetColumnFamilyHandles()[kHashesDataCF], &properties);
+    s = redis->GetDB()->GetPropertiesOfAllTables(redis->GetColumnFamilyHandles()[kMetaCF], &properties);
     ASSERT_TRUE(s.ok());
     res = LogIndexTablePropertiesCollector::GetLargestLogIndexFromTableCollection(properties);
     EXPECT_TRUE(res.has_value());
@@ -236,7 +236,7 @@ TEST_F(LogIndexTest, SimpleTest) {  // NOLINT
 
       {
         rocksdb::TablePropertiesCollection properties;
-        auto s = redis->GetDB()->GetPropertiesOfAllTables(redis->GetColumnFamilyHandles()[kHashesMetaCF], &properties);
+        auto s = redis->GetDB()->GetPropertiesOfAllTables(redis->GetColumnFamilyHandles()[kMetaCF], &properties);
         s = redis->GetDB()->GetPropertiesOfAllTables(redis->GetColumnFamilyHandles()[kHashesDataCF], &properties);
         std::vector<rocksdb::LiveFileMetaData> metas;
         redis->GetDB()->GetLiveFilesMetaData(&metas);
@@ -253,7 +253,7 @@ TEST_F(LogIndexTest, SimpleTest) {  // NOLINT
       }
 
       rocksdb::TablePropertiesCollection properties;
-      auto s = redis->GetDB()->GetPropertiesOfAllTables(redis->GetColumnFamilyHandles()[kHashesMetaCF], &properties);
+      auto s = redis->GetDB()->GetPropertiesOfAllTables(redis->GetColumnFamilyHandles()[kMetaCF], &properties);
       ASSERT_TRUE(s.ok());
       auto res = LogIndexTablePropertiesCollector::GetLargestLogIndexFromTableCollection(properties);
       EXPECT_TRUE(res.has_value());

@@ -13,7 +13,8 @@
 #include <unordered_set>
 
 #include "common.h"
-#include "net/tcp_connection.h"
+// #include "net/tcp_connection.h"
+#include "net/socket_addr.h"
 #include "proto_parser.h"
 #include "replication.h"
 #include "storage/storage.h"
@@ -49,6 +50,7 @@ class CmdRes {
     KIncrByOverFlow,
     kInvalidCursor,
     kWrongLeader,
+    kMultiKey,
   };
 
   CmdRes() = default;
@@ -64,6 +66,8 @@ class CmdRes {
   }
 
   inline const std::string& Message() const { return message_; };
+
+  inline void Message(std::string* str) { str->swap(message_); };
 
   // Inline functions for Create Redis protocol
   inline void AppendStringLen(int64_t ori) { RedisAppendLen(message_, ori, "$"); }
@@ -90,8 +94,10 @@ class CmdRes {
 
   void RedisAppendLen(std::string& str, int64_t ori, const std::string& prefix);
 
- private:
+ protected:
   std::string message_;
+
+ private:
   CmdRet ret_ = kNone;
 };
 
@@ -112,24 +118,31 @@ struct PSlaveInfo;
 
 class PClient : public std::enable_shared_from_this<PClient>, public CmdRes {
  public:
-  PClient() = delete;
-  explicit PClient(TcpConnection* obj);
+  //  PClient() = delete;
+  explicit PClient();
 
-  int HandlePackets(pikiwidb::TcpConnection*, const char*, int);
+  //  int HandlePackets(pikiwidb::TcpConnection*, const char*, int);
 
   void OnConnect();
 
-  const std::string& PeerIP() const;
+  std::string PeerIP() const;
   int PeerPort() const;
 
-  bool SendPacket(const std::string& buf);
-  bool SendPacket(const void* data, size_t size);
+  //  bool SendPacket(const std::string& buf);
+  //  bool SendPacket(const void* data, size_t size);
+  bool SendPacket();
+  bool SendPacket(std::string&& msg);
   bool SendPacket(UnboundedBuffer& data);
-  bool SendPacket(const evbuffer_iovec* iovecs, size_t nvecs);
+  inline void SendOver() {
+    Clear();
+    reset();
+  }
 
-  void WriteReply2Client();
-
+  // active close
   void Close();
+
+  // on close callback
+  void OnClose();
 
   // dbno
   void SetCurrentDB(int dbno) { dbno_ = dbno; }
@@ -211,32 +224,39 @@ class PClient : public std::enable_shared_from_this<PClient>, public CmdRes {
 
   inline void SetState(ClientState state) { state_ = state; }
 
+  inline void SetConnId(uint64_t id) { net_id_ = id; }
+  inline uint64_t GetConnId() const { return net_id_; }
+  inline void SetThreadIndex(int8_t index) { net_thread_index_ = index; }
+  inline int8_t GetThreadIndex() const { return net_thread_index_; }
+  inline void SetSocketAddr(const net::SocketAddr& addr) { addr_ = addr; }
+
   // All parameters of this command (including the command itself)
   // e.g：["set","key","value"]
   std::span<std::string> argv_;
 
- private:
-  std::shared_ptr<TcpConnection> getTcpConnection() const { return tcp_connection_.lock(); }
+  //  std::shared_ptr<TcpConnection> getTcpConnection() const { return tcp_connection_.lock(); }
   int handlePacket(const char*, int);
+
+ private:
   void executeCommand();
   int processInlineCmd(const char*, size_t, std::vector<std::string>&);
   void reset();
   bool isPeerMaster() const;
-  int uniqueID() const;
+  uint64_t uniqueID() const;
 
   bool isClusterCmdTarget() const;
 
   // TcpConnection's life is undetermined, so use weak ptr for safety.
-  std::weak_ptr<TcpConnection> tcp_connection_;
+  //  std::weak_ptr<TcpConnection> tcp_connection_;
 
   PProtoParser parser_;
 
-  int dbno_;
+  int dbno_ = 0;
 
   std::unordered_set<std::string> channels_;
   std::unordered_set<std::string> pattern_channels_;
 
-  uint32_t flag_;
+  uint32_t flag_ = 0;
   std::unordered_map<int32_t, std::unordered_set<std::string> > watch_keys_;
   std::vector<std::vector<std::string> > queue_cmds_;
 
@@ -263,6 +283,10 @@ class PClient : public std::enable_shared_from_this<PClient>, public CmdRes {
   time_t last_auth_ = 0;
 
   ClientState state_;
+
+  uint64_t net_id_ = 0;
+  int8_t net_thread_index_ = 0;
+  net::SocketAddr addr_;
 
   static thread_local PClient* s_current;
 };

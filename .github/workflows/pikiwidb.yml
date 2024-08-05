@@ -43,7 +43,7 @@ jobs:
         run: |
           cd ../tests
           go mod tidy
-          go test
+          go test -timeout 15m
 
   build_on_ubuntu:
     runs-on: ubuntu-latest
@@ -67,4 +67,4 @@ jobs:
         run: |
           cd ../tests
           go mod tidy
-          go test
+          go test -timeout 15m

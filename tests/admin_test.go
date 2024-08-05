@@ -159,4 +159,96 @@ var _ = Describe("Admin", Ordered, func() {
 		// Expect(res.Err()).NotTo(HaveOccurred())
 		// Expect(res.Val()).To(Equal(map[string]string{"timeout": "0"}))
 	})
+
+	It("Cmd Sort", func() {
+		size, err := client.LPush(ctx, "list", "1").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(size).To(Equal(int64(1)))
+
+		size, err = client.LPush(ctx, "list", "3").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(size).To(Equal(int64(2)))
+
+		size, err = client.LPush(ctx, "list", "2").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(size).To(Equal(int64(3)))
+
+		els, err := client.Sort(ctx, "list", &redis.Sort{
+			Offset: 0,
+			Count:  2,
+			Order:  "ASC",
+		}).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(els).To(Equal([]string{"1", "2"}))
+
+		del := client.Del(ctx, "list")
+		Expect(del.Err()).NotTo(HaveOccurred())
+	})
+
+	It("should Sort and Get", Label("NonRedisEnterprise"), func() {
+		size, err := client.LPush(ctx, "list", "1").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(size).To(Equal(int64(1)))
+
+		size, err = client.LPush(ctx, "list", "3").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(size).To(Equal(int64(2)))
+
+		size, err = client.LPush(ctx, "list", "2").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(size).To(Equal(int64(3)))
+
+		err = client.Set(ctx, "object_2", "value2", 0).Err()
+		Expect(err).NotTo(HaveOccurred())
+
+		{
+			els, err := client.Sort(ctx, "list", &redis.Sort{
+				Get: []string{"object_*"},
+			}).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(els).To(Equal([]string{"", "value2", ""}))
+		}
+
+		{
+			els, err := client.SortInterfaces(ctx, "list", &redis.Sort{
+				Get: []string{"object_*"},
+			}).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(els).To(Equal([]interface{}{nil, "value2", nil}))
+		}
+		del := client.Del(ctx, "list")
+		Expect(del.Err()).NotTo(HaveOccurred())
+	})
+
+	It("should Sort and Store", Label("NonRedisEnterprise"), func() {
+		size, err := client.LPush(ctx, "list", "1").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(size).To(Equal(int64(1)))
+
+		size, err = client.LPush(ctx, "list", "3").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(size).To(Equal(int64(2)))
+
+		size, err = client.LPush(ctx, "list", "2").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(size).To(Equal(int64(3)))
+
+		n, err := client.SortStore(ctx, "list", "list2", &redis.Sort{
+			Offset: 0,
+			Count:  2,
+			Order:  "ASC",
+		}).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(n).To(Equal(int64(2)))
+
+		els, err := client.LRange(ctx, "list2", 0, -1).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(els).To(Equal([]string{"1", "2"}))
+
+		del := client.Del(ctx, "list")
+		Expect(del.Err()).NotTo(HaveOccurred())
+
+		del2 := client.Del(ctx, "list2")
+		Expect(del2.Err()).NotTo(HaveOccurred())
+	})
 })

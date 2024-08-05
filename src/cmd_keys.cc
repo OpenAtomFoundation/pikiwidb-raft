@@ -63,10 +63,10 @@ bool TypeCmd::DoInitial(PClient* client) {
 }
 
 void TypeCmd::DoCmd(PClient* client) {
-  std::vector<std::string> types(1);
-  rocksdb::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->GetType(client->Key(), true, types);
+  storage::DataType type;
+  rocksdb::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->GetType(client->Key(), type);
   if (s.ok()) {
-    client->AppendContent("+" + types[0]);
+    client->AppendContent("+" + std::string(storage::DataTypeToString(type)));
   } else {
     client->SetRes(CmdRes::kErrOther, s.ToString());
   }
@@ -103,27 +103,11 @@ bool TtlCmd::DoInitial(PClient* client) {
 }
 
 void TtlCmd::DoCmd(PClient* client) {
-  std::map<storage::DataType, int64_t> type_timestamp;
-  std::map<storage::DataType, rocksdb::Status> type_status;
-  type_timestamp = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->TTL(client->Key(), &type_status);
-  for (const auto& item : type_timestamp) {
-    if (item.second == -3) {
-      client->SetRes(CmdRes::kErrOther, "ttl internal error");
-      return;
-    }
-  }
-  if (type_timestamp[storage::kStrings] != -2) {
-    client->AppendInteger(type_timestamp[storage::kStrings]);
-  } else if (type_timestamp[storage::kHashes] != -2) {
-    client->AppendInteger(type_timestamp[storage::kHashes]);
-  } else if (type_timestamp[storage::kLists] != -2) {
-    client->AppendInteger(type_timestamp[storage::kLists]);
-  } else if (type_timestamp[storage::kZSets] != -2) {
-    client->AppendInteger(type_timestamp[storage::kZSets]);
-  } else if (type_timestamp[storage::kSets] != -2) {
-    client->AppendInteger(type_timestamp[storage::kSets]);
+  auto timestamp = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->TTL(client->Key());
+  if (timestamp == -3) {
+    client->SetRes(CmdRes::kErrOther, "ttl internal error");
   } else {
-    client->AppendInteger(-2);
+    client->AppendInteger(timestamp);
   }
 }
 
@@ -203,19 +187,11 @@ bool PersistCmd::DoInitial(PClient* client) {
 }
 
 void PersistCmd::DoCmd(PClient* client) {
-  std::map<storage::DataType, storage::Status> type_status;
-  auto res = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Persist(client->Key(), &type_status);
+  auto res = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Persist(client->Key());
   if (res != -1) {
     client->AppendInteger(res);
   } else {
-    std::string cnt;
-    for (auto const& s : type_status) {
-      cnt.append(storage::DataTypeToString[s.first]);
-      cnt.append(" - ");
-      cnt.append(s.second.ToString());
-      cnt.append(";");
-    }
-    client->SetRes(CmdRes::kErrOther, cnt);
+    client->SetRes(CmdRes::kErrOther, "persist internal error");
   }
 }
 
@@ -250,48 +226,12 @@ bool PttlCmd::DoInitial(PClient* client) {
 
 // like Blackwidow , Floyd still possible has same key in different data structure
 void PttlCmd::DoCmd(PClient* client) {
-  std::map<storage::DataType, rocksdb::Status> type_status;
-  auto type_timestamp = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->TTL(client->Key(), &type_status);
-  for (const auto& item : type_timestamp) {
-    // mean operation exception errors happen in database
-    if (item.second == -3) {
-      client->SetRes(CmdRes::kErrOther, "ttl internal error");
-      return;
-    }
-  }
-  if (type_timestamp[storage::kStrings] != -2) {
-    if (type_timestamp[storage::kStrings] == -1) {
-      client->AppendInteger(-1);
-    } else {
-      client->AppendInteger(type_timestamp[storage::kStrings] * 1000);
-    }
-  } else if (type_timestamp[storage::kHashes] != -2) {
-    if (type_timestamp[storage::kHashes] == -1) {
-      client->AppendInteger(-1);
-    } else {
-      client->AppendInteger(type_timestamp[storage::kHashes] * 1000);
-    }
-  } else if (type_timestamp[storage::kLists] != -2) {
-    if (type_timestamp[storage::kLists] == -1) {
-      client->AppendInteger(-1);
-    } else {
-      client->AppendInteger(type_timestamp[storage::kLists] * 1000);
-    }
-  } else if (type_timestamp[storage::kSets] != -2) {
-    if (type_timestamp[storage::kSets] == -1) {
-      client->AppendInteger(-1);
-    } else {
-      client->AppendInteger(type_timestamp[storage::kSets] * 1000);
-    }
-  } else if (type_timestamp[storage::kZSets] != -2) {
-    if (type_timestamp[storage::kZSets] == -1) {
-      client->AppendInteger(-1);
-    } else {
-      client->AppendInteger(type_timestamp[storage::kZSets] * 1000);
-    }
+  auto timestamp = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->TTL(client->Key());
+  // mean operation exception errors happen in database
+  if (timestamp == -3) {
+    client->SetRes(CmdRes::kErrOther, "ttl internal error");
   } else {
-    // this key not exist
-    client->AppendInteger(-2);
+    client->AppendInteger(timestamp);
   }
 }
 

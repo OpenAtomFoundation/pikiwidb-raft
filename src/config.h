@@ -21,7 +21,7 @@
 #include "rocksdb/table.h"
 
 #include "common.h"
-#include "net/config_parser.h"
+#include "config_parser.h"
 
 namespace pikiwidb {
 

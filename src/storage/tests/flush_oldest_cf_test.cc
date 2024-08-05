@@ -145,7 +145,7 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
     ASSERT_EQ(last_flush_index.log_index.load(), 0);
     ASSERT_EQ(last_flush_index.seqno.load(), 0);
 
-    auto& cf_0_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kStringsCF);
+    auto& cf_0_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kMetaCF);
     ASSERT_EQ(cf_0_status.flushed_index.log_index, 0);
     ASSERT_EQ(cf_0_status.flushed_index.seqno, 0);
     ASSERT_EQ(cf_0_status.applied_index.log_index, 10);
@@ -179,7 +179,7 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
     ASSERT_EQ(last_flush_index.log_index.load(), 0);
     ASSERT_EQ(last_flush_index.seqno.load(), 0);
 
-    auto& cf_1_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kHashesMetaCF);
+    auto& cf_1_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kMetaCF);
     ASSERT_EQ(cf_1_status.flushed_index.log_index, 0);
     ASSERT_EQ(cf_1_status.flushed_index.seqno, 0);
     ASSERT_EQ(cf_1_status.applied_index.log_index, 30);
@@ -393,13 +393,13 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
     auto after_flush_size = rocksdb->GetCollector().GetSize();
     ASSERT_EQ(after_flush_size, 1);
 
-    auto& cf_0_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kStringsCF);
+    auto& cf_0_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kMetaCF);
     ASSERT_EQ(cf_0_status.flushed_index.log_index, 30);
     ASSERT_EQ(cf_0_status.flushed_index.seqno, 50);
     ASSERT_EQ(cf_0_status.applied_index.log_index, 10);
     ASSERT_EQ(cf_0_status.applied_index.seqno, 10);
 
-    auto& cf_1_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kHashesMetaCF);
+    auto& cf_1_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kMetaCF);
     ASSERT_EQ(cf_1_status.flushed_index.log_index, 30);
     ASSERT_EQ(cf_1_status.flushed_index.seqno, 50);
     ASSERT_EQ(cf_1_status.applied_index.log_index, 30);
@@ -415,7 +415,7 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
     ASSERT_EQ(last_flush_index.log_index.load(), 30);
     ASSERT_EQ(last_flush_index.seqno.load(), 50);
 
-    auto& cf_3_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kSetsMetaCF);
+    auto& cf_3_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kMetaCF);
     ASSERT_EQ(cf_3_status.flushed_index.log_index, 30);
     ASSERT_EQ(cf_3_status.flushed_index.seqno, 50);
     ASSERT_EQ(cf_3_status.applied_index.log_index, 0);
@@ -439,13 +439,13 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
     ASSERT_EQ(last_flush_index.log_index.load(), 30);
     ASSERT_EQ(last_flush_index.seqno.load(), 50);
 
-    auto& cf_0_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kStringsCF);
+    auto& cf_0_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kMetaCF);
     ASSERT_EQ(cf_0_status.flushed_index.log_index, 30);
     ASSERT_EQ(cf_0_status.flushed_index.seqno, 50);
     ASSERT_EQ(cf_0_status.applied_index.log_index, 35);
     ASSERT_EQ(cf_0_status.applied_index.seqno, 55);
 
-    auto& cf_1_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kHashesMetaCF);
+    auto& cf_1_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kMetaCF);
     ASSERT_EQ(cf_1_status.flushed_index.log_index, 30);
     ASSERT_EQ(cf_1_status.flushed_index.seqno, 50);
     ASSERT_EQ(cf_1_status.applied_index.log_index, 30);
@@ -457,7 +457,7 @@ TEST_F(FlushOldestCFTest, SimpleTest) {
     ASSERT_EQ(cf_2_status.applied_index.log_index, 30);
     ASSERT_EQ(cf_2_status.applied_index.seqno, 50);
 
-    auto& cf_3_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kSetsMetaCF);
+    auto& cf_3_status = rocksdb->GetLogIndexOfColumnFamilies().GetCFStatus(storage::kMetaCF);
     ASSERT_EQ(cf_3_status.flushed_index.log_index, 30);
     ASSERT_EQ(cf_3_status.flushed_index.seqno, 50);
     ASSERT_EQ(cf_3_status.applied_index.log_index, 0);

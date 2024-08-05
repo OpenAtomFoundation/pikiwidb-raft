@@ -8,8 +8,7 @@
 #include "cmd_table_manager.h"
 #include "cmd_thread_pool.h"
 #include "common.h"
-#include "io_thread_pool.h"
-#include "net/tcp_connection.h"
+#include "net/event_server.h"
 
 #define KPIKIWIDB_VERSION "4.0.0"
 
@@ -36,14 +35,33 @@ class PikiwiDB final {
   //  void Recycle();
   void Stop();
 
-  void OnNewConnection(pikiwidb::TcpConnection* obj);
+  static void OnNewConnection(uint64_t connId, std::shared_ptr<pikiwidb::PClient>& client, const net::SocketAddr& addr);
 
   //  pikiwidb::CmdTableManager& GetCmdTableManager();
   uint32_t GetCmdID() { return ++cmd_id_; };
 
   void SubmitFast(const std::shared_ptr<pikiwidb::CmdThreadPoolTask>& runner) { cmd_threads_.SubmitFast(runner); }
+  void SubmitSlow(const std::shared_ptr<pikiwidb::CmdThreadPoolTask>& runner) { cmd_threads_.SubmitSlow(runner); }
 
-  void PushWriteTask(const std::shared_ptr<pikiwidb::PClient>& client) { worker_threads_.PushWriteTask(client); }
+  void PushWriteTask(const std::shared_ptr<pikiwidb::PClient>& client) {
+    std::string msg;
+    client->Message(&msg);
+    client->SendOver();
+    event_server_->SendPacket(client, std::move(msg));
+  }
+
+  inline void SendPacket2Client(const std::shared_ptr<pikiwidb::PClient>& client, std::string&& msg) {
+    event_server_->SendPacket(client, std::move(msg));
+  }
+
+  inline void CloseConnection(const std::shared_ptr<pikiwidb::PClient>& client) {
+    event_server_->CloseConnection(client);
+  }
+
+  void TCPConnect(
+      const net::SocketAddr& addr,
+      const std::function<void(uint64_t, std::shared_ptr<pikiwidb::PClient>&, const net::SocketAddr&)>& onConnect,
+      const std::function<void(std::string)>& cb);
 
  public:
   PString cfg_file_;
@@ -56,11 +74,9 @@ class PikiwiDB final {
   static const uint32_t kRunidSize;
 
  private:
-  pikiwidb::WorkIOThreadPool worker_threads_;
-  pikiwidb::IOThreadPool slave_threads_;
   pikiwidb::CmdThreadPool cmd_threads_;
-  //  pikiwidb::CmdTableManager cmd_table_manager_;
 
+  std::unique_ptr<net::EventServer<std::shared_ptr<pikiwidb::PClient>>> event_server_;
   uint32_t cmd_id_ = 0;
 };
 

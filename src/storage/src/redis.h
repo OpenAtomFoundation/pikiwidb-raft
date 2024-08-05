@@ -102,8 +102,7 @@ class Redis {
 
   void SetNeedClose(bool need_close) { need_close_.store(need_close); }
 
-  virtual Status CompactRange(const DataType& option_type, const rocksdb::Slice* begin, const rocksdb::Slice* end,
-                              const ColumnFamilyType& type = kMetaAndData);
+  virtual Status CompactRange(const rocksdb::Slice* begin, const rocksdb::Slice* end);
 
   virtual Status GetProperty(const std::string& property, uint64_t* out);
   bool IsApplied(size_t cf_idx, LogIndex logidx) const { return log_index_of_all_cfs_.IsApplied(cf_idx, logidx); }
@@ -121,43 +120,7 @@ class Redis {
   Status ScanZsetsKeyNum(KeyInfo* key_info);
   Status ScanSetsKeyNum(KeyInfo* key_info);
 
-  virtual Status StringsPKPatternMatchDel(const std::string& pattern, int32_t* ret);
-  virtual Status ListsPKPatternMatchDel(const std::string& pattern, int32_t* ret);
-  virtual Status HashesPKPatternMatchDel(const std::string& pattern, int32_t* ret);
-  virtual Status ZsetsPKPatternMatchDel(const std::string& pattern, int32_t* ret);
-  virtual Status SetsPKPatternMatchDel(const std::string& pattern, int32_t* ret);
-
-  // Keys Commands
-  virtual Status StringsExpire(const Slice& key, uint64_t ttl);
-  virtual Status HashesExpire(const Slice& key, uint64_t ttl);
-  virtual Status ListsExpire(const Slice& key, uint64_t ttl);
-  virtual Status ZsetsExpire(const Slice& key, uint64_t ttl);
-  virtual Status SetsExpire(const Slice& key, uint64_t ttl);
-
-  virtual Status StringsDel(const Slice& key);
-  virtual Status HashesDel(const Slice& key);
-  virtual Status ListsDel(const Slice& key);
-  virtual Status ZsetsDel(const Slice& key);
-  virtual Status SetsDel(const Slice& key);
-
-  virtual Status StringsExpireat(const Slice& key, uint64_t timestamp);
-  virtual Status HashesExpireat(const Slice& key, uint64_t timestamp);
-  virtual Status ListsExpireat(const Slice& key, uint64_t timestamp);
-  virtual Status SetsExpireat(const Slice& key, uint64_t timestamp);
-  virtual Status ZsetsExpireat(const Slice& key, uint64_t timestamp);
-
-  virtual Status StringsPersist(const Slice& key);
-  virtual Status HashesPersist(const Slice& key);
-  virtual Status ListsPersist(const Slice& key);
-  virtual Status ZsetsPersist(const Slice& key);
-  virtual Status SetsPersist(const Slice& key);
-
-  virtual Status StringsTTL(const Slice& key, uint64_t* timestamp);
-  virtual Status HashesTTL(const Slice& key, uint64_t* timestamp);
-  virtual Status ListsTTL(const Slice& key, uint64_t* timestamp);
-  virtual Status ZsetsTTL(const Slice& key, uint64_t* timestamp);
-  virtual Status SetsTTL(const Slice& key, uint64_t* timestamp);
-
+  //   Keys Commands
   virtual Status StringsRename(const Slice& key, Redis* new_inst, const Slice& newkey);
   virtual Status HashesRename(const Slice& key, Redis* new_inst, const Slice& newkey);
   virtual Status ListsRename(const Slice& key, Redis* new_inst, const Slice& newkey);
@@ -177,22 +140,22 @@ class Redis {
                std::string& value_to_dest, int64_t* ret);
   Status Decrby(const Slice& key, int64_t value, int64_t* ret);
   Status Get(const Slice& key, std::string* value);
-  Status GetWithTTL(const Slice& key, std::string* value, uint64_t* ttl);
+  Status GetWithTTL(const Slice& key, std::string* value, int64_t* ttl);
   Status GetBit(const Slice& key, int64_t offset, int32_t* ret);
   Status Getrange(const Slice& key, int64_t start_offset, int64_t end_offset, std::string* ret);
   Status GetrangeWithValue(const Slice& key, int64_t start_offset, int64_t end_offset, std::string* ret,
-                           std::string* value, uint64_t* ttl);
+                           std::string* value, int64_t* ttl);
   Status GetSet(const Slice& key, const Slice& value, std::string* old_value);
   Status Incrby(const Slice& key, int64_t value, int64_t* ret);
   Status Incrbyfloat(const Slice& key, const Slice& value, std::string* ret);
   Status MSet(const std::vector<KeyValue>& kvs);
   Status MSetnx(const std::vector<KeyValue>& kvs, int32_t* ret);
   Status Set(const Slice& key, const Slice& value);
-  Status Setxx(const Slice& key, const Slice& value, int32_t* ret, uint64_t ttl = 0);
+  Status Setxx(const Slice& key, const Slice& value, int32_t* ret, int64_t ttl = 0);
   Status SetBit(const Slice& key, int64_t offset, int32_t value, int32_t* ret);
-  Status Setex(const Slice& key, const Slice& value, uint64_t ttl);
-  Status Setnx(const Slice& key, const Slice& value, int32_t* ret, uint64_t ttl = 0);
-  Status Setvx(const Slice& key, const Slice& value, const Slice& new_value, int32_t* ret, uint64_t ttl = 0);
+  Status Setex(const Slice& key, const Slice& value, int64_t ttl);
+  Status Setnx(const Slice& key, const Slice& value, int32_t* ret, int64_t ttl = 0);
+  Status Setvx(const Slice& key, const Slice& value, const Slice& new_value, int32_t* ret, int64_t ttl = 0);
   Status Delvx(const Slice& key, const Slice& value, int32_t* ret);
   Status Setrange(const Slice& key, int64_t start_offset, const Slice& value, int32_t* ret);
   Status Strlen(const Slice& key, int32_t* len);
@@ -202,12 +165,25 @@ class Redis {
   Status BitPos(const Slice& key, int32_t bit, int64_t start_offset, int64_t end_offset, int64_t* ret);
   Status PKSetexAt(const Slice& key, const Slice& value, uint64_t timestamp);
 
+  Status Exists(const Slice& key);
+  Status Del(const Slice& key);
+  Status Expire(const Slice& key, int64_t timestamp);
+  Status Expireat(const Slice& key, int64_t timestamp);
+  Status Persist(const Slice& key);
+  Status TTL(const Slice& key, int64_t* timestamp);
+  Status PKPatternMatchDel(const std::string& pattern, int32_t* ret);
+  Status Rename(const std::string& key, const std::string& newkey);
+  Status Renamenx(const std::string& key, const std::string& newkey);
+
+  Status GetType(const Slice& key, enum DataType& type);
+  Status IsExist(const Slice& key);
+
   // Hash Commands
   Status HDel(const Slice& key, const std::vector<std::string>& fields, int32_t* ret);
   Status HExists(const Slice& key, const Slice& field);
   Status HGet(const Slice& key, const Slice& field, std::string* value);
   Status HGetall(const Slice& key, std::vector<FieldValue>* fvs);
-  Status HGetallWithTTL(const Slice& key, std::vector<FieldValue>* fvs, uint64_t* ttl);
+  Status HGetallWithTTL(const Slice& key, std::vector<FieldValue>* fvs, int64_t* ttl);
   Status HIncrby(const Slice& key, const Slice& field, int64_t value, int64_t* ret);
   Status HIncrbyfloat(const Slice& key, const Slice& field, const Slice& by, std::string* new_value);
   Status HKeys(const Slice& key, std::vector<std::string>* fields);
@@ -248,7 +224,7 @@ class Redis {
                      std::vector<std::string>& value_to_dest, int32_t* ret);
   Status SIsmember(const Slice& key, const Slice& member, int32_t* ret);
   Status SMembers(const Slice& key, std::vector<std::string>* members);
-  Status SMembersWithTTL(const Slice& key, std::vector<std::string>* members, uint64_t* ttl);
+  Status SMembersWithTTL(const Slice& key, std::vector<std::string>* members, int64_t* ttl);
   Status SMove(const Slice& source, const Slice& destination, const Slice& member, int32_t* ret);
   Status SPop(const Slice& key, std::vector<std::string>* members, int64_t cnt);
   Status SRandmember(const Slice& key, int32_t count, std::vector<std::string>* members);
@@ -270,7 +246,7 @@ class Redis {
   Status LPush(const Slice& key, const std::vector<std::string>& values, uint64_t* ret);
   Status LPushx(const Slice& key, const std::vector<std::string>& values, uint64_t* len);
   Status LRange(const Slice& key, int64_t start, int64_t stop, std::vector<std::string>* ret);
-  Status LRangeWithTTL(const Slice& key, int64_t start, int64_t stop, std::vector<std::string>* ret, uint64_t* ttl);
+  Status LRangeWithTTL(const Slice& key, int64_t start, int64_t stop, std::vector<std::string>* ret, int64_t* ttl);
   Status LRem(const Slice& key, int64_t count, const Slice& value, uint64_t* ret);
   Status LSet(const Slice& key, int64_t index, const Slice& value);
   Status LTrim(const Slice& key, int64_t start, int64_t stop);
@@ -286,7 +262,7 @@ class Redis {
   Status ZIncrby(const Slice& key, const Slice& member, double increment, double* ret);
   Status ZRange(const Slice& key, int32_t start, int32_t stop, std::vector<ScoreMember>* score_members);
   Status ZRangeWithTTL(const Slice& key, int32_t start, int32_t stop, std::vector<ScoreMember>* score_members,
-                       uint64_t* ttl);
+                       int64_t* ttl);
   Status ZRangebyscore(const Slice& key, double min, double max, bool left_close, bool right_close, int64_t count,
                        int64_t offset, std::vector<ScoreMember>* score_members);
   Status ZRank(const Slice& key, const Slice& member, int32_t* rank);
@@ -327,7 +303,7 @@ class Redis {
 
   TypeIterator* CreateIterator(const DataType& type, const std::string& pattern, const Slice* lower_bound,
                                const Slice* upper_bound) {
-    return CreateIterator(DataTypeTag[type], pattern, lower_bound, upper_bound);
+    return CreateIterator(DataTypeTag[static_cast<uint8_t>(type)], pattern, lower_bound, upper_bound);
   }
 
   TypeIterator* CreateIterator(const char& type, const std::string& pattern, const Slice* lower_bound,
@@ -338,25 +314,63 @@ class Redis {
     options.iterate_upper_bound = upper_bound;
     switch (type) {
       case 'k':
-        return new StringsIterator(options, db_, handles_[kStringsCF], pattern);
+        return new StringsIterator(options, db_, handles_[kMetaCF], pattern);
         break;
       case 'h':
-        return new HashesIterator(options, db_, handles_[kHashesMetaCF], pattern);
+        return new HashesIterator(options, db_, handles_[kMetaCF], pattern);
         break;
       case 's':
-        return new SetsIterator(options, db_, handles_[kSetsMetaCF], pattern);
+        return new SetsIterator(options, db_, handles_[kMetaCF], pattern);
         break;
       case 'l':
-        return new ListsIterator(options, db_, handles_[kListsMetaCF], pattern);
+        return new ListsIterator(options, db_, handles_[kMetaCF], pattern);
         break;
       case 'z':
-        return new ZsetsIterator(options, db_, handles_[kZsetsMetaCF], pattern);
+        return new ZsetsIterator(options, db_, handles_[kMetaCF], pattern);
         break;
+      case 'a':
+        return new AllIterator(options, db_, handles_[kMetaCF], pattern);
       default:
         WARN("Invalid datatype to create iterator");
         return nullptr;
     }
     return nullptr;
+  }
+
+  enum DataType GetMetaValueType(const std::string& meta_value) {
+    DataType meta_type = static_cast<enum DataType>(static_cast<uint8_t>(meta_value[0]));
+    return meta_type;
+  }
+
+  bool ExpectedMetaValue(enum DataType type, const std::string& meta_value) {
+    auto meta_type = static_cast<enum DataType>(static_cast<uint8_t>(meta_value[0]));
+    if (type == meta_type) {
+      return true;
+    }
+    return false;
+  }
+
+  bool IsStale(std::string& meta_value) {
+    auto meta_type = static_cast<enum DataType>(static_cast<uint8_t>(meta_value[0]));
+    switch (meta_type) {
+      case DataType::kZSets:
+      case DataType::kSets:
+      case DataType::kHashes: {
+        ParsedBaseMetaValue parsed_meta_value(&meta_value);
+        return (parsed_meta_value.IsStale() || parsed_meta_value.Count() == 0);
+      }
+      case DataType::kLists: {
+        ParsedListsMetaValue parsed_lists_meta_value(&meta_value);
+        return (parsed_lists_meta_value.IsStale() || parsed_lists_meta_value.Count() == 0);
+      }
+      case DataType::kStrings: {
+        ParsedStringsValue parsed_strings_value(&meta_value);
+        return parsed_strings_value.IsStale();
+      }
+      default: {
+        return false;
+      }
+    }
   }
 
   LogIndexOfColumnFamilies& GetLogIndexOfColumnFamilies() { return log_index_of_all_cfs_; }

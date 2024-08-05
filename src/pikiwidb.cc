@@ -104,24 +104,11 @@ bool PikiwiDB::ParseArgs(int ac, char* av[]) {
   return true;
 }
 
-void PikiwiDB::OnNewConnection(pikiwidb::TcpConnection* obj) {
-  INFO("New connection from {}:{}", obj->GetPeerIP(), obj->GetPeerPort());
-
-  auto client = std::make_shared<pikiwidb::PClient>(obj);
-  obj->SetContext(client);
-
+void PikiwiDB::OnNewConnection(uint64_t connId, std::shared_ptr<pikiwidb::PClient>& client,
+                               const net::SocketAddr& addr) {
+  INFO("New connection from {}:{}", addr.GetIP(), addr.GetPort());
+  client->SetSocketAddr(addr);
   client->OnConnect();
-
-  auto msg_cb = std::bind(&pikiwidb::PClient::HandlePackets, client.get(), std::placeholders::_1, std::placeholders::_2,
-                          std::placeholders::_3);
-  obj->SetMessageCallback(msg_cb);
-  obj->SetOnDisconnect([](pikiwidb::TcpConnection* obj) {
-    INFO("disconnect from {}", obj->GetPeerIP());
-    obj->GetContext<pikiwidb::PClient>()->SetState(pikiwidb::ClientState::kClosed);
-  });
-  obj->SetNodelay(true);
-  obj->SetEventLoopSelector([this]() { return worker_threads_.ChooseNextWorkerEventLoop(); });
-  obj->SetSlaveEventLoopSelector([this]() { return slave_threads_.ChooseNextWorkerEventLoop(); });
 }
 
 bool PikiwiDB::Init() {
@@ -137,20 +124,7 @@ bool PikiwiDB::Init() {
     g_config.Set("log-level", log_level_, true);
   }
 
-  NewTcpConnectionCallback cb = std::bind(&PikiwiDB::OnNewConnection, this, std::placeholders::_1);
-  if (!worker_threads_.Init(g_config.ip.ToString().c_str(), g_config.port.load(), cb)) {
-    ERROR("worker_threads Init failed. IP = {} Port = {}", g_config.ip.ToString(), g_config.port.load());
-    return false;
-  }
-
   auto num = g_config.worker_threads_num.load() + g_config.slave_threads_num.load();
-  auto kMaxWorkerNum = IOThreadPool::GetMaxWorkerNum();
-  if (num > kMaxWorkerNum) {
-    ERROR("number of threads can't exceeds {}, now is {}", kMaxWorkerNum, num);
-    return false;
-  }
-  worker_threads_.SetWorkerNum(static_cast<size_t>(g_config.worker_threads_num.load()));
-  slave_threads_.SetWorkerNum(static_cast<size_t>(g_config.slave_threads_num.load()));
 
   // now we only use fast cmd thread pool
   auto status = cmd_threads_.Init(g_config.fast_cmd_threads_num.load(), 0, "pikiwidb-cmd");
@@ -164,35 +138,54 @@ bool PikiwiDB::Init() {
   PSlowLog::Instance().SetThreshold(g_config.slow_log_time.load());
   PSlowLog::Instance().SetLogLimit(static_cast<std::size_t>(g_config.slow_log_max_len.load()));
 
-  // init base loop
-  auto loop = worker_threads_.BaseLoop();
-  loop->ScheduleRepeatedly(1000, &PReplication::Cron, &PREPL);
-
   // master ip
-  if (!g_config.ip.empty()) {
+  if (!g_config.master_ip.empty()) {
     PREPL.SetMasterAddr(g_config.master_ip.ToString().c_str(), g_config.master_port.load());
   }
+
+  event_server_ = std::make_unique<net::EventServer<std::shared_ptr<PClient>>>(num);
+
+  event_server_->SetRwSeparation(true);
+
+  net::SocketAddr addr(g_config.ip.ToString(), g_config.port.load());
+  INFO("Add listen addr:{}, port:{}", g_config.ip.ToString(), g_config.port.load());
+  event_server_->AddListenAddr(addr);
+
+  event_server_->SetOnInit([](std::shared_ptr<PClient>* client) { *client = std::make_shared<PClient>(); });
+
+  event_server_->SetOnCreate([](uint64_t connID, std::shared_ptr<PClient>& client, const net::SocketAddr& addr) {
+    client->SetSocketAddr(addr);
+    client->OnConnect();
+    INFO("New connection from fd:{} IP:{} port:{}", connID, addr.GetIP(), addr.GetPort());
+  });
+
+  event_server_->SetOnMessage([](std::string&& msg, std::shared_ptr<PClient>& t) {
+    t->handlePacket(msg.c_str(), static_cast<int>(msg.size()));
+  });
+
+  event_server_->SetOnClose([](std::shared_ptr<PClient>& client, std::string&& msg) {
+    INFO("Close connection id:{} msg:{}", client->GetConnId(), msg);
+    client->OnClose();
+  });
+
+  event_server_->InitTimer(10);
+
+  auto timerTask = std::make_shared<net::CommonTimerTask>(1000);
+  timerTask->SetCallback([]() { PREPL.Cron(); });
+  event_server_->AddTimerTask(timerTask);
 
   return true;
 }
 
 void PikiwiDB::Run() {
-  worker_threads_.SetName("pikiwi-main");
-  slave_threads_.SetName("pikiwi-slave");
+  auto [ret, err] = event_server_->StartServer();
+  if (!ret) {
+    ERROR("start server failed: {}", err);
+    return;
+  }
 
   cmd_threads_.Start();
-
-  std::thread t([this]() {
-    auto slave_loop = slave_threads_.BaseLoop();
-    slave_loop->Init();
-    slave_threads_.Run(0, nullptr);
-  });
-
-  worker_threads_.Run(0, nullptr);
-
-  if (t.joinable()) {
-    t.join();  // wait for slave thread exit
-  }
+  event_server_->Wait();
   INFO("server exit running");
 }
 
@@ -200,12 +193,17 @@ void PikiwiDB::Stop() {
   pikiwidb::PRAFT.ShutDown();
   pikiwidb::PRAFT.Join();
   pikiwidb::PRAFT.Clear();
-  slave_threads_.Exit();
-  worker_threads_.Exit();
   cmd_threads_.Stop();
+  event_server_->StopServer();
 }
 
-// pikiwidb::CmdTableManager& PikiwiDB::GetCmdTableManager() { return cmd_table_manager_; }
+void PikiwiDB::TCPConnect(
+    const net::SocketAddr& addr,
+    const std::function<void(uint64_t, std::shared_ptr<pikiwidb::PClient>&, const net::SocketAddr&)>& onConnect,
+    const std::function<void(std::string)>& cb) {
+  INFO("Connect to {}:{}", addr.GetIP(), addr.GetPort());
+  event_server_->TCPConnect(addr, onConnect, cb);
+}
 
 static void InitLogs() {
   logger::Init("logs/pikiwidb_server.log");

@@ -14,30 +14,36 @@
 namespace storage {
 
 /*
- * | value | version | reserve | cdate | timestamp |
- * |       |    8B   |   16B   |   8B  |     8B    |
+ * | type | value | version | reserve | cdate | timestamp |
+ * |  1B  |       |    8B   |   16B   |   8B  |     8B    |
  */
 // TODO(wangshaoyi): reformat encode, AppendTimestampAndVersion
 class BaseMetaValue : public InternalValue {
  public:
-  explicit BaseMetaValue(const Slice& user_value) : InternalValue(user_value) {}
+  explicit BaseMetaValue(DataType type, const Slice& user_value) : InternalValue(type, user_value) {}
 
   rocksdb::Slice Encode() override {
     size_t usize = user_value_.size();
-    size_t needed = usize + kVersionLength + kSuffixReserveLength + 2 * kTimestampLength;
+    size_t needed = kTypeLength + usize + kVersionLength + kSuffixReserveLength + 2 * kTimestampLength;
     char* dst = ReAllocIfNeeded(needed);
+    // type
+    memcpy(dst, &type_, sizeof(type_));
+    dst += sizeof(type_);
     char* start_pos = dst;
-
+    // user_value
     memcpy(dst, user_value_.data(), user_value_.size());
     dst += user_value_.size();
+    // version
     EncodeFixed64(dst, version_);
     dst += sizeof(version_);
+    // reserve;
     memcpy(dst, reserve_, sizeof(reserve_));
     dst += sizeof(reserve_);
+    // ctime
     EncodeFixed64(dst, ctime_);
     dst += sizeof(ctime_);
+    // etime
     EncodeFixed64(dst, etime_);
-    dst += sizeof(etime_);
     return rocksdb::Slice(start_, needed);
   }
 
@@ -58,8 +64,11 @@ class ParsedBaseMetaValue : public ParsedInternalValue {
   // Use this constructor after rocksdb::DB::Get();
   explicit ParsedBaseMetaValue(std::string* internal_value_str) : ParsedInternalValue(internal_value_str) {
     if (internal_value_str->size() >= kBaseMetaValueSuffixLength) {
-      int offset = 0;
-      user_value_ = Slice(internal_value_str->data(), internal_value_str->size() - kBaseMetaValueSuffixLength);
+      size_t offset = 0;
+      type_ = static_cast<DataType>(static_cast<uint8_t>((*internal_value_str)[0]));
+      offset += kTypeLength;
+      user_value_ =
+          Slice(internal_value_str->data() + offset, internal_value_str->size() - kBaseMetaValueSuffixLength - offset);
       offset += user_value_.size();
       version_ = DecodeFixed64(internal_value_str->data() + offset);
       offset += sizeof(version_);
@@ -69,24 +78,33 @@ class ParsedBaseMetaValue : public ParsedInternalValue {
       offset += sizeof(ctime_);
       etime_ = DecodeFixed64(internal_value_str->data() + offset);
     }
-    count_ = DecodeFixed32(internal_value_str->data());
+    count_ = DecodeFixed32(internal_value_str->data() + kTypeLength);
   }
 
   // Use this constructor in rocksdb::CompactionFilter::Filter();
   explicit ParsedBaseMetaValue(const Slice& internal_value_slice) : ParsedInternalValue(internal_value_slice) {
     if (internal_value_slice.size() >= kBaseMetaValueSuffixLength) {
-      int offset = 0;
-      user_value_ = Slice(internal_value_slice.data(), internal_value_slice.size() - kBaseMetaValueSuffixLength);
+      size_t offset = 0;
+      // type
+      type_ = static_cast<DataType>(static_cast<uint8_t>(internal_value_slice[0]));
+      offset += kTypeLength;
+      // user_value
+      user_value_ = Slice(internal_value_slice.data() + offset,
+                          internal_value_slice.size() - kBaseMetaValueSuffixLength - offset);
       offset += user_value_.size();
+      // version
       version_ = DecodeFixed64(internal_value_slice.data() + offset);
       offset += sizeof(uint64_t);
+      // reserve
       memcpy(reserve_, internal_value_slice.data() + offset, sizeof(reserve_));
       offset += sizeof(reserve_);
+      // ctime
       ctime_ = DecodeFixed64(internal_value_slice.data() + offset);
       offset += sizeof(ctime_);
+      // etime
       etime_ = DecodeFixed64(internal_value_slice.data() + offset);
     }
-    count_ = DecodeFixed32(internal_value_slice.data());
+    count_ = DecodeFixed32(internal_value_slice.data() + kTypeLength);
   }
 
   void StripSuffix() override {
@@ -138,7 +156,7 @@ class ParsedBaseMetaValue : public ParsedInternalValue {
     count_ = count;
     if (value_) {
       char* dst = const_cast<char*>(value_->data());
-      EncodeFixed32(dst, count_);
+      EncodeFixed32(dst + kTypeLength, count_);
     }
   }
 
@@ -155,7 +173,7 @@ class ParsedBaseMetaValue : public ParsedInternalValue {
     count_ += delta;
     if (value_) {
       char* dst = const_cast<char*>(value_->data());
-      EncodeFixed32(dst, count_);
+      EncodeFixed32(dst + kTypeLength, count_);
     }
   }
 

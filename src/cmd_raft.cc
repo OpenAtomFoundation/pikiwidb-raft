@@ -11,7 +11,7 @@
 #include <optional>
 #include <string>
 
-#include "net/event_loop.h"
+// #include "net/event_loop.h"
 #include "praft/praft.h"
 #include "pstd/log.h"
 #include "pstd/pstd_string.h"

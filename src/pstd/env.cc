@@ -6,6 +6,7 @@
  */
 
 #include "env.h"
+#include "log.h"
 
 #include <dirent.h>
 #include <fcntl.h>

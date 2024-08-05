@@ -11,7 +11,7 @@
 #include "rocksdb/env.h"
 #include "rocksdb/slice.h"
 
-#include "pstd/pstd_coding.h"
+#include "pstd/env.h"
 #include "src/coding.h"
 #include "src/mutex.h"
 
@@ -20,9 +20,22 @@ namespace storage {
 using Status = rocksdb::Status;
 using Slice = rocksdb::Slice;
 
+enum DataType : uint8_t { kStrings = 0, kHashes = 1, kSets = 2, kLists = 3, kZSets = 4, kNones = 5, kAll = 6 };
+
+static const char* DataTypeStrings[] = {"string", "hash", "set", "list", "zset", "none", "all"};
+
+static const char DataTypeTag[] = {'k', 'h', 's', 'l', 'z', 'n', 'a'};
+
+const char* DataTypeToString(DataType type);
+
+const char DataTypeToTag(DataType type);
+
 class InternalValue {
  public:
-  explicit InternalValue(const Slice& user_value) : user_value_(user_value) {}
+  explicit InternalValue(DataType type, const Slice& user_value) : type_(type), user_value_(user_value) {
+    ctime_ = pstd::NowMicros() / 1e6;
+  }
+
   virtual ~InternalValue() {
     if (start_ != space_) {
       delete[] start_;
@@ -60,6 +73,7 @@ class InternalValue {
  protected:
   char space_[200];
   char* start_ = nullptr;
+  DataType type_ = DataType::kNones;
   Slice user_value_;
   uint64_t version_ = 0;
   uint64_t etime_ = 0;
@@ -130,6 +144,7 @@ class ParsedInternalValue {
   virtual void SetEtimeToValue() = 0;
   virtual void SetCtimeToValue() = 0;
   std::string* value_ = nullptr;
+  DataType type_ = DataType::kNones;
   Slice user_value_;
   uint64_t version_ = 0;
   uint64_t ctime_ = 0;

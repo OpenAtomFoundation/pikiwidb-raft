@@ -195,6 +195,27 @@ var _ = Describe("Hash", Ordered, func() {
 		Expect(length.Val()).To(Equal(int64(len("hello1"))))
 	})
 
+	It("should HIncrBy against wrong metadata", func() {
+		hSet := client.HSet(ctx, "hash", "key", "5")
+		Expect(hSet.Err()).NotTo(HaveOccurred())
+
+		hIncrBy := client.HIncrBy(ctx, "hash", "key", 1)
+		Expect(hIncrBy.Err()).NotTo(HaveOccurred())
+		Expect(hIncrBy.Val()).To(Equal(int64(6)))
+
+		hDel := client.HDel(ctx, "hash", "key")
+		Expect(hDel.Err()).NotTo(HaveOccurred())
+		Expect(hDel.Val()).To(Equal(int64(1)))
+
+		hIncrBy = client.HIncrBy(ctx, "hash", "key", 1)
+		Expect(hIncrBy.Err()).NotTo(HaveOccurred())
+		Expect(hIncrBy.Val()).To(Equal(int64(1)))
+
+		hIncrBy = client.HIncrBy(ctx, "hash", "key", 2)
+		Expect(hIncrBy.Err()).NotTo(HaveOccurred())
+		Expect(hIncrBy.Val()).To(Equal(int64(3)))
+	})
+
 	It("HIncrbyFloat", func() {
 		hSet := client.HSet(ctx, "hash", "field", "10.50")
 		Expect(hSet.Err()).NotTo(HaveOccurred())

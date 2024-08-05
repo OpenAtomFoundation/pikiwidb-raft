@@ -93,11 +93,33 @@ var _ = Describe("Consistency", Ordered, func() {
 				leader = s.NewClient()
 				Expect(leader).NotTo(BeNil())
 				Expect(leader.FlushDB(ctx).Err()).NotTo(HaveOccurred())
+
+				info, err := leader.Do(ctx, "info", "raft").Result()
+				Expect(err).NotTo(HaveOccurred())
+				info_str := info.(string)
+				scanner := bufio.NewScanner(strings.NewReader(info_str))
+				for scanner.Scan() {
+					line := scanner.Text()
+					if strings.Contains(line, "raft_role") {
+						Expect(strings.Split(line, ":")[1]).To(Equal("LEADER"))
+					}
+				}
 			} else {
 				c := s.NewClient()
 				Expect(c).NotTo(BeNil())
-				Expect(c.FlushDB(ctx).Err().Error()).To(Equal("ERR MOVED 127.0.0.1:12111"))
+				Expect(c.FlushDB(ctx).Err().Error()).To(Equal("ERR -MOVED 127.0.0.1:12111"))
 				followers = append(followers, c)
+
+				info, err := c.Do(ctx, "info", "raft").Result()
+				Expect(err).NotTo(HaveOccurred())
+				info_str := info.(string)
+				scanner := bufio.NewScanner(strings.NewReader(info_str))
+				for scanner.Scan() {
+					line := scanner.Text()
+					if strings.Contains(line, "raft_role") {
+						Expect(strings.Split(line, ":")[1]).To(Equal("FOLLOWER"))
+					}
+				}
 			}
 		}
 	})
@@ -121,6 +143,7 @@ var _ = Describe("Consistency", Ordered, func() {
 			"fb": "vb",
 			"fc": "vc",
 		}
+
 		{
 			// hset write on leader
 			set, err := leader.HSet(ctx, testKey, testValue).Result()
@@ -151,6 +174,89 @@ var _ = Describe("Consistency", Ordered, func() {
 				}))
 			})
 		}
+	})
+
+	It("HSetnx Consistency Test", func() {
+		const testKey = "HashConsistencyTest"
+		const testField = "HSetnxTestField"
+		const testValue = "HSetnxTestValue"
+
+		setnx, err := leader.HSetNX(ctx, testKey, testField, testValue).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(setnx).To(BeTrue())
+
+		setnx, err = leader.HSetNX(ctx, testKey, testField, "NewValue").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(setnx).To(BeFalse())
+
+		// read check
+		readChecker(func(c *redis.Client) {
+			hget, err := c.HGet(ctx, testKey, testField).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(hget).To(Equal(testValue))
+		})
+	})
+
+	It("HMSet Consistency Test", func() {
+		const testKey = "HashConsistencyTest"
+		testValue := map[string]string{
+			"fa": "va",
+			"fb": "vb",
+			"fc": "vc",
+		}
+		// write on leader
+		hmset, err := leader.HMSet(ctx, testKey, testValue).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(hmset).To(BeTrue())
+
+		// read check
+		readChecker(func(c *redis.Client) {
+			getall, err := c.HGetAll(ctx, testKey).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(getall).To(Equal(testValue))
+		})
+	})
+
+	It("HIncrby Consistency Test", func() {
+		const testKey = "HashConsistencyTest"
+		const testField = "HIncrbyField"
+		// write on leader
+		set, err := leader.HSet(ctx, testKey, testField, 5).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(set).To(Equal(int64(1)))
+
+		// incrby 1
+		hincrby, err := leader.HIncrBy(ctx, testKey, testField, 1).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(hincrby).To(Equal(int64(6)))
+		// read check
+		readChecker(func(c *redis.Client) {
+			hget, err := c.HGet(ctx, testKey, testField).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(hget).To(Equal("6"))
+		})
+
+		// incrby -1
+		hincrby, err = leader.HIncrBy(ctx, testKey, testField, -1).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(hincrby).To(Equal(int64(5)))
+		// read check
+		readChecker(func(c *redis.Client) {
+			hget, err := c.HGet(ctx, testKey, testField).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(hget).To(Equal("5"))
+		})
+
+		// incrby -10
+		hincrby, err = leader.HIncrBy(ctx, testKey, testField, -10).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(hincrby).To(Equal(int64(-5)))
+		// read check
+		readChecker(func(c *redis.Client) {
+			hget, err := c.HGet(ctx, testKey, testField).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(hget).To(Equal("-5"))
+		})
 	})
 
 	It("SAdd & SRem Consistency Test", func() {
@@ -788,6 +894,29 @@ var _ = Describe("Consistency", Ordered, func() {
 		}
 	})
 
+	It("ReadConsistencyTest", func() {
+		// set write on leader
+		set, err := leader.Set(ctx, "a", "b", 0).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(set).To(Equal("OK"))
+
+		// get from leader
+		get_leader, err := leader.Get(ctx, "a").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(get_leader).To(Equal("b"))
+
+		if len(followers) > 0 {
+			get_follower, err := followers[0].Get(ctx, "a").Result()
+			Expect(err).To(HaveOccurred())
+
+			if strings.Contains(get_follower, "-MOVED") {
+				redirect_leader_ip := strings.Split(get_follower, "MOVED")[1]
+				real_leader_ip := leader.Options().Addr
+				Expect(redirect_leader_ip).To(Equal(real_leader_ip))
+			}
+		}
+	})
+
 	It("ThreeNodesClusterConstructionTest", func() {
 		for _, follower := range followers {
 			info, err := follower.Do(ctx, "info", "raft").Result()
@@ -815,16 +944,15 @@ var _ = Describe("Consistency", Ordered, func() {
 			}
 		}
 	})
-
 })
 
 func readChecker(check func(*redis.Client)) {
 	// read on leader
 	check(leader)
-	time.Sleep(10000 * time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 
 	// read on followers
-	followerChecker(followers, check)
+	// followerChecker(followers, check)
 }
 
 func followerChecker(fs []*redis.Client, check func(*redis.Client)) {

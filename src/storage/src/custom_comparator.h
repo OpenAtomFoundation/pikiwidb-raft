@@ -103,9 +103,7 @@ class ZSetsScoreKeyComparatorImpl : public rocksdb::Comparator {
     ptr_a += kPrefixReserveLength;
     ptr_b += kPrefixReserveLength;
     const char* p_a = SeekUserkeyDelim(ptr_a, a_size - kPrefixReserveLength);
-    p_a += kVersionLength;
     const char* p_b = SeekUserkeyDelim(ptr_b, b_size - kPrefixReserveLength);
-    p_b += kVersionLength;
     rocksdb::Slice p_a_prefix = Slice(ptr_a, std::distance(ptr_a, p_a));
     rocksdb::Slice p_b_prefix = Slice(ptr_b, std::distance(ptr_b, p_b));
     int ret = p_a_prefix.compare(p_b_prefix);
@@ -115,6 +113,15 @@ class ZSetsScoreKeyComparatorImpl : public rocksdb::Comparator {
 
     ptr_a = p_a;
     ptr_b = p_b;
+    // compare version
+    uint64_t version_a = DecodeFixed64(ptr_a);
+    uint64_t version_b = DecodeFixed64(ptr_b);
+    if (version_a != version_b) {
+      return version_a < version_b ? -1 : 1;
+    }
+
+    ptr_a += kVersionLength;
+    ptr_b += kVersionLength;
     // compare score
     uint64_t a_i = DecodeFixed64(ptr_a);
     uint64_t b_i = DecodeFixed64(ptr_b);

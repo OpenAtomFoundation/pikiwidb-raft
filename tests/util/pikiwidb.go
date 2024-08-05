@@ -82,12 +82,12 @@ func (s *Server) NewClient() *redis.Client {
 	return redis.NewClient(&redis.Options{
 		Addr:         s.getAddr(),
 		DB:           0,
-		DialTimeout:  10 * time.Second,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		DialTimeout:  10 * time.Minute,
+		ReadTimeout:  10 * time.Minute,
+		WriteTimeout: 10 * time.Minute,
 		MaxRetries:   -1,
 		PoolSize:     30,
-		PoolTimeout:  60 * time.Second,
+		PoolTimeout:  10 * time.Minute,
 	})
 }
 
@@ -143,8 +143,14 @@ func StartServer(config string, options map[string]string, delete bool) *Server 
 
 	b := getBinPath()
 	c := exec.Command(b)
+	t := time.Now().UnixMilli()
 
-	outfile, err := os.Create("test.log")
+	if options["port"] != "" {
+		p, _ = strconv.Atoi(options["port"])
+	}
+
+	logName := fmt.Sprintf("test_%d_%d.log", t, p)
+	outfile, err := os.Create(logName)
 	if err != nil {
 		panic(err)
 	}
@@ -155,7 +161,6 @@ func StartServer(config string, options map[string]string, delete bool) *Server 
 	log.SetOutput(outfile)
 
 	if len(config) != 0 {
-		t := time.Now().UnixMilli()
 		d = path.Join(getRootPathByCaller(), fmt.Sprintf("db_%d", t))
 		n = GetConfPath(true, t)
 
@@ -198,10 +203,6 @@ func StartServer(config string, options map[string]string, delete bool) *Server 
 			continue
 		}
 		c.Args = append(c.Args, fmt.Sprintf("--%s", k), v)
-	}
-
-	if options["port"] != "" {
-		p, _ = strconv.Atoi(options["port"])
 	}
 
 	err = c.Start()

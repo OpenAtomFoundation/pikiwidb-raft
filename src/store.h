@@ -25,6 +25,8 @@ enum TaskArg {
   kCheckpointPath = 0,
 };
 
+constexpr const char* ErrTypeMessage = "WRONGTYPE";
+
 struct TaskContext {
   TaskType type = kEmpty;
   int db = -1;

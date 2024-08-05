@@ -16,6 +16,8 @@
 #include <string>
 #include <vector>
 
+#include "unbounded_buffer.h"
+
 #define CRLF "\r\n"
 
 using PString = std::string;
@@ -57,8 +59,6 @@ extern struct PErrorInfo {
 } g_errorInfo[];
 
 int StrToLongDouble(const char* s, size_t slen, long double* ldval);
-
-class UnboundedBuffer;
 
 std::size_t FormatInt(long value, UnboundedBuffer* reply);
 std::size_t FormatBulk(const char* str, std::size_t len, UnboundedBuffer* reply);

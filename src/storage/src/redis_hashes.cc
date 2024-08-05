@@ -19,7 +19,6 @@
 #include "src/base_filter.h"
 #include "src/scope_record_lock.h"
 #include "src/scope_snapshot.h"
-#include "storage/storage_define.h"
 #include "storage/util.h"
 
 namespace storage {
@@ -27,7 +26,7 @@ Status Redis::ScanHashesKeyNum(KeyInfo* key_info) {
   uint64_t keys = 0;
   uint64_t expires = 0;
   uint64_t ttl_sum = 0;
-  uint64_t invaild_keys = 0;
+  uint64_t invalid_keys = 0;
 
   rocksdb::ReadOptions iterator_options;
   const rocksdb::Snapshot* snapshot;
@@ -38,11 +37,14 @@ Status Redis::ScanHashesKeyNum(KeyInfo* key_info) {
   int64_t curtime;
   rocksdb::Env::Default()->GetCurrentTime(&curtime);
 
-  rocksdb::Iterator* iter = db_->NewIterator(iterator_options, handles_[kHashesMetaCF]);
+  rocksdb::Iterator* iter = db_->NewIterator(iterator_options, handles_[kMetaCF]);
   for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+    if (!ExpectedMetaValue(DataType::kHashes, iter->value().ToString())) {
+      continue;
+    }
     ParsedHashesMetaValue parsed_hashes_meta_value(iter->value());
     if (parsed_hashes_meta_value.IsStale() || parsed_hashes_meta_value.Count() == 0) {
-      invaild_keys++;
+      invalid_keys++;
     } else {
       keys++;
       if (!parsed_hashes_meta_value.IsPermanentSurvival()) {
@@ -56,55 +58,8 @@ Status Redis::ScanHashesKeyNum(KeyInfo* key_info) {
   key_info->keys = keys;
   key_info->expires = expires;
   key_info->avg_ttl = (expires != 0) ? ttl_sum / expires : 0;
-  key_info->invaild_keys = invaild_keys;
+  key_info->invalid_keys = invalid_keys;
   return Status::OK();
-}
-
-Status Redis::HashesPKPatternMatchDel(const std::string& pattern, int32_t* ret) {
-  rocksdb::ReadOptions iterator_options;
-  const rocksdb::Snapshot* snapshot;
-  ScopeSnapshot ss(db_, &snapshot);
-  iterator_options.snapshot = snapshot;
-  iterator_options.fill_cache = false;
-
-  std::string key;
-  std::string meta_value;
-  int32_t total_delete = 0;
-  Status s;
-  rocksdb::WriteBatch batch;
-  rocksdb::Iterator* iter = db_->NewIterator(iterator_options, handles_[kHashesMetaCF]);
-  iter->SeekToFirst();
-  while (iter->Valid()) {
-    key = iter->key().ToString();
-    meta_value = iter->value().ToString();
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (!parsed_hashes_meta_value.IsStale() && (parsed_hashes_meta_value.Count() != 0) &&
-        (StringMatch(pattern.data(), pattern.size(), key.data(), key.size(), 0) != 0)) {
-      parsed_hashes_meta_value.InitialMetaValue();
-      batch.Put(handles_[kHashesMetaCF], key, meta_value);
-    }
-    if (static_cast<size_t>(batch.Count()) >= BATCH_DELETE_LIMIT) {
-      s = db_->Write(default_write_options_, &batch);
-      if (s.ok()) {
-        total_delete += static_cast<int32_t>(batch.Count());
-        batch.Clear();
-      } else {
-        *ret = total_delete;
-        return s;
-      }
-    }
-    iter->Next();
-  }
-  if (batch.Count() != 0U) {
-    s = db_->Write(default_write_options_, &batch);
-    if (s.ok()) {
-      total_delete += static_cast<int32_t>(batch.Count());
-      batch.Clear();
-    }
-  }
-
-  *ret = total_delete;
-  return s;
 }
 
 Status Redis::HDel(const Slice& key, const std::vector<std::string>& fields, int32_t* ret) {
@@ -131,14 +86,18 @@ Status Redis::HDel(const Slice& key, const std::vector<std::string>& fields, int
   read_options.snapshot = snapshot;
 
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(read_options, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(read_options, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale() || parsed_hashes_meta_value.Count() == 0) {
+    if (IsStale(meta_value)) {
       *ret = 0;
       return Status::OK();
+    } else if (!ExpectedMetaValue(DataType::kHashes, meta_value)) {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
     } else {
       std::string data_value;
+      ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
       version = parsed_hashes_meta_value.Version();
       for (const auto& field : filtered_fields) {
         HashesDataKey hashes_data_key(key, version, field);
@@ -158,7 +117,7 @@ Status Redis::HDel(const Slice& key, const std::vector<std::string>& fields, int
         return Status::InvalidArgument("hash size overflow");
       }
       parsed_hashes_meta_value.ModifyCount(-del_cnt);
-      batch->Put(kHashesMetaCF, base_meta_key.Encode(), meta_value);
+      batch->Put(kMetaCF, base_meta_key.Encode(), meta_value);
     }
   } else if (s.IsNotFound()) {
     *ret = 0;
@@ -185,14 +144,16 @@ Status Redis::HGet(const Slice& key, const Slice& field, std::string* value) {
   read_options.snapshot = snapshot;
 
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(read_options, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(read_options, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale()) {
+    if (IsStale(meta_value)) {
       return Status::NotFound("Stale");
-    } else if (parsed_hashes_meta_value.Count() == 0) {
-      return Status::NotFound();
+    } else if (!ExpectedMetaValue(DataType::kHashes, meta_value)) {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
     } else {
+      ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
       version = parsed_hashes_meta_value.Version();
       HashesDataKey data_key(key, version, field);
       s = db_->Get(read_options, handles_[kHashesDataCF], data_key.Encode(), value);
@@ -215,14 +176,16 @@ Status Redis::HGetall(const Slice& key, std::vector<FieldValue>* fvs) {
   read_options.snapshot = snapshot;
 
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(read_options, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(read_options, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale()) {
+    if (IsStale(meta_value)) {
       return Status::NotFound("Stale");
-    } else if (parsed_hashes_meta_value.Count() == 0) {
-      return Status::NotFound();
+    } else if (!ExpectedMetaValue(DataType::kHashes, meta_value)) {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
     } else {
+      ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
       version = parsed_hashes_meta_value.Version();
       HashesDataKey hashes_data_key(key, version, "");
       Slice prefix = hashes_data_key.EncodeSeekKey();
@@ -239,7 +202,7 @@ Status Redis::HGetall(const Slice& key, std::vector<FieldValue>* fvs) {
   return s;
 }
 
-Status Redis::HGetallWithTTL(const Slice& key, std::vector<FieldValue>* fvs, uint64_t* ttl) {
+Status Redis::HGetallWithTTL(const Slice& key, std::vector<FieldValue>* fvs, int64_t* ttl) {
   rocksdb::ReadOptions read_options;
   const rocksdb::Snapshot* snapshot;
 
@@ -248,15 +211,17 @@ Status Redis::HGetallWithTTL(const Slice& key, std::vector<FieldValue>* fvs, uin
   ScopeSnapshot ss(db_, &snapshot);
   read_options.snapshot = snapshot;
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(read_options, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(read_options, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.Count() == 0) {
+    if (IsStale(meta_value)) {
       return Status::NotFound();
-    } else if (parsed_hashes_meta_value.IsStale()) {
-      return Status::NotFound("Stale");
+    } else if (!ExpectedMetaValue(DataType::kHashes, meta_value)) {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
     } else {
       // ttl
+      ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
       *ttl = parsed_hashes_meta_value.Etime();
       if (*ttl == 0) {
         *ttl = -1;
@@ -284,7 +249,7 @@ Status Redis::HGetallWithTTL(const Slice& key, std::vector<FieldValue>* fvs, uin
 
 Status Redis::HIncrby(const Slice& key, const Slice& field, int64_t value, int64_t* ret) {
   *ret = 0;
-  rocksdb::WriteBatch batch;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
 
   uint64_t version = 0;
@@ -293,19 +258,29 @@ Status Redis::HIncrby(const Slice& key, const Slice& field, int64_t value, int64
   std::string meta_value;
 
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(default_read_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(default_read_options_, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   char value_buf[32] = {0};
   char meta_value_buf[4] = {0};
+  if (s.ok() && !ExpectedMetaValue(DataType::kHashes, meta_value)) {
+    if (IsStale(meta_value)) {
+      s = Status::NotFound();
+    } else {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
+    }
+  }
   if (s.ok()) {
     ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
     if (parsed_hashes_meta_value.IsStale() || parsed_hashes_meta_value.Count() == 0) {
       version = parsed_hashes_meta_value.UpdateVersion();
       parsed_hashes_meta_value.SetCount(1);
       parsed_hashes_meta_value.SetEtime(0);
-      batch.Put(handles_[kHashesMetaCF], base_meta_key.Encode(), meta_value);
+      batch->Put(kMetaCF, base_meta_key.Encode(), meta_value);
       HashesDataKey hashes_data_key(key, version, field);
       Int64ToStr(value_buf, 32, value);
-      batch.Put(handles_[kHashesDataCF], hashes_data_key.Encode(), value_buf);
+      BaseDataValue internal_value(value_buf);
+      batch->Put(kHashesDataCF, hashes_data_key.Encode(), internal_value.Encode());
       *ret = value;
     } else {
       version = parsed_hashes_meta_value.Version();
@@ -324,7 +299,7 @@ Status Redis::HIncrby(const Slice& key, const Slice& field, int64_t value, int64
         *ret = ival + value;
         Int64ToStr(value_buf, 32, *ret);
         BaseDataValue internal_value(value_buf);
-        batch.Put(handles_[kHashesDataCF], hashes_data_key.Encode(), internal_value.Encode());
+        batch->Put(kHashesDataCF, hashes_data_key.Encode(), internal_value.Encode());
         statistic++;
       } else if (s.IsNotFound()) {
         Int64ToStr(value_buf, 32, value);
@@ -333,8 +308,8 @@ Status Redis::HIncrby(const Slice& key, const Slice& field, int64_t value, int64
         }
         BaseDataValue internal_value(value_buf);
         parsed_hashes_meta_value.ModifyCount(1);
-        batch.Put(handles_[kHashesMetaCF], base_meta_key.Encode(), meta_value);
-        batch.Put(handles_[kHashesDataCF], hashes_data_key.Encode(), internal_value.Encode());
+        batch->Put(kMetaCF, base_meta_key.Encode(), meta_value);
+        batch->Put(kHashesDataCF, hashes_data_key.Encode(), internal_value.Encode());
         *ret = value;
       } else {
         return s;
@@ -342,19 +317,19 @@ Status Redis::HIncrby(const Slice& key, const Slice& field, int64_t value, int64
     }
   } else if (s.IsNotFound()) {
     EncodeFixed32(meta_value_buf, 1);
-    HashesMetaValue hashes_meta_value(Slice(meta_value_buf, sizeof(int32_t)));
+    HashesMetaValue hashes_meta_value(DataType::kHashes, Slice(meta_value_buf, 4));
     version = hashes_meta_value.UpdateVersion();
-    batch.Put(handles_[kHashesMetaCF], base_meta_key.Encode(), hashes_meta_value.Encode());
+    batch->Put(kMetaCF, base_meta_key.Encode(), hashes_meta_value.Encode());
     HashesDataKey hashes_data_key(key, version, field);
 
     Int64ToStr(value_buf, 32, value);
     BaseDataValue internal_value(value_buf);
-    batch.Put(handles_[kHashesDataCF], hashes_data_key.Encode(), internal_value.Encode());
+    batch->Put(kHashesDataCF, hashes_data_key.Encode(), internal_value.Encode());
     *ret = value;
   } else {
     return s;
   }
-  s = db_->Write(default_write_options_, &batch);
+  s = batch->Commit();
   UpdateSpecificKeyStatistics(DataType::kHashes, key.ToString(), statistic);
   return s;
 }
@@ -371,19 +346,28 @@ Status Redis::HIncrbyfloat(const Slice& key, const Slice& field, const Slice& by
   long double long_double_by;
 
   if (StrToLongDouble(by.data(), by.size(), &long_double_by) == -1) {
-    return Status::Corruption("value is not a vaild float");
+    return Status::Corruption("value is not a valid float");
   }
 
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(default_read_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(default_read_options_, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   char meta_value_buf[4] = {0};
+  if (s.ok() && !ExpectedMetaValue(DataType::kHashes, meta_value)) {
+    if (IsStale(meta_value)) {
+      s = Status::NotFound();
+    } else {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
+    }
+  }
   if (s.ok()) {
     ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
     if (parsed_hashes_meta_value.IsStale() || parsed_hashes_meta_value.Count() == 0) {
       version = parsed_hashes_meta_value.UpdateVersion();
       parsed_hashes_meta_value.SetCount(1);
       parsed_hashes_meta_value.SetEtime(0);
-      batch.Put(handles_[kHashesMetaCF], base_meta_key.Encode(), meta_value);
+      batch.Put(handles_[kMetaCF], base_meta_key.Encode(), meta_value);
       HashesDataKey hashes_data_key(key, version, field);
 
       LongDoubleToStr(long_double_by, new_value);
@@ -399,7 +383,7 @@ Status Redis::HIncrbyfloat(const Slice& key, const Slice& field, const Slice& by
         ParsedBaseDataValue parsed_internal_value(&old_value_str);
         parsed_internal_value.StripSuffix();
         if (StrToLongDouble(old_value_str.data(), old_value_str.size(), &old_value) == -1) {
-          return Status::Corruption("value is not a vaild float");
+          return Status::Corruption("value is not a valid float");
         }
 
         total = old_value + long_double_by;
@@ -416,7 +400,7 @@ Status Redis::HIncrbyfloat(const Slice& key, const Slice& field, const Slice& by
         }
         parsed_hashes_meta_value.ModifyCount(1);
         BaseDataValue internal_value(*new_value);
-        batch.Put(handles_[kHashesMetaCF], base_meta_key.Encode(), meta_value);
+        batch.Put(handles_[kMetaCF], base_meta_key.Encode(), meta_value);
         batch.Put(handles_[kHashesDataCF], hashes_data_key.Encode(), internal_value.Encode());
       } else {
         return s;
@@ -424,9 +408,9 @@ Status Redis::HIncrbyfloat(const Slice& key, const Slice& field, const Slice& by
     }
   } else if (s.IsNotFound()) {
     EncodeFixed32(meta_value_buf, 1);
-    HashesMetaValue hashes_meta_value(Slice(meta_value_buf, sizeof(int32_t)));
+    HashesMetaValue hashes_meta_value(DataType::kHashes, Slice(meta_value_buf, 4));
     version = hashes_meta_value.UpdateVersion();
-    batch.Put(handles_[kHashesMetaCF], base_meta_key.Encode(), hashes_meta_value.Encode());
+    batch.Put(handles_[kMetaCF], base_meta_key.Encode(), hashes_meta_value.Encode());
 
     HashesDataKey hashes_data_key(key, version, field);
     LongDoubleToStr(long_double_by, new_value);
@@ -450,14 +434,16 @@ Status Redis::HKeys(const Slice& key, std::vector<std::string>* fields) {
   read_options.snapshot = snapshot;
 
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(read_options, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(read_options, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale()) {
+    if (IsStale(meta_value)) {
       return Status::NotFound("Stale");
-    } else if (parsed_hashes_meta_value.Count() == 0) {
-      return Status::NotFound();
+    } else if (!ExpectedMetaValue(DataType::kHashes, meta_value)) {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
     } else {
+      ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
       version = parsed_hashes_meta_value.Version();
       HashesDataKey hashes_data_key(key, version, "");
       Slice prefix = hashes_data_key.EncodeSeekKey();
@@ -478,15 +464,17 @@ Status Redis::HLen(const Slice& key, int32_t* ret) {
   std::string meta_value;
 
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(default_read_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(default_read_options_, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale()) {
+    if (IsStale(meta_value)) {
       *ret = 0;
-      return Status::NotFound("Stale");
-    } else if (parsed_hashes_meta_value.Count() == 0) {
       return Status::NotFound();
+    } else if (!ExpectedMetaValue(DataType::kHashes, meta_value)) {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
     } else {
+      ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
       *ret = parsed_hashes_meta_value.Count();
     }
   } else if (s.IsNotFound()) {
@@ -507,15 +495,19 @@ Status Redis::HMGet(const Slice& key, const std::vector<std::string>& fields, st
   ScopeSnapshot ss(db_, &snapshot);
   read_options.snapshot = snapshot;
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(read_options, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(read_options, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if ((is_stale = parsed_hashes_meta_value.IsStale()) || parsed_hashes_meta_value.Count() == 0) {
+    if (IsStale(meta_value)) {
       for (size_t idx = 0; idx < fields.size(); ++idx) {
         vss->push_back({std::string(), Status::NotFound()});
       }
-      return Status::NotFound(is_stale ? "Stale" : "");
+      return Status::NotFound("Stale");
+    } else if (!ExpectedMetaValue(DataType::kHashes, meta_value)) {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
     } else {
+      ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
       version = parsed_hashes_meta_value.Version();
       for (const auto& field : fields) {
         HashesDataKey hashes_data_key(key, version, field);
@@ -553,15 +545,24 @@ Status Redis::HMSet(const Slice& key, const std::vector<FieldValue>& fvs) {
     }
   }
 
-  rocksdb::WriteBatch batch;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
 
   uint64_t version = 0;
   std::string meta_value;
 
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(default_read_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(default_read_options_, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   char meta_value_buf[4] = {0};
+  if (s.ok() && !ExpectedMetaValue(DataType::kHashes, meta_value)) {
+    if (IsStale(meta_value)) {
+      s = Status::NotFound();
+    } else {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
+    }
+  }
   if (s.ok()) {
     ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
     if (parsed_hashes_meta_value.IsStale() || parsed_hashes_meta_value.Count() == 0) {
@@ -570,11 +571,11 @@ Status Redis::HMSet(const Slice& key, const std::vector<FieldValue>& fvs) {
         return Status::InvalidArgument("hash size overflow");
       }
       parsed_hashes_meta_value.SetCount(static_cast<int32_t>(filtered_fvs.size()));
-      batch.Put(handles_[kHashesMetaCF], base_meta_key.Encode(), meta_value);
+      batch->Put(kMetaCF, base_meta_key.Encode(), meta_value);
       for (const auto& fv : filtered_fvs) {
         HashesDataKey hashes_data_key(key, version, fv.field);
         BaseDataValue inter_value(fv.value);
-        batch.Put(handles_[kHashesDataCF], hashes_data_key.Encode(), inter_value.Encode());
+        batch->Put(kHashesDataCF, hashes_data_key.Encode(), inter_value.Encode());
       }
     } else {
       int32_t count = 0;
@@ -586,10 +587,10 @@ Status Redis::HMSet(const Slice& key, const std::vector<FieldValue>& fvs) {
         s = db_->Get(default_read_options_, handles_[kHashesDataCF], hashes_data_key.Encode(), &data_value);
         if (s.ok()) {
           statistic++;
-          batch.Put(handles_[kHashesDataCF], hashes_data_key.Encode(), inter_value.Encode());
+          batch->Put(kHashesDataCF, hashes_data_key.Encode(), inter_value.Encode());
         } else if (s.IsNotFound()) {
           count++;
-          batch.Put(handles_[kHashesDataCF], hashes_data_key.Encode(), inter_value.Encode());
+          batch->Put(kHashesDataCF, hashes_data_key.Encode(), inter_value.Encode());
         } else {
           return s;
         }
@@ -598,20 +599,20 @@ Status Redis::HMSet(const Slice& key, const std::vector<FieldValue>& fvs) {
         return Status::InvalidArgument("hash size overflow");
       }
       parsed_hashes_meta_value.ModifyCount(count);
-      batch.Put(handles_[kHashesMetaCF], base_meta_key.Encode(), meta_value);
+      batch->Put(kMetaCF, base_meta_key.Encode(), meta_value);
     }
   } else if (s.IsNotFound()) {
     EncodeFixed32(meta_value_buf, filtered_fvs.size());
-    HashesMetaValue hashes_meta_value(Slice(meta_value_buf, sizeof(int32_t)));
+    HashesMetaValue hashes_meta_value(DataType::kHashes, Slice(meta_value_buf, 4));
     version = hashes_meta_value.UpdateVersion();
-    batch.Put(handles_[kHashesMetaCF], base_meta_key.Encode(), hashes_meta_value.Encode());
+    batch->Put(kMetaCF, base_meta_key.Encode(), hashes_meta_value.Encode());
     for (const auto& fv : filtered_fvs) {
       HashesDataKey hashes_data_key(key, version, fv.field);
       BaseDataValue inter_value(fv.value);
-      batch.Put(handles_[kHashesDataCF], hashes_data_key.Encode(), inter_value.Encode());
+      batch->Put(kHashesDataCF, hashes_data_key.Encode(), inter_value.Encode());
     }
   }
-  s = db_->Write(default_write_options_, &batch);
+  s = batch->Commit();
   UpdateSpecificKeyStatistics(DataType::kHashes, key.ToString(), statistic);
   return s;
 }
@@ -625,14 +626,23 @@ Status Redis::HSet(const Slice& key, const Slice& field, const Slice& value, int
   std::string meta_value;
 
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(default_read_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(default_read_options_, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   char meta_value_buf[4] = {0};
+  if (s.ok() && !ExpectedMetaValue(DataType::kHashes, meta_value)) {
+    if (IsStale(meta_value)) {
+      s = Status::NotFound();
+    } else {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
+    }
+  }
   if (s.ok()) {
     ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
     if (parsed_hashes_meta_value.IsStale() || parsed_hashes_meta_value.Count() == 0) {
       version = parsed_hashes_meta_value.InitialMetaValue();
       parsed_hashes_meta_value.SetCount(1);
-      batch->Put(kHashesMetaCF, base_meta_key.Encode(), meta_value);
+      batch->Put(kMetaCF, base_meta_key.Encode(), meta_value);
       HashesDataKey data_key(key, version, field);
       BaseDataValue internal_value(value);
       batch->Put(kHashesDataCF, data_key.Encode(), internal_value.Encode());
@@ -657,7 +667,7 @@ Status Redis::HSet(const Slice& key, const Slice& field, const Slice& value, int
         }
         parsed_hashes_meta_value.ModifyCount(1);
         BaseDataValue internal_value(value);
-        batch->Put(kHashesMetaCF, base_meta_key.Encode(), meta_value);
+        batch->Put(kMetaCF, base_meta_key.Encode(), meta_value);
         batch->Put(kHashesDataCF, hashes_data_key.Encode(), internal_value.Encode());
         *res = 1;
       } else {
@@ -666,9 +676,9 @@ Status Redis::HSet(const Slice& key, const Slice& field, const Slice& value, int
     }
   } else if (s.IsNotFound()) {
     EncodeFixed32(meta_value_buf, 1);
-    HashesMetaValue meta_value(Slice(meta_value_buf, sizeof(int32_t)));
-    version = meta_value.UpdateVersion();
-    batch->Put(kHashesMetaCF, base_meta_key.Encode(), meta_value.Encode());
+    HashesMetaValue hashes_meta_value(DataType::kHashes, Slice(meta_value_buf, 4));
+    version = hashes_meta_value.UpdateVersion();
+    batch->Put(kMetaCF, base_meta_key.Encode(), hashes_meta_value.Encode());
     HashesDataKey data_key(key, version, field);
     BaseDataValue internal_value(value);
     batch->Put(kHashesDataCF, data_key.Encode(), internal_value.Encode());
@@ -682,7 +692,7 @@ Status Redis::HSet(const Slice& key, const Slice& field, const Slice& value, int
 }
 
 Status Redis::HSetnx(const Slice& key, const Slice& field, const Slice& value, int32_t* ret) {
-  rocksdb::WriteBatch batch;
+  auto batch = Batch::CreateBatch(this);
   ScopeRecordLock l(lock_mgr_, key);
 
   uint64_t version = 0;
@@ -690,16 +700,25 @@ Status Redis::HSetnx(const Slice& key, const Slice& field, const Slice& value, i
 
   BaseMetaKey base_meta_key(key);
   BaseDataValue internal_value(value);
-  Status s = db_->Get(default_read_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(default_read_options_, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   char meta_value_buf[4] = {0};
+  if (s.ok() && !ExpectedMetaValue(DataType::kHashes, meta_value)) {
+    if (IsStale(meta_value)) {
+      s = Status::NotFound();
+    } else {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
+    }
+  }
   if (s.ok()) {
     ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
     if (parsed_hashes_meta_value.IsStale() || parsed_hashes_meta_value.Count() == 0) {
       version = parsed_hashes_meta_value.InitialMetaValue();
       parsed_hashes_meta_value.SetCount(1);
-      batch.Put(handles_[kHashesMetaCF], base_meta_key.Encode(), meta_value);
+      batch->Put(kMetaCF, base_meta_key.Encode(), meta_value);
       HashesDataKey hashes_data_key(key, version, field);
-      batch.Put(handles_[kHashesDataCF], hashes_data_key.Encode(), internal_value.Encode());
+      batch->Put(kHashesDataCF, hashes_data_key.Encode(), internal_value.Encode());
       *ret = 1;
     } else {
       version = parsed_hashes_meta_value.Version();
@@ -713,8 +732,8 @@ Status Redis::HSetnx(const Slice& key, const Slice& field, const Slice& value, i
           return Status::InvalidArgument("hash size overflow");
         }
         parsed_hashes_meta_value.ModifyCount(1);
-        batch.Put(handles_[kHashesMetaCF], base_meta_key.Encode(), meta_value);
-        batch.Put(handles_[kHashesDataCF], hashes_data_key.Encode(), internal_value.Encode());
+        batch->Put(kMetaCF, base_meta_key.Encode(), meta_value);
+        batch->Put(kHashesDataCF, hashes_data_key.Encode(), internal_value.Encode());
         *ret = 1;
       } else {
         return s;
@@ -722,16 +741,16 @@ Status Redis::HSetnx(const Slice& key, const Slice& field, const Slice& value, i
     }
   } else if (s.IsNotFound()) {
     EncodeFixed32(meta_value_buf, 1);
-    HashesMetaValue hashes_meta_value(Slice(meta_value_buf, sizeof(int32_t)));
+    HashesMetaValue hashes_meta_value(DataType::kHashes, Slice(meta_value_buf, 4));
     version = hashes_meta_value.UpdateVersion();
-    batch.Put(handles_[kHashesMetaCF], base_meta_key.Encode(), hashes_meta_value.Encode());
+    batch->Put(kMetaCF, base_meta_key.Encode(), hashes_meta_value.Encode());
     HashesDataKey hashes_data_key(key, version, field);
-    batch.Put(handles_[kHashesDataCF], hashes_data_key.Encode(), internal_value.Encode());
+    batch->Put(kHashesDataCF, hashes_data_key.Encode(), internal_value.Encode());
     *ret = 1;
   } else {
     return s;
   }
-  return db_->Write(default_write_options_, &batch);
+  return batch->Commit();
 }
 
 Status Redis::HVals(const Slice& key, std::vector<std::string>* values) {
@@ -744,14 +763,16 @@ Status Redis::HVals(const Slice& key, std::vector<std::string>* values) {
   read_options.snapshot = snapshot;
 
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(read_options, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(read_options, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale()) {
-      return Status::NotFound("Stale");
-    } else if (parsed_hashes_meta_value.Count() == 0) {
+    if (IsStale(meta_value)) {
       return Status::NotFound();
+    } else if (!ExpectedMetaValue(DataType::kHashes, meta_value)) {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
     } else {
+      ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
       version = parsed_hashes_meta_value.Version();
       HashesDataKey hashes_data_key(key, version, "");
       Slice prefix = hashes_data_key.EncodeSeekKey();
@@ -797,15 +818,19 @@ Status Redis::HScan(const Slice& key, int64_t cursor, const std::string& pattern
   read_options.snapshot = snapshot;
 
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(read_options, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(read_options, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale() || parsed_hashes_meta_value.Count() == 0) {
+    if (IsStale(meta_value)) {
       *next_cursor = 0;
       return Status::NotFound();
+    } else if (!ExpectedMetaValue(DataType::kHashes, meta_value)) {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
     } else {
       std::string sub_field;
       std::string start_point;
+      ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
       uint64_t version = parsed_hashes_meta_value.Version();
       s = GetScanStartPoint(DataType::kHashes, key, pattern, cursor, &start_point);
       if (s.IsNotFound()) {
@@ -864,13 +889,17 @@ Status Redis::HScanx(const Slice& key, const std::string& start_field, const std
   read_options.snapshot = snapshot;
 
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(read_options, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(read_options, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale() || parsed_hashes_meta_value.Count() == 0) {
+    if (IsStale(meta_value)) {
       *next_field = "";
       return Status::NotFound();
+    } else if (!ExpectedMetaValue(DataType::kHashes, meta_value)) {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
     } else {
+      ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
       uint64_t version = parsed_hashes_meta_value.Version();
       HashesDataKey hashes_data_prefix(key, version, Slice());
       HashesDataKey hashes_start_data_key(key, version, start_field);
@@ -906,16 +935,19 @@ Status Redis::HScanx(const Slice& key, const std::string& start_field, const std
 Status Redis::HRandField(const Slice& key, int64_t count, bool with_values, std::vector<std::string>* res) {
   BaseMetaKey base_meta_key(key);
   std::string meta_value;
-  Status s = db_->Get(default_read_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(default_read_options_, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   if (!s.ok()) {
     return s;
   }
+  if (IsStale(meta_value)) {
+    return Status::NotFound();
+  } else if (!ExpectedMetaValue(DataType::kHashes, meta_value)) {
+    return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                               DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                               DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
+  }
   ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
   auto hlen = parsed_hashes_meta_value.Count();
-  if (parsed_hashes_meta_value.IsStale() || hlen == 0) {
-    return Status::NotFound();
-  }
-
   if (count >= hlen) {
     // case 1: count > 0 and >= hlen, return all fv
     if (!with_values) {
@@ -997,12 +1029,16 @@ Status Redis::PKHScanRange(const Slice& key, const Slice& field_start, const std
   }
 
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(read_options, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(read_options, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale() || parsed_hashes_meta_value.Count() == 0) {
+    if (IsStale(meta_value)) {
       return Status::NotFound();
+    } else if (!ExpectedMetaValue(DataType::kHashes, meta_value)) {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
     } else {
+      ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
       uint64_t version = parsed_hashes_meta_value.Version();
       HashesDataKey hashes_data_prefix(key, version, Slice());
       HashesDataKey hashes_start_data_key(key, version, field_start);
@@ -1058,12 +1094,16 @@ Status Redis::PKHRScanRange(const Slice& key, const Slice& field_start, const st
   }
 
   BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(read_options, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  Status s = db_->Get(read_options, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale() || parsed_hashes_meta_value.Count() == 0) {
+    if (IsStale(meta_value)) {
       return Status::NotFound();
+    } else if (!ExpectedMetaValue(DataType::kHashes, meta_value)) {
+      return Status::InvalidArgument(fmt::format("WRONGTYPE, key: {}, expect type: {}, get type: {}", key.ToString(),
+                                                 DataTypeStrings[static_cast<int>(DataType::kHashes)],
+                                                 DataTypeStrings[static_cast<int>(GetMetaValueType(meta_value))]));
     } else {
+      ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
       uint64_t version = parsed_hashes_meta_value.Version();
       int32_t start_key_version = start_no_limit ? version + 1 : version;
       std::string start_key_field = start_no_limit ? "" : field_start.ToString();
@@ -1100,131 +1140,6 @@ Status Redis::PKHRScanRange(const Slice& key, const Slice& field_start, const st
   return Status::OK();
 }
 
-Status Redis::HashesExpire(const Slice& key, uint64_t ttl) {
-  std::string meta_value;
-  ScopeRecordLock l(lock_mgr_, key);
-
-  BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(default_read_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
-  if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale()) {
-      return Status::NotFound("Stale");
-    } else if (parsed_hashes_meta_value.Count() == 0) {
-      return Status::NotFound();
-    }
-
-    if (ttl > 0) {
-      parsed_hashes_meta_value.SetRelativeTimestamp(ttl);
-      s = db_->Put(default_write_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), meta_value);
-    } else {
-      parsed_hashes_meta_value.InitialMetaValue();
-      s = db_->Put(default_write_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), meta_value);
-    }
-  }
-  return s;
-}
-
-Status Redis::HashesDel(const Slice& key) {
-  std::string meta_value;
-  ScopeRecordLock l(lock_mgr_, key);
-
-  BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(default_read_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
-  if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale()) {
-      return Status::NotFound("Stale");
-    } else if (parsed_hashes_meta_value.Count() == 0) {
-      return Status::NotFound();
-    } else {
-      uint32_t statistic = parsed_hashes_meta_value.Count();
-      parsed_hashes_meta_value.InitialMetaValue();
-      s = db_->Put(default_write_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), meta_value);
-      UpdateSpecificKeyStatistics(DataType::kHashes, key.ToString(), statistic);
-    }
-  }
-  return s;
-}
-
-Status Redis::HashesExpireat(const Slice& key, uint64_t timestamp) {
-  std::string meta_value;
-  ScopeRecordLock l(lock_mgr_, key);
-
-  BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(default_read_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
-  if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale()) {
-      return Status::NotFound("Stale");
-    } else if (parsed_hashes_meta_value.Count() == 0) {
-      return Status::NotFound();
-    } else {
-      if (timestamp > 0) {
-        parsed_hashes_meta_value.SetEtime(uint64_t(timestamp));
-      } else {
-        parsed_hashes_meta_value.InitialMetaValue();
-      }
-      s = db_->Put(default_write_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), meta_value);
-    }
-  }
-  return s;
-}
-
-Status Redis::HashesPersist(const Slice& key) {
-  std::string meta_value;
-  ScopeRecordLock l(lock_mgr_, key);
-
-  BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(default_read_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
-  if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale()) {
-      return Status::NotFound("Stale");
-    } else if (parsed_hashes_meta_value.Count() == 0) {
-      return Status::NotFound();
-    } else {
-      int32_t timestamp = parsed_hashes_meta_value.Etime();
-      if (timestamp == 0) {
-        return Status::NotFound("Not have an associated timeout");
-      } else {
-        parsed_hashes_meta_value.SetEtime(0);
-        s = db_->Put(default_write_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), meta_value);
-      }
-    }
-  }
-  return s;
-}
-
-Status Redis::HashesTTL(const Slice& key, uint64_t* timestamp) {
-  std::string meta_value;
-
-  BaseMetaKey base_meta_key(key);
-  Status s = db_->Get(default_read_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
-  if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale()) {
-      *timestamp = -2;
-      return Status::NotFound("Stale");
-    } else if (parsed_hashes_meta_value.Count() == 0) {
-      *timestamp = -2;
-      return Status::NotFound();
-    } else {
-      *timestamp = parsed_hashes_meta_value.Etime();
-      if (*timestamp == 0) {
-        *timestamp = -1;
-      } else {
-        int64_t curtime;
-        rocksdb::Env::Default()->GetCurrentTime(&curtime);
-        *timestamp = *timestamp - curtime >= 0 ? *timestamp - curtime : -2;
-      }
-    }
-  } else if (s.IsNotFound()) {
-    *timestamp = -2;
-  }
-  return s;
-}
-
 Status Redis::HashesRename(const Slice& key, Redis* new_inst, const Slice& newkey) {
   std::string meta_value;
   Status s;
@@ -1234,22 +1149,20 @@ Status Redis::HashesRename(const Slice& key, Redis* new_inst, const Slice& newke
 
   BaseMetaKey base_meta_key(key);
   BaseMetaKey base_meta_newkey(newkey);
-  s = db_->Get(default_read_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  s = db_->Get(default_read_options_, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale()) {
-      return Status::NotFound("Stale");
-    } else if (parsed_hashes_meta_value.Count() == 0) {
+    if (IsStale(meta_value)) {
       return Status::NotFound();
     }
     // copy a new hash with newkey
+    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
     statistic = parsed_hashes_meta_value.Count();
-    s = new_inst->GetDB()->Put(default_write_options_, handles_[kHashesMetaCF], base_meta_newkey.Encode(), meta_value);
+    s = new_inst->GetDB()->Put(default_write_options_, handles_[kMetaCF], base_meta_newkey.Encode(), meta_value);
     new_inst->UpdateSpecificKeyStatistics(DataType::kHashes, newkey.ToString(), statistic);
 
     // HashesDel key
     parsed_hashes_meta_value.InitialMetaValue();
-    s = db_->Put(default_write_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), meta_value);
+    s = db_->Put(default_write_options_, handles_[kMetaCF], base_meta_key.Encode(), meta_value);
     UpdateSpecificKeyStatistics(DataType::kHashes, key.ToString(), statistic);
   }
   return s;
@@ -1264,33 +1177,29 @@ Status Redis::HashesRenamenx(const Slice& key, Redis* new_inst, const Slice& new
 
   BaseMetaKey base_meta_key(key);
   BaseMetaKey base_meta_newkey(newkey);
-  s = db_->Get(default_read_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), &meta_value);
+  s = db_->Get(default_read_options_, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
   if (s.ok()) {
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    if (parsed_hashes_meta_value.IsStale()) {
-      return Status::NotFound("Stale");
-    } else if (parsed_hashes_meta_value.Count() == 0) {
+    if (IsStale(meta_value)) {
       return Status::NotFound();
     }
+    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
     // check if newkey exists.
     std::string new_meta_value;
-    s = new_inst->GetDB()->Get(default_read_options_, handles_[kHashesMetaCF], base_meta_newkey.Encode(),
-                               &new_meta_value);
+    s = new_inst->GetDB()->Get(default_read_options_, handles_[kMetaCF], base_meta_newkey.Encode(), &new_meta_value);
     if (s.ok()) {
-      ParsedHashesMetaValue parsed_hashes_new_meta_value(&new_meta_value);
-      if (!parsed_hashes_new_meta_value.IsStale() && parsed_hashes_new_meta_value.Count() != 0) {
+      if (!IsStale(new_meta_value)) {
         return Status::Corruption();  // newkey already exists.
       }
     }
-
+    ParsedHashesMetaValue parsed_hashes_new_meta_value(&new_meta_value);
     // copy a new hash with newkey
     statistic = parsed_hashes_meta_value.Count();
-    s = new_inst->GetDB()->Put(default_write_options_, handles_[kHashesMetaCF], base_meta_newkey.Encode(), meta_value);
+    s = new_inst->GetDB()->Put(default_write_options_, handles_[kMetaCF], base_meta_newkey.Encode(), meta_value);
     new_inst->UpdateSpecificKeyStatistics(DataType::kHashes, newkey.ToString(), statistic);
 
     // HashesDel key
     parsed_hashes_meta_value.InitialMetaValue();
-    s = db_->Put(default_write_options_, handles_[kHashesMetaCF], base_meta_key.Encode(), meta_value);
+    s = db_->Put(default_write_options_, handles_[kMetaCF], base_meta_key.Encode(), meta_value);
     UpdateSpecificKeyStatistics(DataType::kHashes, key.ToString(), statistic);
   }
   return s;
@@ -1305,8 +1214,11 @@ void Redis::ScanHashes() {
   auto current_time = static_cast<int32_t>(time(nullptr));
 
   INFO("***************rocksdb instance: {} Hashes Meta Data***************", index_);
-  auto meta_iter = db_->NewIterator(iterator_options, handles_[kHashesMetaCF]);
+  auto meta_iter = db_->NewIterator(iterator_options, handles_[kMetaCF]);
   for (meta_iter->SeekToFirst(); meta_iter->Valid(); meta_iter->Next()) {
+    if (!ExpectedMetaValue(DataType::kHashes, meta_iter->value().ToString())) {
+      continue;
+    }
     ParsedHashesMetaValue parsed_hashes_meta_value(meta_iter->value());
     uint64_t survival_time = 0;
     if (parsed_hashes_meta_value.Etime() != 0) {

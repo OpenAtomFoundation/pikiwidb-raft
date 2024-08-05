@@ -27,6 +27,7 @@
 
 #include "pstd/env.h"
 #include "pstd/pstd_mutex.h"
+#include "src/base_data_value_format.h"
 #include "storage/slot_indexer.h"
 
 namespace pikiwidb {
@@ -94,18 +95,18 @@ struct KeyInfo {
   uint64_t keys = 0;
   uint64_t expires = 0;
   uint64_t avg_ttl = 0;
-  uint64_t invaild_keys = 0;
+  uint64_t invalid_keys = 0;
 
-  KeyInfo() : keys(0), expires(0), avg_ttl(0), invaild_keys(0) {}
+  KeyInfo() : keys(0), expires(0), avg_ttl(0), invalid_keys(0) {}
 
-  KeyInfo(uint64_t k, uint64_t e, uint64_t a, uint64_t i) : keys(k), expires(e), avg_ttl(a), invaild_keys(i) {}
+  KeyInfo(uint64_t k, uint64_t e, uint64_t a, uint64_t i) : keys(k), expires(e), avg_ttl(a), invalid_keys(i) {}
 
   KeyInfo operator+(const KeyInfo& info) {
     KeyInfo res;
     res.keys = keys + info.keys;
     res.expires = expires + info.expires;
     res.avg_ttl = avg_ttl + info.avg_ttl;
-    res.invaild_keys = invaild_keys + info.invaild_keys;
+    res.invalid_keys = invalid_keys + info.invalid_keys;
     return res;
   }
 };
@@ -113,7 +114,7 @@ struct KeyInfo {
 struct ValueStatus {
   std::string value;
   Status status;
-  uint64_t ttl;
+  int64_t ttl;
   bool operator==(const ValueStatus& vs) const { return (vs.value == value && vs.status == status && vs.ttl == ttl); }
 };
 
@@ -142,11 +143,6 @@ struct ScoreMember {
 
 enum BeforeOrAfter { Before, After };
 
-enum DataType { kAll, kStrings, kHashes, kSets, kLists, kZSets };
-
-const std::string DataTypeToString[] = {"all", "string", "hash", "set", "list", "zset"};
-const char DataTypeTag[] = {'a', 'k', 'h', 's', 'l', 'z'};
-
 enum class OptionType {
   kDB,
   kColumnFamily,
@@ -158,16 +154,7 @@ enum AGGREGATE { SUM, MIN, MAX };
 
 enum BitOpType { kBitOpAnd = 1, kBitOpOr, kBitOpXor, kBitOpNot, kBitOpDefault };
 
-enum Operation {
-  kNone = 0,
-  kCleanAll,
-  kCleanStrings,
-  kCleanHashes,
-  kCleanZSets,
-  kCleanSets,
-  kCleanLists,
-  kCompactRange
-};
+enum Operation { kNone = 0, kCleanAll, kCompactRange };
 
 struct BGTask {
   DataType type;
@@ -211,7 +198,7 @@ class Storage {
   Status Set(const Slice& key, const Slice& value);
 
   // Set key to hold the string value. if key exist
-  Status Setxx(const Slice& key, const Slice& value, int32_t* ret, uint64_t ttl = 0);
+  Status Setxx(const Slice& key, const Slice& value, int32_t* ret, int64_t ttl = 0);
 
   // Get the value of key. If the key does not exist
   // the special value nil is returned
@@ -219,7 +206,7 @@ class Storage {
 
   // Get the value and ttl of key. If the key does not exist
   // the special value nil is returned. If the key has no ttl, ttl is -1
-  Status GetWithTTL(const Slice& key, std::string* value, uint64_t* ttl);
+  Status GetWithTTL(const Slice& key, std::string* value, int64_t* ttl);
 
   // Atomically sets key to value and returns the old value stored at key
   // Returns an error when key exists but does not hold a string value.
@@ -248,7 +235,7 @@ class Storage {
   // Set key to hold string value if key does not exist
   // return 1 if the key was set
   // return 0 if the key was not set
-  Status Setnx(const Slice& key, const Slice& value, int32_t* ret, uint64_t ttl = 0);
+  Status Setnx(const Slice& key, const Slice& value, int32_t* ret, int64_t ttl = 0);
 
   // Sets the given keys to their respective values.
   // MSETNX will not perform any operation at all even
@@ -259,7 +246,7 @@ class Storage {
   // return 1 if the key currently hold the give value And override success
   // return 0 if the key doesn't exist And override fail
   // return -1 if the key currently does not hold the given value And override fail
-  Status Setvx(const Slice& key, const Slice& value, const Slice& new_value, int32_t* ret, uint64_t ttl = 0);
+  Status Setvx(const Slice& key, const Slice& value, const Slice& new_value, int32_t* ret, int64_t ttl = 0);
 
   // delete the key that holds a given value
   // return 1 if the key currently hold the give value And delete success
@@ -276,7 +263,7 @@ class Storage {
   Status Getrange(const Slice& key, int64_t start_offset, int64_t end_offset, std::string* ret);
 
   Status GetrangeWithValue(const Slice& key, int64_t start_offset, int64_t end_offset, std::string* ret,
-                           std::string* value, uint64_t* ttl);
+                           std::string* value, int64_t* ttl);
 
   // If key already exists and is a string, this command appends the value at
   // the end of the string
@@ -315,7 +302,7 @@ class Storage {
 
   // Set key to hold the string value and set key to timeout after a given
   // number of seconds
-  Status Setex(const Slice& key, const Slice& value, uint64_t ttl);
+  Status Setex(const Slice& key, const Slice& value, int64_t ttl);
 
   // Returns the length of the string value stored at key. An error
   // is returned when key holds a non-string value.
@@ -325,7 +312,7 @@ class Storage {
   // specifying the number of seconds representing the TTL (time to live), it
   // takes an absolute Unix timestamp (seconds since January 1, 1970). A
   // timestamp in the past will delete the key immediately.
-  Status PKSetexAt(const Slice& key, const Slice& value, uint64_t timestamp);
+  Status PKSetexAt(const Slice& key, const Slice& value, int64_t timestamp);
 
   // Hashes Commands
 
@@ -356,7 +343,7 @@ class Storage {
   // reply is twice the size of the hash.
   Status HGetall(const Slice& key, std::vector<FieldValue>* fvs);
 
-  Status HGetallWithTTL(const Slice& key, std::vector<FieldValue>* fvs, uint64_t* ttl);
+  Status HGetallWithTTL(const Slice& key, std::vector<FieldValue>* fvs, int64_t* ttl);
 
   // Returns all field names in the hash stored at key.
   Status HKeys(const Slice& key, std::vector<std::string>* fields);
@@ -494,7 +481,7 @@ class Storage {
   // This has the same effect as running SINTER with one argument key.
   Status SMembers(const Slice& key, std::vector<std::string>* members);
 
-  Status SMembersWithTTL(const Slice& key, std::vector<std::string>* members, uint64_t* ttl);
+  Status SMembersWithTTL(const Slice& key, std::vector<std::string>* members, int64_t* ttl);
 
   // Remove the specified members from the set stored at key. Specified members
   // that are not a member of this set are ignored. If key does not exist, it is
@@ -568,7 +555,7 @@ class Storage {
   // (the head of the list), 1 being the next element and so on.
   Status LRange(const Slice& key, int64_t start, int64_t stop, std::vector<std::string>* ret);
 
-  Status LRangeWithTTL(const Slice& key, int64_t start, int64_t stop, std::vector<std::string>* ret, uint64_t* ttl);
+  Status LRangeWithTTL(const Slice& key, int64_t start, int64_t stop, std::vector<std::string>* ret, int64_t* ttl);
 
   // Removes the first count occurrences of elements equal to value from the
   // list stored at key. The count argument influences the operation in the
@@ -731,7 +718,7 @@ class Storage {
   Status ZRange(const Slice& key, int32_t start, int32_t stop, std::vector<ScoreMember>* score_members);
 
   Status ZRangeWithTTL(const Slice& key, int32_t start, int32_t stop, std::vector<ScoreMember>* score_members,
-                       uint64_t* ttl);
+                       int64_t* ttl);
 
   // Returns all the elements in the sorted set at key with a score between min
   // and max (including elements with score equal to min or max). The elements
@@ -979,17 +966,12 @@ class Storage {
   // Set a timeout on key
   // return -1 operation exception errors happen in database
   // return >=0 success
-  int32_t Expire(const Slice& key, uint64_t ttl);
+  int32_t Expire(const Slice& key, int64_t ttl);
 
   // Removes the specified keys
   // return -1 operation exception errors happen in database
   // return >=0 the number of keys that were removed
   int64_t Del(const std::vector<std::string>& keys);
-
-  // Removes the specified keys of the specified type
-  // return -1 operation exception errors happen in database
-  // return >= 0 the number of keys that were removed
-  int64_t DelByType(const std::vector<std::string>& keys, const DataType& type);
 
   // Iterate over a collection of elements
   // return an updated cursor that the user need to use as the cursor argument
@@ -1033,7 +1015,7 @@ class Storage {
   // return -1 operation exception errors happen in database
   // return 0 if key does not exist
   // return >=1 if the timueout was set
-  int32_t Expireat(const Slice& key, uint64_t timestamp);
+  int32_t Expireat(const Slice& key, int64_t timestamp);
 
   // Remove the existing timeout on key, turning the key from volatile (a key
   // with an expire set) to persistent (a key that will never expire as no
@@ -1041,18 +1023,18 @@ class Storage {
   // return -1 operation exception errors happen in database
   // return 0 if key does not exist or does not have an associated timeout
   // return >=1 if the timueout was set
-  int32_t Persist(const Slice& key, std::map<DataType, Status>* type_status);
+  int32_t Persist(const Slice& key);
 
   // Returns the remaining time to live of a key that has a timeout.
   // return -3 operation exception errors happen in database
   // return -2 if the key does not exist
   // return -1 if the key exists but has not associated expire
   // return > 0 TTL in seconds
-  std::map<DataType, int64_t> TTL(const Slice& key, std::map<DataType, Status>* type_status);
+  int64_t TTL(const Slice& key);
 
   // Reutrns the data all type of the key
   // if single is true, the query will return the first one
-  Status GetType(const std::string& key, bool single, std::vector<std::string>& types);
+  Status GetType(const std::string& key, enum DataType& type);
 
   // Reutrns the data all type of the key
   Status Type(const std::string& key, std::vector<std::string>& types);

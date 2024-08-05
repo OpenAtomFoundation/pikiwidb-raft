@@ -403,7 +403,8 @@ int String2d(const char* s, size_t slen, double* val) {
   } catch (std::exception& e) {
     return 0;
   }
-  return 1;
+  std::string str(s, slen);
+  return str.find_first_not_of("0123456789.-+") != std::string::npos ? 0 : 1;
 #else
   auto [ptr, ec] = std::from_chars(s, s + slen, *val);
   if (ec != std::errc()) {

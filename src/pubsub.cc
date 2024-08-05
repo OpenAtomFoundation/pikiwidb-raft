@@ -8,7 +8,6 @@
 #include <fnmatch.h>
 
 #include "client.h"
-#include "event_loop.h"
 #include "log.h"
 #include "pubsub.h"
 
@@ -215,10 +214,10 @@ void PPubsub::recycleClients(ChannelClients& channels, PString& start) {
 }
 
 void PPubsub::InitPubsubTimer() {
-  auto loop = EventLoop::Self();
-  loop->ScheduleRepeatedly(
-      100, [&](std::string& channel, std::string& pattern) { PPubsub::Instance().RecycleClients(channel, pattern); },
-      std::ref(startChannel_), std::ref(startPattern_));
+  //  auto loop = EventLoop::Self();
+  //  loop->ScheduleRepeatedly(
+  //      100, [&](std::string& channel, std::string& pattern) { PPubsub::Instance().RecycleClients(channel, pattern);
+  //      }, std::ref(startChannel_), std::ref(startPattern_));
 }
 
 void PPubsub::PubsubChannels(std::vector<PString>& res, const char* pattern) const {
