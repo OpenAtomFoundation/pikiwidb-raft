@@ -11,7 +11,10 @@ ExternalProject_Add(
         extern_rocksdb
         ${EXTERNAL_PROJECT_LOG_ARGS}
         GIT_REPOSITORY https://github.com/facebook/rocksdb.git
-        GIT_TAG v8.3.3
+        GIT_TAG v9.4.0
+          URL https://github.com/facebook/rocksdb/archive/refs/tags/v9.4.0.tar.gz
+          URL_HASH MD5=ce19cb3e2b6db927ef88cbf25c42097e
+        DOWNLOAD_NO_PROGRESS 1
         DEPENDS
         gflags
         snappy

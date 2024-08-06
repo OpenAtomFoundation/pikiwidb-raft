@@ -48,23 +48,25 @@ function build() {
   cmake --build ${PREFIX} -- ${MAKE_FLAGS} -j ${CPU_CORE}
 
   if [ $? -eq 0 ]; then
-    echo -e "pikiwidb compile complete, output file ${C_GREEN} ${BUILD_DIR}/pikiwidb ${C_END}"
+    # echo -e "pikiwidb compile complete, output file ${C_GREEN} ${PREFIX}/bin/pikiwidb ${C_END}"
+    echo -e "pikiwidb compile complete, output file ${C_GREEN} ./bin/pikiwidb ${C_END}"
   else
     echo -e "${C_RED} pikiwidb compile fail ${C_END}"
     exit 1
   fi
 }
 
+# ":?" makes sure the bash var is not empty.
 function clear() {
-  rm -rf ${PROJECT_HOME}/deps-debug
-  rm -rf ${PROJECT_HOME}/deps-release
-  rm -rf ${PROJECT_HOME}/cmake-build-debug
-  rm -rf ${PROJECT_HOME}/cmake-build-release
-  rm -rf ${PROJECT_HOME}/cmake-build-release-release
-  rm -rf ${PROJECT_HOME}/build
-  rm -rf ${PROJECT_HOME}/build-release
-  rm -rf ${PROJECT_HOME}/build-debug
-  rm -rf ${PROJECT_HOME}/bin
+  rm -rf ${PROJECT_HOME:?}/deps-debug
+  rm -rf ${PROJECT_HOME:?}/deps-release
+  rm -rf ${PROJECT_HOME:?}/cmake-build-debug
+  rm -rf ${PROJECT_HOME:?}/cmake-build-release
+  rm -rf ${PROJECT_HOME:?}/cmake-build-release-release
+  rm -rf ${PROJECT_HOME:?}/build
+  rm -rf ${PROJECT_HOME:?}/build-release
+  rm -rf ${PROJECT_HOME:?}/build-debug
+  rm -rf ${PROJECT_HOME:?}/bin
   exit 0
 }
 

@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build
-        run: bash etc/script/ci/build.sh
+        run: bash ./etc/script/ci/build.sh
 
       - name: Check Format
         working-directory: ${{ github.workspace }}/build
@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build --verbose
-        env: 
+        env:
           CPLUS_INCLUDE_PATH: /opt/homebrew/include
         run: |
           brew install autoconf
