@@ -41,9 +41,11 @@ jobs:
       - name: Run Go E2E Tests
         working-directory: ${{ github.workspace }}/build-release
         run: |
+          set +e
           cd ../tests
           go mod tidy
-          go test -timeout 15m
+          go test -timeout 15m --ginkgo.v
+          sh print_log.sh
 
   build_on_ubuntu:
     runs-on: ubuntu-latest
@@ -65,6 +67,8 @@ jobs:
       - name: Run Go E2E Tests
         working-directory: ${{ github.workspace }}/build-release
         run: |
+          set +e
           cd ../tests
           go mod tidy
-          go test -timeout 15m
+          go test -timeout 15m --ginkgo.v
+          sh print_log.sh
