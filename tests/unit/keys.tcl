@@ -1,3 +1,4 @@
+# TODO all param is invalid
 start_server {tags {"keys"}} {
   test {KEYS with pattern} {
     foreach key {key_x key_y key_z foo_a foo_b foo_c} {

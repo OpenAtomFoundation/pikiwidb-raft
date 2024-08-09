@@ -1150,21 +1150,27 @@ Status Redis::HashesRename(const Slice& key, Redis* new_inst, const Slice& newke
   BaseMetaKey base_meta_key(key);
   BaseMetaKey base_meta_newkey(newkey);
   s = db_->Get(default_read_options_, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
-  if (s.ok()) {
-    if (IsStale(meta_value)) {
-      return Status::NotFound();
-    }
-    // copy a new hash with newkey
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    statistic = parsed_hashes_meta_value.Count();
-    s = new_inst->GetDB()->Put(default_write_options_, handles_[kMetaCF], base_meta_newkey.Encode(), meta_value);
-    new_inst->UpdateSpecificKeyStatistics(DataType::kHashes, newkey.ToString(), statistic);
-
-    // HashesDel key
-    parsed_hashes_meta_value.InitialMetaValue();
-    s = db_->Put(default_write_options_, handles_[kMetaCF], base_meta_key.Encode(), meta_value);
-    UpdateSpecificKeyStatistics(DataType::kHashes, key.ToString(), statistic);
+  if (!s.ok() || !ExpectedMetaValue(DataType::kHashes, meta_value)) {
+    return s;
   }
+  if (key == newkey) {
+    return Status::OK();
+  }
+
+  if (IsStale(meta_value)) {
+    return Status::NotFound();
+  }
+  // copy a new hash with newkey
+  ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
+  statistic = parsed_hashes_meta_value.Count();
+  s = new_inst->GetDB()->Put(default_write_options_, handles_[kMetaCF], base_meta_newkey.Encode(), meta_value);
+  new_inst->UpdateSpecificKeyStatistics(DataType::kHashes, newkey.ToString(), statistic);
+
+  // HashesDel key
+  parsed_hashes_meta_value.InitialMetaValue();
+  s = db_->Put(default_write_options_, handles_[kMetaCF], base_meta_key.Encode(), meta_value);
+  UpdateSpecificKeyStatistics(DataType::kHashes, key.ToString(), statistic);
+
   return s;
 }
 
@@ -1178,30 +1184,36 @@ Status Redis::HashesRenamenx(const Slice& key, Redis* new_inst, const Slice& new
   BaseMetaKey base_meta_key(key);
   BaseMetaKey base_meta_newkey(newkey);
   s = db_->Get(default_read_options_, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
-  if (s.ok()) {
-    if (IsStale(meta_value)) {
-      return Status::NotFound();
-    }
-    ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
-    // check if newkey exists.
-    std::string new_meta_value;
-    s = new_inst->GetDB()->Get(default_read_options_, handles_[kMetaCF], base_meta_newkey.Encode(), &new_meta_value);
-    if (s.ok()) {
-      if (!IsStale(new_meta_value)) {
-        return Status::Corruption();  // newkey already exists.
-      }
-    }
-    ParsedHashesMetaValue parsed_hashes_new_meta_value(&new_meta_value);
-    // copy a new hash with newkey
-    statistic = parsed_hashes_meta_value.Count();
-    s = new_inst->GetDB()->Put(default_write_options_, handles_[kMetaCF], base_meta_newkey.Encode(), meta_value);
-    new_inst->UpdateSpecificKeyStatistics(DataType::kHashes, newkey.ToString(), statistic);
-
-    // HashesDel key
-    parsed_hashes_meta_value.InitialMetaValue();
-    s = db_->Put(default_write_options_, handles_[kMetaCF], base_meta_key.Encode(), meta_value);
-    UpdateSpecificKeyStatistics(DataType::kHashes, key.ToString(), statistic);
+  if (!s.ok() || !ExpectedMetaValue(DataType::kHashes, meta_value)) {
+    return s;
   }
+  if (key == newkey) {
+    return Status::Corruption();
+  }
+
+  if (IsStale(meta_value)) {
+    return Status::NotFound();
+  }
+  ParsedHashesMetaValue parsed_hashes_meta_value(&meta_value);
+  // check if newkey exists.
+  std::string new_meta_value;
+  s = new_inst->GetDB()->Get(default_read_options_, handles_[kMetaCF], base_meta_newkey.Encode(), &new_meta_value);
+  if (s.ok()) {
+    if (!IsStale(new_meta_value)) {
+      return Status::Corruption();  // newkey already exists.
+    }
+  }
+  ParsedHashesMetaValue parsed_hashes_new_meta_value(&new_meta_value);
+  // copy a new hash with newkey
+  statistic = parsed_hashes_meta_value.Count();
+  s = new_inst->GetDB()->Put(default_write_options_, handles_[kMetaCF], base_meta_newkey.Encode(), meta_value);
+  new_inst->UpdateSpecificKeyStatistics(DataType::kHashes, newkey.ToString(), statistic);
+
+  // HashesDel key
+  parsed_hashes_meta_value.InitialMetaValue();
+  s = db_->Put(default_write_options_, handles_[kMetaCF], base_meta_key.Encode(), meta_value);
+  UpdateSpecificKeyStatistics(DataType::kHashes, key.ToString(), statistic);
+
   return s;
 }
 

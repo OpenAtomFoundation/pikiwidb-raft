@@ -1,3 +1,5 @@
+# Pikiwidb does not support the geo command
+
 # Helper functions to simulate search-in-radius in the Tcl side in order to
 # verify the Redis implementation with a fuzzy test.
 proc geo_degrad deg {expr {$deg*atan(1)*8/360}}

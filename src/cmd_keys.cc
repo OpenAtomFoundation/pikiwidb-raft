@@ -63,7 +63,7 @@ bool TypeCmd::DoInitial(PClient* client) {
 }
 
 void TypeCmd::DoCmd(PClient* client) {
-  storage::DataType type;
+  storage::DataType type = storage::DataType::kNones;
   rocksdb::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->GetType(client->Key(), type);
   if (s.ok()) {
     client->AppendContent("+" + std::string(storage::DataTypeToString(type)));

@@ -323,20 +323,18 @@ void BitOpCmd::DoCmd(PClient* client) {
   PString res;
   storage::BitOpType op = storage::kBitOpDefault;
 
-  if (keys.size() == 1) {
+  if (!keys.empty()) {
     if (pstd::StringEqualCaseInsensitive(client->argv_[1], "or")) {
       err = kPErrorOK;
       op = storage::kBitOpOr;
-    }
-  } else if (keys.size() >= 2) {
-    if (pstd::StringEqualCaseInsensitive(client->argv_[1], "xor")) {
+    } else if (pstd::StringEqualCaseInsensitive(client->argv_[1], "xor")) {
       err = kPErrorOK;
       op = storage::kBitOpXor;
     } else if (pstd::StringEqualCaseInsensitive(client->argv_[1], "and")) {
       err = kPErrorOK;
       op = storage::kBitOpAnd;
     } else if (pstd::StringEqualCaseInsensitive(client->argv_[1], "not")) {
-      if (client->argv_.size() == 4) {
+      if (keys.size() == 1) {
         err = kPErrorOK;
         op = storage::kBitOpNot;
       }

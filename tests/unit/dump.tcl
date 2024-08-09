@@ -1,3 +1,5 @@
+# Pikiwidb does not support the restore command
+
 start_server {tags {"dump"}} {
     test {DUMP / RESTORE are able to serialize / unserialize a simple key} {
         r set foo bar

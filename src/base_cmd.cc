@@ -107,7 +107,7 @@ BaseCmd* BaseCmdGroup::GetSubCmd(const std::string& cmdName) {
 bool BaseCmdGroup::DoInitial(PClient* client) {
   client->SetSubCmdName(client->argv_[1]);
   if (!subCmds_.contains(client->SubCmdName())) {
-    client->SetRes(CmdRes::kSyntaxErr, client->argv_[0] + " unknown subcommand for '" + client->SubCmdName() + "'");
+    client->SetRes(CmdRes::kErrOther, client->argv_[0] + " unknown subcommand for '" + client->SubCmdName() + "'");
     return false;
   }
   return true;

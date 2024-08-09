@@ -981,21 +981,27 @@ Status Redis::ListsRename(const Slice& key, Redis* new_inst, const Slice& newkey
   BaseMetaKey base_meta_key(key);
   BaseMetaKey base_meta_newkey(newkey);
   Status s = db_->Get(default_read_options_, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
-  if (s.ok()) {
-    if (IsStale(meta_value)) {
-      return Status::NotFound();
-    }
-    // copy a new list with newkey
-    ParsedListsMetaValue parsed_lists_meta_value(&meta_value);
-    statistic = parsed_lists_meta_value.Count();
-    s = new_inst->GetDB()->Put(default_write_options_, handles_[kMetaCF], base_meta_newkey.Encode(), meta_value);
-    new_inst->UpdateSpecificKeyStatistics(DataType::kLists, newkey.ToString(), statistic);
-
-    // ListsDel key
-    parsed_lists_meta_value.InitialMetaValue();
-    s = db_->Put(default_write_options_, handles_[kMetaCF], base_meta_key.Encode(), meta_value);
-    UpdateSpecificKeyStatistics(DataType::kLists, key.ToString(), statistic);
+  if (!s.ok() || !ExpectedMetaValue(DataType::kLists, meta_value)) {
+    return s;
   }
+  if (key == newkey) {
+    return Status::OK();
+  }
+
+  if (IsStale(meta_value)) {
+    return Status::NotFound();
+  }
+  // copy a new list with newkey
+  ParsedListsMetaValue parsed_lists_meta_value(&meta_value);
+  statistic = parsed_lists_meta_value.Count();
+  s = new_inst->GetDB()->Put(default_write_options_, handles_[kMetaCF], base_meta_newkey.Encode(), meta_value);
+  new_inst->UpdateSpecificKeyStatistics(DataType::kLists, newkey.ToString(), statistic);
+
+  // ListsDel key
+  parsed_lists_meta_value.InitialMetaValue();
+  s = db_->Put(default_write_options_, handles_[kMetaCF], base_meta_key.Encode(), meta_value);
+  UpdateSpecificKeyStatistics(DataType::kLists, key.ToString(), statistic);
+
   return s;
 }
 
@@ -1008,30 +1014,36 @@ Status Redis::ListsRenamenx(const Slice& key, Redis* new_inst, const Slice& newk
   BaseMetaKey base_meta_key(key);
   BaseMetaKey base_meta_newkey(newkey);
   Status s = db_->Get(default_read_options_, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
-  if (s.ok()) {
-    if (IsStale(meta_value)) {
-      return Status::NotFound();
-    }
-    // check if newkey exists.
-    std::string new_meta_value;
-    ParsedListsMetaValue parsed_lists_meta_value(&meta_value);
-    s = new_inst->GetDB()->Get(default_read_options_, handles_[kMetaCF], base_meta_newkey.Encode(), &new_meta_value);
-    if (s.ok()) {
-      if (IsStale(new_meta_value)) {
-        return Status::Corruption();  // newkey already exists.
-      }
-    }
-    ParsedSetsMetaValue parsed_lists_new_meta_value(&new_meta_value);
-    // copy a new list with newkey
-    statistic = parsed_lists_meta_value.Count();
-    s = new_inst->GetDB()->Put(default_write_options_, handles_[kMetaCF], base_meta_newkey.Encode(), meta_value);
-    new_inst->UpdateSpecificKeyStatistics(DataType::kLists, newkey.ToString(), statistic);
-
-    // ListsDel key
-    parsed_lists_meta_value.InitialMetaValue();
-    s = db_->Put(default_write_options_, handles_[kMetaCF], base_meta_key.Encode(), meta_value);
-    UpdateSpecificKeyStatistics(DataType::kLists, key.ToString(), statistic);
+  if (!s.ok() || !ExpectedMetaValue(DataType::kLists, meta_value)) {
+    return s;
   }
+  if (key == newkey) {
+    return Status::Corruption();
+  }
+
+  if (IsStale(meta_value)) {
+    return Status::NotFound();
+  }
+  // check if newkey exists.
+  std::string new_meta_value;
+  ParsedListsMetaValue parsed_lists_meta_value(&meta_value);
+  s = new_inst->GetDB()->Get(default_read_options_, handles_[kMetaCF], base_meta_newkey.Encode(), &new_meta_value);
+  if (s.ok()) {
+    if (IsStale(new_meta_value)) {
+      return Status::Corruption();  // newkey already exists.
+    }
+  }
+  ParsedSetsMetaValue parsed_lists_new_meta_value(&new_meta_value);
+  // copy a new list with newkey
+  statistic = parsed_lists_meta_value.Count();
+  s = new_inst->GetDB()->Put(default_write_options_, handles_[kMetaCF], base_meta_newkey.Encode(), meta_value);
+  new_inst->UpdateSpecificKeyStatistics(DataType::kLists, newkey.ToString(), statistic);
+
+  // ListsDel key
+  parsed_lists_meta_value.InitialMetaValue();
+  s = db_->Put(default_write_options_, handles_[kMetaCF], base_meta_key.Encode(), meta_value);
+  UpdateSpecificKeyStatistics(DataType::kLists, key.ToString(), statistic);
+
   return s;
 }
 

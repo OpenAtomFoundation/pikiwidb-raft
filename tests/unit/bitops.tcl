@@ -43,36 +43,36 @@ start_server {tags {"bitops"}} {
         r bitcount no-key
     } 0
 
-#    catch {unset num}
-#    foreach vec [list "" "\xaa" "\x00\x00\xff" "foobar" "123"] {
-#        incr num
-#        test "BITCOUNT against test vector #$num" {
-#            r set str $vec
-#            assert {[r bitcount str] == [count_bits $vec]}
-#        }
-#    }
+    catch {unset num}
+    foreach vec [list "" "\xaa" "\x00\x00\xff" "foobar" "123"] {
+        incr num
+        test "BITCOUNT against test vector #$num" {
+            r set str $vec
+            assert {[r bitcount str] == [count_bits $vec]}
+        }
+    }
 
-#    test {BITCOUNT fuzzing without start/end} {
-#        for {set j 0} {$j < 100} {incr j} {
-#            set str [randstring 0 3000]
-#            r set str $str
-#            assert {[r bitcount str] == [count_bits $str]}
-#        }
-#    }
+    test {BITCOUNT fuzzing without start/end} {
+        for {set j 0} {$j < 100} {incr j} {
+            set str [randstring 0 3000]
+            r set str $str
+            assert {[r bitcount str] == [count_bits $str]}
+        }
+    }
 
-#    test {BITCOUNT fuzzing with start/end} {
-#        for {set j 0} {$j < 100} {incr j} {
-#            set str [randstring 0 3000]
-#            r set str $str
-#            set l [string length $str]
-#            set start [randomInt $l]
-#            set end [randomInt $l]
-#            if {$start > $end} {
-#                lassign [list $end $start] start end
-#            }
-#            assert {[r bitcount str $start $end] == [count_bits [string range $str $start $end]]}
-#        }
-#    }
+    test {BITCOUNT fuzzing with start/end} {
+        for {set j 0} {$j < 100} {incr j} {
+            set str [randstring 0 3000]
+            r set str $str
+            set l [string length $str]
+            set start [randomInt $l]
+            set end [randomInt $l]
+            if {$start > $end} {
+                lassign [list $end $start] start end
+            }
+            assert {[r bitcount str $start $end] == [count_bits [string range $str $start $end]]}
+        }
+    }
 
     test {BITCOUNT with start, end} {
         r set s "foobar"
@@ -156,7 +156,8 @@ start_server {tags {"bitops"}} {
     foreach op {and or xor} {
         test "BITOP $op fuzzing" {
             for {set i 0} {$i < 10} {incr i} {
-                r flushall
+                # TODO replaced by r flushall
+                r flushdb
                 set vec {}
                 set veckeys {}
                 set numvec [expr {[randomInt 10]+1}]
@@ -172,15 +173,16 @@ start_server {tags {"bitops"}} {
         }
     }
 
-    test {BITOP NOT fuzzing} {
-        for {set i 0} {$i < 10} {incr i} {
-            r flushall
-            set str [randstring 0 1000]
-            r set str $str
-            r bitop not target str
-            assert_equal [r get target] [simulate_bit_op not $str]
-        }
-    }
+   test {BITOP NOT fuzzing} {
+       for {set i 0} {$i < 10} {incr i} {
+           # TODO replaced by r flushall
+           r flushdb
+           set str [randstring 0 1000]
+           r set str $str
+           r bitop not target str
+           assert_equal [r get target] [simulate_bit_op not $str]
+       }
+   }
 
     test {BITOP with integer encoded source objects} {
         r set a 1
@@ -189,14 +191,14 @@ start_server {tags {"bitops"}} {
         r get dest
     } {2}
 
-#    test {BITOP with non string source key} {
-#        r del c
-#        r set a 1
-#        r set b 2
-#        r lpush c foo
-#        catch {r bitop xor dest a b c d} e
-#        set e
-#    } {WRONGTYPE*}
+    test {BITOP with non string source key} {
+        r del c
+        r set a 1
+        r set b 2
+        r lpush c foo
+        catch {r bitop xor dest a b c d} e
+        set e
+    } {WRONGTYPE*}
 
     test {BITOP with empty string after non empty string (issue #529)} {
         r flushdb
@@ -204,6 +206,7 @@ start_server {tags {"bitops"}} {
         r bitop or x a b
     } {32}
 
+# Pikiwidb does not support the BITPOS command
 #    test {BITPOS bit=0 with empty key returns 0} {
 #        r del str
 #        r bitpos str 0

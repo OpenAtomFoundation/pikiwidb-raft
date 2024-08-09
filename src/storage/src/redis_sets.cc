@@ -1244,23 +1244,32 @@ Status Redis::SetsRename(const Slice& key, Redis* new_inst, const Slice& newkey)
   BaseMetaKey base_meta_key(key);
   BaseMetaKey base_meta_newkey(newkey);
   rocksdb::Status s = db_->Get(default_read_options_, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
-  if (s.ok()) {
-    ParsedSetsMetaValue parsed_sets_meta_value(&meta_value);
-    if (parsed_sets_meta_value.IsStale()) {
-      return rocksdb::Status::NotFound("Stale");
-    } else if (parsed_sets_meta_value.Count() == 0) {
-      return rocksdb::Status::NotFound();
-    }
-    // copy a new set with newkey
-    statistic = parsed_sets_meta_value.Count();
-    s = new_inst->GetDB()->Put(default_write_options_, handles_[kMetaCF], base_meta_newkey.Encode(), meta_value);
-    new_inst->UpdateSpecificKeyStatistics(DataType::kSets, newkey.ToString(), statistic);
-
-    // SetsDel key
-    parsed_sets_meta_value.InitialMetaValue();
-    s = db_->Put(default_write_options_, handles_[kMetaCF], base_meta_key.Encode(), meta_value);
-    UpdateSpecificKeyStatistics(DataType::kSets, key.ToString(), statistic);
+  if (!s.ok()) {
+    return s;
   }
+  if (!s.ok() || !ExpectedMetaValue(DataType::kSets, meta_value)) {
+    return s;
+  }
+  if (key == newkey) {
+    return Status::OK();
+  }
+
+  ParsedSetsMetaValue parsed_sets_meta_value(&meta_value);
+  if (parsed_sets_meta_value.IsStale()) {
+    return rocksdb::Status::NotFound("Stale");
+  } else if (parsed_sets_meta_value.Count() == 0) {
+    return rocksdb::Status::NotFound();
+  }
+  // copy a new set with newkey
+  statistic = parsed_sets_meta_value.Count();
+  s = new_inst->GetDB()->Put(default_write_options_, handles_[kMetaCF], base_meta_newkey.Encode(), meta_value);
+  new_inst->UpdateSpecificKeyStatistics(DataType::kSets, newkey.ToString(), statistic);
+
+  // SetsDel key
+  parsed_sets_meta_value.InitialMetaValue();
+  s = db_->Put(default_write_options_, handles_[kMetaCF], base_meta_key.Encode(), meta_value);
+  UpdateSpecificKeyStatistics(DataType::kSets, key.ToString(), statistic);
+
   return s;
 }
 
@@ -1273,33 +1282,39 @@ Status Redis::SetsRenamenx(const Slice& key, Redis* new_inst, const Slice& newke
   BaseMetaKey base_meta_key(key);
   BaseMetaKey base_meta_newkey(newkey);
   rocksdb::Status s = db_->Get(default_read_options_, handles_[kMetaCF], base_meta_key.Encode(), &meta_value);
-  if (s.ok()) {
-    ParsedSetsMetaValue parsed_sets_meta_value(&meta_value);
-    if (parsed_sets_meta_value.IsStale()) {
-      return rocksdb::Status::NotFound("Stale");
-    } else if (parsed_sets_meta_value.Count() == 0) {
-      return rocksdb::Status::NotFound();
-    }
-    // check if newkey exists.
-    std::string new_meta_value;
-    s = new_inst->GetDB()->Get(default_read_options_, handles_[kMetaCF], base_meta_newkey.Encode(), &new_meta_value);
-    if (s.ok()) {
-      ParsedSetsMetaValue parsed_sets_new_meta_value(&new_meta_value);
-      if (!parsed_sets_new_meta_value.IsStale() && parsed_sets_new_meta_value.Count() != 0) {
-        return Status::Corruption();  // newkey already exists.
-      }
-    }
-
-    // copy a new set with newkey
-    statistic = parsed_sets_meta_value.Count();
-    s = new_inst->GetDB()->Put(default_write_options_, handles_[kMetaCF], base_meta_newkey.Encode(), meta_value);
-    new_inst->UpdateSpecificKeyStatistics(DataType::kSets, newkey.ToString(), statistic);
-
-    // SetsDel key
-    parsed_sets_meta_value.InitialMetaValue();
-    s = db_->Put(default_write_options_, handles_[kMetaCF], base_meta_key.Encode(), meta_value);
-    UpdateSpecificKeyStatistics(DataType::kSets, key.ToString(), statistic);
+  if (!s.ok() || !ExpectedMetaValue(DataType::kSets, meta_value)) {
+    return s;
   }
+  if (key == newkey) {
+    return Status::Corruption();
+  }
+
+  ParsedSetsMetaValue parsed_sets_meta_value(&meta_value);
+  if (parsed_sets_meta_value.IsStale()) {
+    return rocksdb::Status::NotFound("Stale");
+  } else if (parsed_sets_meta_value.Count() == 0) {
+    return rocksdb::Status::NotFound();
+  }
+  // check if newkey exists.
+  std::string new_meta_value;
+  s = new_inst->GetDB()->Get(default_read_options_, handles_[kMetaCF], base_meta_newkey.Encode(), &new_meta_value);
+  if (s.ok()) {
+    ParsedSetsMetaValue parsed_sets_new_meta_value(&new_meta_value);
+    if (!parsed_sets_new_meta_value.IsStale() && parsed_sets_new_meta_value.Count() != 0) {
+      return Status::Corruption();  // newkey already exists.
+    }
+  }
+
+  // copy a new set with newkey
+  statistic = parsed_sets_meta_value.Count();
+  s = new_inst->GetDB()->Put(default_write_options_, handles_[kMetaCF], base_meta_newkey.Encode(), meta_value);
+  new_inst->UpdateSpecificKeyStatistics(DataType::kSets, newkey.ToString(), statistic);
+
+  // SetsDel key
+  parsed_sets_meta_value.InitialMetaValue();
+  s = db_->Put(default_write_options_, handles_[kMetaCF], base_meta_key.Encode(), meta_value);
+  UpdateSpecificKeyStatistics(DataType::kSets, key.ToString(), statistic);
+
   return s;
 }
 

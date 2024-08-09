@@ -1523,8 +1523,7 @@ int64_t Storage::TTL(const Slice& key) {
 
 Status Storage::GetType(const std::string& key, enum DataType& type) {
   auto& inst = GetDBInstance(key);
-  inst->GetType(key, type);
-  return Status::OK();
+  return inst->GetType(key, type);
 }
 
 Status Storage::Keys(const DataType& data_type, const std::string& pattern, std::vector<std::string>* keys) {
@@ -1548,99 +1547,76 @@ Status Storage::Keys(const DataType& data_type, const std::string& pattern, std:
 }
 
 Status Storage::Rename(const std::string& key, const std::string& newkey) {
-  Status ret = Status::NotFound();
   auto& inst = GetDBInstance(key);
   auto& new_inst = GetDBInstance(newkey);
 
-  // Strings
-  Status s = inst->StringsRename(key, new_inst.get(), newkey);
-  if (s.ok()) {
-    ret = Status::OK();
-  } else if (!s.IsNotFound()) {
+  DataType type;
+  Status s = GetType(key, type);
+  if (!s.ok()) {
     return s;
   }
-
-  // Hashes
-  s = inst->HashesRename(key, new_inst.get(), newkey);
-  if (s.ok()) {
-    ret = Status::OK();
-  } else if (!s.IsNotFound()) {
-    return s;
+  if (key == newkey) {
+    return Status::OK();
   }
 
-  // Sets
-  s = inst->SetsRename(key, new_inst.get(), newkey);
-  if (s.ok()) {
-    ret = Status::OK();
-  } else if (!s.IsNotFound()) {
-    return s;
+  switch (type) {
+    case DataType::kStrings:
+      s = inst->StringsRename(key, new_inst.get(), newkey);
+      break;
+    case DataType::kHashes:
+      s = inst->HashesRename(key, new_inst.get(), newkey);
+      break;
+    case DataType::kSets:
+      s = inst->SetsRename(key, new_inst.get(), newkey);
+      break;
+    case DataType::kZSets:
+      s = inst->ZsetsRename(key, new_inst.get(), newkey);
+      break;
+    case DataType::kLists:
+      s = inst->ListsRename(key, new_inst.get(), newkey);
+      break;
+    default:
+      return Status::NotFound();
   }
 
-  // Lists
-  s = inst->ListsRename(key, new_inst.get(), newkey);
-  if (s.ok()) {
-    ret = Status::OK();
-  } else if (!s.IsNotFound()) {
-    return s;
-  }
-
-  // ZSets
-  s = inst->ZsetsRename(key, new_inst.get(), newkey);
-  if (s.ok()) {
-    ret = Status::OK();
-  } else if (!s.IsNotFound()) {
-    return s;
-  }
-
-  return ret;
+  return s;
 }
 
 Status Storage::Renamenx(const std::string& key, const std::string& newkey) {
-  Status ret = Status::NotFound();
   auto& inst = GetDBInstance(key);
   auto& new_inst = GetDBInstance(newkey);
 
-  // Strings
-  Status s = inst->StringsRenamenx(key, new_inst.get(), newkey);
-  if (s.ok()) {
-    ret = Status::OK();
-  } else if (!s.IsNotFound()) {
+  DataType type;
+  Status s = GetType(key, type);
+  if (!s.ok()) {
     return s;
   }
 
-  // Hashes
-  s = inst->HashesRenamenx(key, new_inst.get(), newkey);
-  if (s.ok()) {
-    ret = Status::OK();
-  } else if (!s.IsNotFound()) {
-    return s;
+  if (key == newkey) {
+    return Status::Corruption();
   }
 
-  // Sets
-  s = inst->SetsRenamenx(key, new_inst.get(), newkey);
-  if (s.ok()) {
-    ret = Status::OK();
-  } else if (!s.IsNotFound()) {
-    return s;
+  switch (type) {
+    case DataType::kStrings:
+      s = inst->StringsRenamenx(key, new_inst.get(), newkey);
+      break;
+    case DataType::kHashes:
+      s = inst->HashesRenamenx(key, new_inst.get(), newkey);
+      break;
+    case DataType::kSets:
+      s = inst->SetsRenamenx(key, new_inst.get(), newkey);
+      break;
+    case DataType::kZSets:
+      s = inst->ZsetsRenamenx(key, new_inst.get(), newkey);
+      break;
+    case DataType::kLists:
+      s = inst->ListsRenamenx(key, new_inst.get(), newkey);
+      break;
+    default:
+      return Status::NotFound();
   }
 
-  // Lists
-  s = inst->ListsRenamenx(key, new_inst.get(), newkey);
-  if (s.ok()) {
-    ret = Status::OK();
-  } else if (!s.IsNotFound()) {
-    return s;
-  }
-
-  // ZSets
-  s = inst->ZsetsRenamenx(key, new_inst.get(), newkey);
-  if (s.ok()) {
-    ret = Status::OK();
-  } else if (!s.IsNotFound()) {
-    return s;
-  }
-
-  return ret;
+  return s;
 }
 
 void Storage::ScanDatabase(const DataType& type) {
