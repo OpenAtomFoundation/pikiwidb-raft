@@ -104,6 +104,23 @@ BaseCmd* BaseCmdGroup::GetSubCmd(const std::string& cmdName) {
   return subCmd->second.get();
 }
 
+void BaseCmd::BlockThisClientToWaitLRPush(std::vector<std::string>& keys, int64_t expire_time, PClient* client,
+                                          BlockedConnNode::Type type) {
+  std::unique_lock<std::shared_mutex> latch(g_pikiwidb->GetBlockMtx());
+  auto& key_to_conns = g_pikiwidb->GetMapFromKeyToConns();
+  std::shared_ptr<std::atomic<bool>> is_done = std::make_shared<std::atomic<bool>>(false);
+  for (auto key : keys) {
+    pikiwidb::BlockKey blpop_key{client->GetCurrentDB(), key};
+    auto it = key_to_conns.find(blpop_key);
+    if (it == key_to_conns.end()) {
+      key_to_conns.emplace(blpop_key, std::make_unique<std::list<BlockedConnNode>>());
+      it = key_to_conns.find(blpop_key);
+    }
+    auto& wait_list_of_this_key = it->second;
+    wait_list_of_this_key->emplace_back(expire_time, client, type, is_done);
+  }
+}
+
 void BaseCmd::ServeAndUnblockConns(PClient* client) {
   pikiwidb::BlockKey key{client->GetCurrentDB(), client->Key()};
   std::shared_lock<std::shared_mutex> read_latch(g_pikiwidb->GetBlockMtx());
@@ -122,8 +139,17 @@ void BaseCmd::ServeAndUnblockConns(PClient* client) {
 
   // traverse this list from head to tail(in the order of adding sequence) ,means "first blocked, first get served“
   for (auto conn_blocked = waitting_list->begin(); conn_blocked != waitting_list->end();) {
+    if (conn_blocked->is_done_->exchange(true)) {
+      conn_blocked = waitting_list->erase(conn_blocked);
+      continue;
+    }
     PClient* BlockedClient = (*conn_blocked).GetBlockedClient();
-    s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->LPop(key.key, 1, &elements);
+    switch (conn_blocked->GetCmdType()) {
+      case BlockedConnNode::Type::BLPop:
+        s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->LPop(key.key, 1, &elements);
+      case BlockedConnNode::Type::BRPop:
+        s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->RPop(key.key, 1, &elements);
+    }
     if (s.ok()) {
       BlockedClient->AppendArrayLen(2);
       BlockedClient->AppendString(client->Key());

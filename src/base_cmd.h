@@ -134,6 +134,7 @@ const std::string kCmdNameRPushx = "rpushx";
 const std::string kCmdNameLPop = "lpop";
 const std::string kCmdNameBLPop = "blpop";
 const std::string kCmdNameRPop = "rpop";
+const std::string kCmdNameBRPop = "brpop";
 const std::string kCmdNameLRem = "lrem";
 const std::string kCmdNameLRange = "lrange";
 const std::string kCmdNameLTrim = "ltrim";
@@ -207,6 +208,23 @@ enum AclCategory {
   kAclCategoryTransaction = (1 << 19),
   kAclCategoryScripting = (1 << 20),
   kAclCategoryRaft = (1 << 21),
+};
+
+class BlockedConnNode {
+ public:
+  enum Type { BLPop = 0, BRPop };
+  virtual ~BlockedConnNode() {}
+  BlockedConnNode(int64_t expire_time, PClient* client, Type type, std::shared_ptr<std::atomic<bool>> is_done)
+      : expire_time_(expire_time), client_(client), type_(type), is_done_(is_done) {}
+  bool IsExpired();
+  PClient* GetBlockedClient() { return client_; }
+  std::shared_ptr<std::atomic<bool>> is_done_;
+  Type GetCmdType() { return type_; }
+
+ private:
+  Type type_;
+  int64_t expire_time_;
+  PClient* client_;
 };
 
 /**
@@ -320,6 +338,9 @@ class BaseCmd : public std::enable_shared_from_this<BaseCmd> {
 
   void ServeAndUnblockConns(PClient* client);
 
+  void BlockThisClientToWaitLRPush(std::vector<std::string>& keys, int64_t expire_time, PClient* client,
+                                   BlockedConnNode::Type type);
+
  protected:
   // Execute a specific command
   virtual void DoCmd(PClient* client) = 0;
@@ -365,18 +386,6 @@ class BaseCmdGroup : public BaseCmd {
 
  private:
   std::map<std::string, std::unique_ptr<BaseCmd>> subCmds_;
-};
-
-class BlockedConnNode {
- public:
-  virtual ~BlockedConnNode() {}
-  BlockedConnNode(int64_t expire_time, PClient* client) : expire_time_(expire_time), client_(client) {}
-  bool IsExpired();
-  PClient* GetBlockedClient() { return client_; }
-
- private:
-  int64_t expire_time_;
-  PClient* client_;
 };
 
 struct BlockKey {  // this data struct is made for the scenario of multi dbs in pika.

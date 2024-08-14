@@ -155,6 +155,7 @@ bool BLPopCmd::DoInitial(PClient* client) {
 
 void BLPopCmd::DoCmd(PClient* client) {
   std::vector<std::string> elements;
+  std::vector<std::string> list_keys(client->argv_.begin() + 1, client->argv_.end() - 1);
   storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->LPop(client->Key(), 1, &elements);
   if (s.ok()) {
     client->AppendArrayLen(2);
@@ -162,25 +163,52 @@ void BLPopCmd::DoCmd(PClient* client) {
     client->AppendString(elements[0]);
     return;
   } else if (s.IsNotFound()) {
-    BlockThisClientToWaitLRPush(elements, expire_time_, client);
+    BlockThisClientToWaitLRPush(elements, expire_time_, client, BlockedConnNode::Type::BLPop);
   } else {
     client->SetRes(CmdRes::kErrOther, s.ToString());
     return;
   }
 }
 
-void BLPopCmd::BlockThisClientToWaitLRPush(std::vector<std::string>& keys, int64_t expire_time, PClient* client) {
-  std::unique_lock<std::shared_mutex> latch(g_pikiwidb->GetBlockMtx());
-  auto& key_to_conns = g_pikiwidb->GetMapFromKeyToConns();
-  std::string key = client->Key();
-  pikiwidb::BlockKey blpop_key{client->GetCurrentDB(), key};
-  auto it = key_to_conns.find(blpop_key);
-  if (it == key_to_conns.end()) {
-    key_to_conns.emplace(blpop_key, std::make_unique<std::list<BlockedConnNode>>());
-    it = key_to_conns.find(blpop_key);
+BRPopCmd::BRPopCmd(const std::string& name, int16_t arity)
+    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryList) {}
+
+bool BRPopCmd::DoInitial(PClient* client) {
+  client->SetKey(client->argv_[1]);
+  int64_t timeout = 0;
+  if (!pstd::String2int(client->argv_.back().data(), client->argv_.back().size(), &timeout)) {
+    client->SetRes(CmdRes::kInvalidInt);
+    return false;
   }
-  auto& wait_list_of_this_key = it->second;
-  wait_list_of_this_key->emplace_back(expire_time, client);
+  constexpr int64_t seconds_of_ten_years = 10 * 365 * 24 * 3600;
+  if (timeout < 0 || timeout > seconds_of_ten_years) {
+    client->SetRes(CmdRes::kErrOther,
+                   "timeout can't be a negative value and can't exceed the number of seconds in 10 years");
+    return false;
+  }
+
+  if (timeout > 0) {
+    auto now = std::chrono::system_clock::now();
+    expire_time_ =
+        std::chrono::time_point_cast<std::chrono::milliseconds>(now).time_since_epoch().count() + timeout * 1000;
+  }
+  return true;
+}
+
+void BRPopCmd::DoCmd(PClient* client) {
+  std::vector<std::string> elements;
+  storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->RPop(client->Key(), 1, &elements);
+  if (s.ok()) {
+    client->AppendArrayLen(2);
+    client->AppendString(client->Key());
+    client->AppendString(elements[0]);
+    return;
+  } else if (s.IsNotFound()) {
+    BlockThisClientToWaitLRPush(elements, expire_time_, client, BlockedConnNode::Type::BRPop);
+  } else {
+    client->SetRes(CmdRes::kErrOther, s.ToString());
+    return;
+  }
 }
 
 LPopCmd::LPopCmd(const std::string& name, int16_t arity)

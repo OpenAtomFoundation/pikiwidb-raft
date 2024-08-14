@@ -57,7 +57,7 @@ class PikiwiDB final {
 
   std::shared_mutex& GetBlockMtx() { return block_mtx_; };
 
-  void ScanExpiredBlockedConnsOfBlrpop();
+  void ScanEvictedBlockedConnsOfBlrpop();
 
   inline void SendPacket2Client(const std::shared_ptr<pikiwidb::PClient>& client, std::string&& msg) {
     event_server_->SendPacket(client, std::move(msg));
