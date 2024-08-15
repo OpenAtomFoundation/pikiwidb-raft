@@ -156,18 +156,20 @@ bool BLPopCmd::DoInitial(PClient* client) {
 void BLPopCmd::DoCmd(PClient* client) {
   std::vector<std::string> elements;
   std::vector<std::string> list_keys(client->argv_.begin() + 1, client->argv_.end() - 1);
-  storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->LPop(client->Key(), 1, &elements);
-  if (s.ok()) {
-    client->AppendArrayLen(2);
-    client->AppendString(client->Key());
-    client->AppendString(elements[0]);
-    return;
-  } else if (s.IsNotFound()) {
-    BlockThisClientToWaitLRPush(elements, expire_time_, client, BlockedConnNode::Type::BLPop);
-  } else {
-    client->SetRes(CmdRes::kErrOther, s.ToString());
-    return;
+  for (auto key : list_keys) {
+    storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->LPop(key, 1, &elements);
+    if (s.ok()) {
+      client->AppendArrayLen(2);
+      client->AppendString(key);
+      client->AppendString(elements[0]);
+      return;
+    } else if (s.IsNotFound()) {
+    } else {
+      client->SetRes(CmdRes::kErrOther, s.ToString());
+      return;
+    }
   }
+  BlockThisClientToWaitLRPush(list_keys, expire_time_, client, BlockedConnNode::Type::BLPop);
 }
 
 BRPopCmd::BRPopCmd(const std::string& name, int16_t arity)
@@ -197,18 +199,21 @@ bool BRPopCmd::DoInitial(PClient* client) {
 
 void BRPopCmd::DoCmd(PClient* client) {
   std::vector<std::string> elements;
-  storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->RPop(client->Key(), 1, &elements);
-  if (s.ok()) {
-    client->AppendArrayLen(2);
-    client->AppendString(client->Key());
-    client->AppendString(elements[0]);
-    return;
-  } else if (s.IsNotFound()) {
-    BlockThisClientToWaitLRPush(elements, expire_time_, client, BlockedConnNode::Type::BRPop);
-  } else {
-    client->SetRes(CmdRes::kErrOther, s.ToString());
-    return;
+  std::vector<std::string> list_keys(client->argv_.begin() + 1, client->argv_.end() - 1);
+  for (auto key : list_keys) {
+    storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->RPop(key, 1, &elements);
+    if (s.ok()) {
+      client->AppendArrayLen(2);
+      client->AppendString(key);
+      client->AppendString(elements[0]);
+      return;
+    } else if (s.IsNotFound()) {
+    } else {
+      client->SetRes(CmdRes::kErrOther, s.ToString());
+      return;
+    }
   }
+  BlockThisClientToWaitLRPush(list_keys, expire_time_, client, BlockedConnNode::Type::BRPop);
 }
 
 LPopCmd::LPopCmd(const std::string& name, int16_t arity)

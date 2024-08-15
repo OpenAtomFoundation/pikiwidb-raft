@@ -111,6 +111,7 @@ void BaseCmd::BlockThisClientToWaitLRPush(std::vector<std::string>& keys, int64_
   std::shared_ptr<std::atomic<bool>> is_done = std::make_shared<std::atomic<bool>>(false);
   for (auto key : keys) {
     pikiwidb::BlockKey blpop_key{client->GetCurrentDB(), key};
+
     auto it = key_to_conns.find(blpop_key);
     if (it == key_to_conns.end()) {
       key_to_conns.emplace(blpop_key, std::make_unique<std::list<BlockedConnNode>>());
@@ -123,6 +124,7 @@ void BaseCmd::BlockThisClientToWaitLRPush(std::vector<std::string>& keys, int64_
 
 void BaseCmd::ServeAndUnblockConns(PClient* client) {
   pikiwidb::BlockKey key{client->GetCurrentDB(), client->Key()};
+
   std::shared_lock<std::shared_mutex> read_latch(g_pikiwidb->GetBlockMtx());
   auto& key_to_conns = g_pikiwidb->GetMapFromKeyToConns();
   auto it = key_to_conns.find(key);
@@ -144,12 +146,15 @@ void BaseCmd::ServeAndUnblockConns(PClient* client) {
       continue;
     }
     PClient* BlockedClient = (*conn_blocked).GetBlockedClient();
+
     switch (conn_blocked->GetCmdType()) {
       case BlockedConnNode::Type::BLPop:
-        s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->LPop(key.key, 1, &elements);
+        s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->LPop(client->Key(), 1, &elements);
+        break;
       case BlockedConnNode::Type::BRPop:
-        s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->RPop(key.key, 1, &elements);
+        s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->RPop(client->Key(), 1, &elements);
     }
+
     if (s.ok()) {
       BlockedClient->AppendArrayLen(2);
       BlockedClient->AppendString(client->Key());
