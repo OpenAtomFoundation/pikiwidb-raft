@@ -117,7 +117,7 @@ void PikiwiDB::ScanEvictedBlockedConnsOfBlrpop() {
   for (auto& it : key_to_blocked_conns) {
     auto& conns_list = it.second;
     for (auto conn_node = conns_list->begin(); conn_node != conns_list->end();) {
-      if (conn_node->is_done_->load()) {
+      if (conn_node->is_done_->exchange(true)) {
         conn_node = conns_list->erase(conn_node);
       } else if (conn_node->IsExpired()) {
         PClient* conn_ptr = conn_node->GetBlockedClient();
