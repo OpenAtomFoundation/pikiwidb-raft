@@ -416,6 +416,8 @@ void SortCmd::DoCmd(PClient* client) {
     storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->RPush(store_key_, ret_, &reply_num);
     if (s.ok()) {
       client->AppendInteger(reply_num);
+      client->SetKey(store_key_);
+      ServeAndUnblockConns(client);
     } else {
       client->SetRes(CmdRes::kErrOther, s.ToString());
     }
