@@ -145,7 +145,13 @@ void BaseCmd::ServeAndUnblockConns(PClient* client) {
       conn_blocked = waitting_list->erase(conn_blocked);
       continue;
     }
+
     PClient* BlockedClient = (*conn_blocked).GetBlockedClient();
+
+    if (BlockedClient->State() == ClientState::kClosed) {
+      conn_blocked = waitting_list->erase(conn_blocked);
+      continue;
+    }
 
     switch (conn_blocked->GetCmdType()) {
       case BlockedConnNode::Type::BLPop:
@@ -153,6 +159,7 @@ void BaseCmd::ServeAndUnblockConns(PClient* client) {
         break;
       case BlockedConnNode::Type::BRPop:
         s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->RPop(client->Key(), 1, &elements);
+        break;
     }
 
     if (s.ok()) {

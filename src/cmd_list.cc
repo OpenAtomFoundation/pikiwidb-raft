@@ -74,6 +74,8 @@ void RPoplpushCmd::DoCmd(PClient* client) {
   storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->RPoplpush(source_, receiver_, &value);
   if (s.ok()) {
     client->AppendString(value);
+    client->SetKey(receiver_);
+    ServeAndUnblockConns(client);
   } else if (s.IsNotFound()) {
     client->AppendStringLen(-1);
   } else if (s.IsInvalidArgument()) {
