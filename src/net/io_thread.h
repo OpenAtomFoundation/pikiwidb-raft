@@ -16,7 +16,7 @@ namespace net {
 
 class IOThread {
  public:
-  explicit IOThread(const std::shared_ptr<BaseEvent> &event) : baseEvent_(event){};
+  explicit IOThread(const std::shared_ptr<BaseEvent> &event) : baseEvent_(event) {};
 
   ~IOThread() = default;
 

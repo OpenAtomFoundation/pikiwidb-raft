@@ -140,6 +140,16 @@ PConfig::PConfig() {
   AddNumber("rocksdb-level0-slowdown-writes-trigger", false, &rocksdb_level0_slowdown_writes_trigger);
   AddNumber("rocksdb-level0-stop-writes-trigger", false, &rocksdb_level0_stop_writes_trigger);
   AddNumber("rocksdb-level0-slowdown-writes-trigger", false, &rocksdb_level0_slowdown_writes_trigger);
+
+  // cache config
+  AddNumberWithLimit("cache-num", true, &cache_num, 1, 48);
+  AddNumberWithLimit("cache-mode", true, &cache_mode, 0, 1);
+  AddNumber("zset-cache-field-num-per-key", true, &zset_cache_field_num_per_key);
+  AddNumber("zset-cache-start-direction", true, &zset_cache_start_direction);
+  AddNumber("cache-maxmemory", true, &cache_maxmemory);
+  AddNumber("cache-maxmemory-policy", true, &cache_maxmemory_policy);
+  AddNumber("cache-maxmemory-samples", true, &cache_maxmemory_samples);
+  AddNumber("cache-lfu-decay-time", true, &cache_lfu_decay_time);
 }
 
 bool PConfig::LoadFromFile(const std::string& file_name) {
@@ -175,7 +185,38 @@ bool PConfig::LoadFromFile(const std::string& file_name) {
     }
   }
 
+  std::string all_cache_type_str;
+  all_cache_type_str = parser_.GetData<PString>("cache-type");
+  SetCacheType(all_cache_type_str);
+
   return true;
+}
+
+void PConfig::SetCacheType(const std::string& value) {
+  cache_string = cache_set = cache_zset = cache_hash = cache_list = cache_bit = 0;
+  if (value == "") {
+    return;
+  }
+
+  std::string lower_value = value;
+  pstd::StringToLower(lower_value);
+  lower_value.erase(remove_if(lower_value.begin(), lower_value.end(), isspace), lower_value.end());
+  pstd::StringSplit(lower_value, ',', cache_type_all);
+  for (auto& type : cache_type_all) {
+    if (type == "string") {
+      cache_string = 1;
+    } else if (type == "set") {
+      cache_set = 1;
+    } else if (type == "zset") {
+      cache_zset = 1;
+    } else if (type == "hash") {
+      cache_hash = 1;
+    } else if (type == "list") {
+      cache_list = 1;
+    } else if (type == "bit") {
+      cache_bit = 1;
+    }
+  }
 }
 
 void PConfig::Get(const std::string& key, std::vector<std::string>* values) const {

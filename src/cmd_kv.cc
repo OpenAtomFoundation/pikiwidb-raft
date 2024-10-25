@@ -17,7 +17,9 @@
 namespace pikiwidb {
 
 GetCmd::GetCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsReadonly, kAclCategoryRead | kAclCategoryString) {}
+    : BaseCmd(name, arity,
+              kCmdFlagsReadonly | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache | kCmdFlagsReadCache,
+              kAclCategoryRead | kAclCategoryString) {}
 
 bool GetCmd::DoInitial(PClient* client) {
   client->SetKey(client->argv_[1]);
@@ -25,27 +27,47 @@ bool GetCmd::DoInitial(PClient* client) {
 }
 
 void GetCmd::DoCmd(PClient* client) {
-  PString value;
-  int64_t ttl = -1;
-  storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->GetWithTTL(client->Key(), &value, &ttl);
-  if (s.ok()) {
-    client->AppendString(value);
-  } else if (s.IsNotFound()) {
+  s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->GetWithTTL(client->Key(), &value_, &ttl_);
+  if (s_.ok()) {
+    client->AppendString(value_);
+  } else if (s_.IsNotFound()) {
     client->AppendString("");
-  } else if (s.IsInvalidArgument()) {
+  } else if (s_.IsInvalidArgument()) {
     client->SetRes(CmdRes::kMultiKey);
   } else {
     client->SetRes(CmdRes::kSyntaxErr, "get key error");
   }
 }
 
+void GetCmd::ReadCache(PClient* client) {
+  auto key_ = client->Key();
+  auto s = PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->Get(key_, &value_);
+  if (s.ok()) {
+    client->AppendString(value_);
+  } else {
+    client->SetRes(CmdRes::kCacheMiss);
+  }
+}
+
+void GetCmd::DoThroughDB(PClient* client) {
+  client->Clear();
+  DoCmd(client);
+}
+
+void GetCmd::DoUpdateCache(PClient* client) {
+  if (s_.ok()) {
+    auto key_ = client->Key();
+    PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->WriteKVToCache(key_, value_, ttl_);
+  }
+}
+
 SetCmd::SetCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryString) {}
+    : BaseCmd(name, arity, kCmdFlagsWrite | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache,
+              kAclCategoryWrite | kAclCategoryString) {}
 
 // SET key value [NX | XX] [EX seconds | PX milliseconds]
 bool SetCmd::DoInitial(PClient* client) {
   client->SetKey(client->argv_[1]);
-
   auto argv_ = client->argv_;
   value_ = argv_[2];
   condition_ = SetCmd::kNONE;
@@ -73,6 +95,7 @@ bool SetCmd::DoInitial(PClient* client) {
       if (strcasecmp(opt.data(), "px") == 0) {
         sec_ /= 1000;
       }
+      has_ttl_ = true;
     } else {
       client->SetRes(CmdRes::kSyntaxErr);
       return false;
@@ -85,38 +108,54 @@ bool SetCmd::DoInitial(PClient* client) {
 
 void SetCmd::DoCmd(PClient* client) {
   int32_t res = 1;
-  storage::Status s;
   auto key_ = client->Key();
   switch (condition_) {
     case SetCmd::kXX:
-      s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Setxx(key_, value_, &res, sec_);
+      s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Setxx(key_, value_, &res, sec_);
       break;
     case SetCmd::kNX:
-      s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Setnx(key_, value_, &res, sec_);
+      s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Setnx(key_, value_, &res, sec_);
       break;
     case SetCmd::kEXORPX:
-      s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Setex(key_, value_, sec_);
+      s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Setex(key_, value_, sec_);
       break;
     default:
-      s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Set(key_, value_);
+      s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Set(key_, value_);
       break;
   }
 
-  if (s.ok() || s.IsNotFound()) {
+  if (s_.ok() || s_.IsNotFound()) {
     if (res == 1) {
       client->SetRes(CmdRes::kOK);
     } else {
       client->AppendStringLen(-1);
     }
-  } else if (s.IsInvalidArgument()) {
+  } else if (s_.IsInvalidArgument()) {
     client->SetRes(CmdRes::kMultiKey);
   } else {
-    client->SetRes(CmdRes::kErrOther, s.ToString());
+    client->SetRes(CmdRes::kErrOther, s_.ToString());
+  }
+}
+
+void SetCmd::DoThroughDB(PClient* client) { DoCmd(client); }
+
+void SetCmd::DoUpdateCache(PClient* client) {
+  if (SetCmd::kNX == condition_) {
+    return;
+  }
+  auto key_ = client->Key();
+  if (s_.ok()) {
+    if (has_ttl_) {
+      PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->Setxx(key_, value_, sec_);
+    } else {
+      PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->SetxxWithoutTTL(key_, value_);
+    }
   }
 }
 
 AppendCmd::AppendCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryString) {}
+    : BaseCmd(name, arity, kCmdFlagsWrite | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache,
+              kAclCategoryWrite | kAclCategoryString) {}
 
 bool AppendCmd::DoInitial(PClient* client) {
   client->SetKey(client->argv_[1]);
@@ -125,17 +164,26 @@ bool AppendCmd::DoInitial(PClient* client) {
 
 void AppendCmd::DoCmd(PClient* client) {
   int32_t new_len = 0;
-  storage::Status s =
-      PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Append(client->Key(), client->argv_[2], &new_len);
-  if (s.ok() || s.IsNotFound()) {
+  s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Append(client->Key(), client->argv_[2], &new_len);
+  if (s_.ok() || s_.IsNotFound()) {
     client->AppendInteger(new_len);
   } else {
-    client->SetRes(CmdRes::kErrOther, s.ToString());
+    client->SetRes(CmdRes::kErrOther, s_.ToString());
+  }
+}
+
+void AppendCmd::DoThroughDB(PClient* client) { DoCmd(client); }
+
+void AppendCmd::DoUpdateCache(PClient* client) {
+  if (s_.ok()) {
+    auto key_ = client->Key();
+    PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->Appendxx(key_, client->argv_[2]);
   }
 }
 
 GetSetCmd::GetSetCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryString) {}
+    : BaseCmd(name, arity, kCmdFlagsWrite | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache,
+              kAclCategoryWrite | kAclCategoryString) {}
 
 bool GetSetCmd::DoInitial(PClient* client) {
   client->SetKey(client->argv_[1]);
@@ -144,9 +192,8 @@ bool GetSetCmd::DoInitial(PClient* client) {
 
 void GetSetCmd::DoCmd(PClient* client) {
   std::string old_value;
-  storage::Status s =
-      PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->GetSet(client->Key(), client->argv_[2], &old_value);
-  if (s.ok()) {
+  s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->GetSet(client->Key(), client->argv_[2], &old_value);
+  if (s_.ok()) {
     if (old_value.empty()) {
       client->AppendContent("$-1");
     } else {
@@ -154,12 +201,23 @@ void GetSetCmd::DoCmd(PClient* client) {
       client->AppendContent(old_value);
     }
   } else {
-    client->SetRes(CmdRes::kErrOther, s.ToString());
+    client->SetRes(CmdRes::kErrOther, s_.ToString());
+  }
+}
+
+void GetSetCmd::DoThroughDB(PClient* client) { DoCmd(client); }
+
+void GetSetCmd::DoUpdateCache(PClient* client) {
+  if (s_.ok()) {
+    auto key_ = client->Key();
+    PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->SetxxWithoutTTL(key_, client->argv_[2]);
   }
 }
 
 MGetCmd::MGetCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsReadonly, kAclCategoryRead | kAclCategoryString) {}
+    : BaseCmd(name, arity,
+              kCmdFlagsReadonly | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache | kCmdFlagsReadCache,
+              kAclCategoryRead | kAclCategoryString) {}
 
 bool MGetCmd::DoInitial(PClient* client) {
   std::vector<std::string> keys(client->argv_.begin(), client->argv_.end());
@@ -169,12 +227,11 @@ bool MGetCmd::DoInitial(PClient* client) {
 }
 
 void MGetCmd::DoCmd(PClient* client) {
-  std::vector<storage::ValueStatus> db_value_status_array;
-  storage::Status s =
-      PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->MGet(client->Keys(), &db_value_status_array);
-  if (s.ok()) {
-    client->AppendArrayLen(db_value_status_array.size());
-    for (const auto& vs : db_value_status_array) {
+  db_value_status_array_.clear();
+  s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->MGet(client->Keys(), &db_value_status_array_);
+  if (s_.ok()) {
+    client->AppendArrayLen(db_value_status_array_.size());
+    for (const auto& vs : db_value_status_array_) {
       if (vs.status.ok()) {
         client->AppendStringLen(vs.value.size());
         client->AppendContent(vs.value);
@@ -183,12 +240,46 @@ void MGetCmd::DoCmd(PClient* client) {
       }
     }
   } else {
-    client->SetRes(CmdRes::kErrOther, s.ToString());
+    client->SetRes(CmdRes::kErrOther, s_.ToString());
+  }
+}
+
+void MGetCmd::ReadCache(PClient* client) {
+  auto keys_ = client->Keys();
+  if (1 < keys_.size()) {
+    client->SetRes(CmdRes::kCacheMiss);
+    return;
+  }
+  std::string value;
+  auto s = PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->Get(keys_[0], &value);
+  if (s.ok()) {
+    client->AppendArrayLen(1);
+    client->AppendStringLen(value.size());
+    client->AppendContent(value);
+  } else {
+    client->SetRes(CmdRes::kCacheMiss);
+  }
+}
+
+void MGetCmd::DoThroughDB(PClient* client) {
+  client->Clear();
+  DoCmd(client);
+}
+
+void MGetCmd::DoUpdateCache(PClient* client) {
+  auto keys_ = client->Keys();
+  for (size_t i = 0; i < keys_.size(); i++) {
+    if (db_value_status_array_[i].status.ok()) {
+      PSTORE.GetBackend(client->GetCurrentDB())
+          ->GetCache()
+          ->WriteKVToCache(keys_[i], db_value_status_array_[i].value, db_value_status_array_[i].ttl);
+    }
   }
 }
 
 MSetCmd::MSetCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryString) {}
+    : BaseCmd(name, arity, kCmdFlagsWrite | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache,
+              kAclCategoryWrite | kAclCategoryString) {}
 
 bool MSetCmd::DoInitial(PClient* client) {
   size_t argcSize = client->argv_.size();
@@ -196,24 +287,29 @@ bool MSetCmd::DoInitial(PClient* client) {
     client->SetRes(CmdRes::kWrongNum, kCmdNameMSet);
     return false;
   }
-  std::vector<std::string> keys;
-  for (size_t index = 1; index < argcSize; index += 2) {
-    keys.emplace_back(client->argv_[index]);
+  kvs_.clear();
+  for (size_t index = 1; index != argcSize; index += 2) {
+    kvs_.push_back({client->argv_[index], client->argv_[index + 1]});
   }
-  client->SetKey(keys);
   return true;
 }
 
 void MSetCmd::DoCmd(PClient* client) {
-  std::vector<storage::KeyValue> kvs;
-  for (size_t index = 1; index != client->argv_.size(); index += 2) {
-    kvs.push_back({client->argv_[index], client->argv_[index + 1]});
-  }
-  storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->MSet(kvs);
-  if (s.ok()) {
+  s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->MSet(kvs_);
+  if (s_.ok()) {
     client->SetRes(CmdRes::kOK);
   } else {
-    client->SetRes(CmdRes::kErrOther, s.ToString());
+    client->SetRes(CmdRes::kErrOther, s_.ToString());
+  }
+}
+
+void MSetCmd::DoThroughDB(PClient* client) { DoCmd(client); }
+
+void MSetCmd::DoUpdateCache(PClient* client) {
+  if (s_.ok()) {
+    for (auto key : kvs_) {
+      PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->SetxxWithoutTTL(key.key, key.value);
+    }
   }
 }
 
@@ -259,7 +355,8 @@ void BitCountCmd::DoCmd(PClient* client) {
 }
 
 DecrCmd::DecrCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsReadonly, kAclCategoryRead | kAclCategoryString) {}
+    : BaseCmd(name, arity, kCmdFlagsWrite | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache,
+              kAclCategoryRead | kAclCategoryString) {}
 
 bool DecrCmd::DoInitial(pikiwidb::PClient* client) {
   client->SetKey(client->argv_[1]);
@@ -268,20 +365,30 @@ bool DecrCmd::DoInitial(pikiwidb::PClient* client) {
 
 void DecrCmd::DoCmd(pikiwidb::PClient* client) {
   int64_t ret = 0;
-  storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Decrby(client->Key(), 1, &ret);
-  if (s.ok()) {
+  s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Decrby(client->Key(), 1, &ret);
+  if (s_.ok()) {
     client->AppendContent(":" + std::to_string(ret));
-  } else if (s.IsCorruption() && s.ToString() == "Corruption: Value is not a integer") {
+  } else if (s_.IsCorruption() && s_.ToString() == "Corruption: Value is not a integer") {
     client->SetRes(CmdRes::kInvalidInt);
-  } else if (s.IsInvalidArgument()) {
+  } else if (s_.IsInvalidArgument()) {
     client->SetRes(CmdRes::kOverFlow);
   } else {
-    client->SetRes(CmdRes::kErrOther, s.ToString());
+    client->SetRes(CmdRes::kErrOther, s_.ToString());
+  }
+}
+
+void DecrCmd::DoThroughDB(PClient* client) { DoCmd(client); }
+
+void DecrCmd::DoUpdateCache(PClient* client) {
+  if (s_.ok()) {
+    auto key_ = client->Key();
+    PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->Decrxx(key_);
   }
 }
 
 IncrCmd::IncrCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsReadonly, kAclCategoryRead | kAclCategoryString) {}
+    : BaseCmd(name, arity, kCmdFlagsWrite | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache,
+              kAclCategoryWrite | kAclCategoryString) {}
 
 bool IncrCmd::DoInitial(pikiwidb::PClient* client) {
   client->SetKey(client->argv_[1]);
@@ -290,15 +397,24 @@ bool IncrCmd::DoInitial(pikiwidb::PClient* client) {
 
 void IncrCmd::DoCmd(pikiwidb::PClient* client) {
   int64_t ret = 0;
-  storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Incrby(client->Key(), 1, &ret);
-  if (s.ok()) {
+  s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Incrby(client->Key(), 1, &ret);
+  if (s_.ok()) {
     client->AppendContent(":" + std::to_string(ret));
-  } else if (s.IsCorruption() && s.ToString() == "Corruption: Value is not a integer") {
+  } else if (s_.IsCorruption() && s_.ToString() == "Corruption: Value is not a integer") {
     client->SetRes(CmdRes::kInvalidInt);
-  } else if (s.IsInvalidArgument()) {
+  } else if (s_.IsInvalidArgument()) {
     client->SetRes(CmdRes::kOverFlow);
   } else {
-    client->SetRes(CmdRes::kErrOther, s.ToString());
+    client->SetRes(CmdRes::kErrOther, s_.ToString());
+  }
+}
+
+void IncrCmd::DoThroughDB(PClient* client) { DoCmd(client); }
+
+void IncrCmd::DoUpdateCache(PClient* client) {
+  if (s_.ok()) {
+    auto key_ = client->Key();
+    PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->Incrxx(key_);
   }
 }
 
@@ -363,7 +479,9 @@ void BitOpCmd::DoCmd(PClient* client) {
 }
 
 StrlenCmd::StrlenCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsReadonly, kAclCategoryRead | kAclCategoryString) {}
+    : BaseCmd(name, arity,
+              kCmdFlagsReadonly | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache | kCmdFlagsReadCache,
+              kAclCategoryRead | kAclCategoryString) {}
 
 bool StrlenCmd::DoInitial(PClient* client) {
   client->SetKey(client->argv_[1]);
@@ -382,13 +500,42 @@ void StrlenCmd::DoCmd(PClient* client) {
   }
 }
 
+void StrlenCmd::ReadCache(PClient* client) {
+  int32_t len = 0;
+  auto key = client->Key();
+  auto s = PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->Strlen(key, &len);
+  if (s.ok()) {
+    client->AppendInteger(len);
+  } else {
+    client->SetRes(CmdRes::kCacheMiss);
+  }
+}
+
+void StrlenCmd::DoThroughDB(PClient* client) {
+  client->Clear();
+  auto key = client->Key();
+  s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->GetWithTTL(key, &value_, &sec_);
+  if (s_.ok() || s_.IsNotFound()) {
+    client->AppendInteger(value_.size());
+  } else {
+    client->SetRes(CmdRes::kErrOther, s_.ToString());
+  }
+}
+
+void StrlenCmd::DoUpdateCache(PClient* client) {
+  if (s_.ok()) {
+    auto key = client->Key();
+    PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->WriteKVToCache(key, value_, sec_);
+  }
+}
+
 SetExCmd::SetExCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryString) {}
+    : BaseCmd(name, arity, kCmdFlagsWrite | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache,
+              kAclCategoryWrite | kAclCategoryString) {}
 
 bool SetExCmd::DoInitial(PClient* client) {
   client->SetKey(client->argv_[1]);
-  int64_t sec = 0;
-  if (pstd::String2int(client->argv_[2], &sec) == 0) {
+  if (pstd::String2int(client->argv_[2], &sec_) == 0) {
     client->SetRes(CmdRes::kInvalidInt);
     return false;
   }
@@ -396,26 +543,33 @@ bool SetExCmd::DoInitial(PClient* client) {
 }
 
 void SetExCmd::DoCmd(PClient* client) {
-  int64_t sec = 0;
-  pstd::String2int(client->argv_[2], &sec);
-  storage::Status s =
-      PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Setex(client->Key(), client->argv_[3], sec);
-  if (s.ok()) {
+  s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Setex(client->Key(), client->argv_[3], sec_);
+  if (s_.ok()) {
     client->SetRes(CmdRes::kOK);
-  } else if (s.IsInvalidArgument()) {
+  } else if (s_.IsInvalidArgument()) {
     client->SetRes(CmdRes::kMultiKey);
   } else {
-    client->SetRes(CmdRes::kErrOther, s.ToString());
+    client->SetRes(CmdRes::kErrOther, s_.ToString());
+  }
+}
+
+void SetExCmd::DoThroughDB(PClient* client) { DoCmd(client); }
+
+void SetExCmd::DoUpdateCache(PClient* client) {
+  if (s_.ok()) {
+    auto key = client->Key();
+    PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->Setxx(key, client->argv_[3], sec_);
   }
 }
 
 PSetExCmd::PSetExCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryString) {}
+    : BaseCmd(name, arity, kCmdFlagsWrite | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache,
+              kAclCategoryWrite | kAclCategoryString) {}
 
 bool PSetExCmd::DoInitial(PClient* client) {
   client->SetKey(client->argv_[1]);
-  int64_t msec = 0;
-  if (pstd::String2int(client->argv_[2], &msec) == 0) {
+
+  if (pstd::String2int(client->argv_[2], &msec_) == 0) {
     client->SetRes(CmdRes::kInvalidInt);
     return false;
   }
@@ -423,22 +577,30 @@ bool PSetExCmd::DoInitial(PClient* client) {
 }
 
 void PSetExCmd::DoCmd(PClient* client) {
-  int64_t msec = 0;
-  pstd::String2int(client->argv_[2], &msec);
-  storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())
-                          ->GetStorage()
-                          ->Setex(client->Key(), client->argv_[3], static_cast<int32_t>(msec / 1000));
-  if (s.ok()) {
+  s_ = PSTORE.GetBackend(client->GetCurrentDB())
+           ->GetStorage()
+           ->Setex(client->Key(), client->argv_[3], static_cast<int32_t>(msec_ / 1000));
+  if (s_.ok()) {
     client->SetRes(CmdRes::kOK);
-  } else if (s.IsInvalidArgument()) {
+  } else if (s_.IsInvalidArgument()) {
     client->SetRes(CmdRes::kMultiKey);
   } else {
-    client->SetRes(CmdRes::kErrOther, s.ToString());
+    client->SetRes(CmdRes::kErrOther, s_.ToString());
+  }
+}
+
+void PSetExCmd::DoThroughDB(PClient* client) { DoCmd(client); }
+
+void PSetExCmd::DoUpdateCache(PClient* client) {
+  if (s_.ok()) {
+    auto key = client->Key();
+    PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->Setxx(key, client->argv_[3], msec_ / 1000);
   }
 }
 
 IncrbyCmd::IncrbyCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryString) {}
+    : BaseCmd(name, arity, kCmdFlagsWrite | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache,
+              kAclCategoryWrite | kAclCategoryString) {}
 
 bool IncrbyCmd::DoInitial(PClient* client) {
   int64_t by_ = 0;
@@ -452,25 +614,34 @@ bool IncrbyCmd::DoInitial(PClient* client) {
 
 void IncrbyCmd::DoCmd(PClient* client) {
   int64_t ret = 0;
-  int64_t by = 0;
-  pstd::String2int(client->argv_[2].data(), client->argv_[2].size(), &by);
-  storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Incrby(client->Key(), by, &ret);
-  if (s.ok()) {
+  pstd::String2int(client->argv_[2].data(), client->argv_[2].size(), &by_);
+  s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Incrby(client->Key(), by_, &ret);
+  if (s_.ok()) {
     client->AppendContent(":" + std::to_string(ret));
-  } else if (s.IsCorruption() && s.ToString() == "Corruption: Value is not a integer") {
+  } else if (s_.IsCorruption() && s_.ToString() == "Corruption: Value is not a integer") {
     client->SetRes(CmdRes::kInvalidInt);
-  } else if (s.IsInvalidArgument()) {
+  } else if (s_.IsInvalidArgument()) {
     client->SetRes(CmdRes::kOverFlow);
-  } else if (s.IsInvalidArgument() &&
-             s.ToString().substr(0, std::char_traits<char>::length(ErrTypeMessage)) == ErrTypeMessage) {
+  } else if (s_.IsInvalidArgument() &&
+             s_.ToString().substr(0, std::char_traits<char>::length(ErrTypeMessage)) == ErrTypeMessage) {
     client->SetRes(CmdRes::kMultiKey);
   } else {
-    client->SetRes(CmdRes::kErrOther, s.ToString());
+    client->SetRes(CmdRes::kErrOther, s_.ToString());
   };
 }
 
+void IncrbyCmd::DoThroughDB(PClient* client) { DoCmd(client); }
+
+void IncrbyCmd::DoUpdateCache(PClient* client) {
+  if (s_.ok()) {
+    auto key_ = client->Key();
+    PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->IncrByxx(key_, by_);
+  }
+}
+
 DecrbyCmd::DecrbyCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryString) {}
+    : BaseCmd(name, arity, kCmdFlagsWrite | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache,
+              kAclCategoryWrite | kAclCategoryString) {}
 
 bool DecrbyCmd::DoInitial(PClient* client) {
   int64_t by = 0;
@@ -484,55 +655,77 @@ bool DecrbyCmd::DoInitial(PClient* client) {
 
 void DecrbyCmd::DoCmd(PClient* client) {
   int64_t ret = 0;
-  int64_t by = 0;
-  if (pstd::String2int(client->argv_[2].data(), client->argv_[2].size(), &by) == 0) {
+
+  if (pstd::String2int(client->argv_[2].data(), client->argv_[2].size(), &by_) == 0) {
     client->SetRes(CmdRes::kInvalidInt);
     return;
   }
-  storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Decrby(client->Key(), by, &ret);
-  if (s.ok()) {
+  s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Decrby(client->Key(), by_, &ret);
+  if (s_.ok()) {
     client->AppendContent(":" + std::to_string(ret));
-  } else if (s.IsCorruption() && s.ToString() == "Corruption: Value is not a integer") {
+  } else if (s_.IsCorruption() && s_.ToString() == "Corruption: Value is not a integer") {
     client->SetRes(CmdRes::kInvalidInt);
-  } else if (s.IsInvalidArgument()) {
+  } else if (s_.IsInvalidArgument()) {
     client->SetRes(CmdRes::kOverFlow);
-  } else if (s.IsInvalidArgument() &&
-             s.ToString().substr(0, std::char_traits<char>::length(ErrTypeMessage)) == ErrTypeMessage) {
+  } else if (s_.IsInvalidArgument() &&
+             s_.ToString().substr(0, std::char_traits<char>::length(ErrTypeMessage)) == ErrTypeMessage) {
     client->SetRes(CmdRes::kMultiKey);
   } else {
-    client->SetRes(CmdRes::kErrOther, s.ToString());
+    client->SetRes(CmdRes::kErrOther, s_.ToString());
+  }
+}
+
+void DecrbyCmd::DoThroughDB(PClient* client) { DoCmd(client); }
+
+void DecrbyCmd::DoUpdateCache(PClient* client) {
+  if (s_.ok()) {
+    auto key_ = client->Key();
+    PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->DecrByxx(key_, by_);
   }
 }
 
 IncrbyFloatCmd::IncrbyFloatCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryString) {}
+    : BaseCmd(name, arity, kCmdFlagsWrite | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache,
+              kAclCategoryWrite | kAclCategoryString) {}
 
 bool IncrbyFloatCmd::DoInitial(PClient* client) {
   long double by_ = 0.00f;
-  if (StrToLongDouble(client->argv_[2].data(), client->argv_[2].size(), &by_)) {
+  if (pikiwidb::StrToLongDouble(client->argv_[2].data(), client->argv_[2].size(), &by_)) {
     client->SetRes(CmdRes::kInvalidFloat);
     return false;
   }
   client->SetKey(client->argv_[1]);
+  value_ = client->argv_[2];
   return true;
 }
 
 void IncrbyFloatCmd::DoCmd(PClient* client) {
   PString ret;
-  storage::Status s =
-      PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Incrbyfloat(client->Key(), client->argv_[2], &ret);
-  if (s.ok()) {
+  s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Incrbyfloat(client->Key(), value_, &ret);
+  if (s_.ok()) {
     client->AppendStringLen(ret.size());
     client->AppendContent(ret);
-  } else if (s.IsCorruption() && s.ToString() == "Corruption: Value is not a valid float") {
+  } else if (s_.IsCorruption() && s_.ToString() == "Corruption: Value is not a valid float") {
     client->SetRes(CmdRes::kInvalidFloat);
-  } else if (s.IsInvalidArgument()) {
+  } else if (s_.IsInvalidArgument()) {
     client->SetRes(CmdRes::KIncrByOverFlow);
-  } else if (s.IsInvalidArgument() &&
-             s.ToString().substr(0, std::char_traits<char>::length(ErrTypeMessage)) == ErrTypeMessage) {
+  } else if (s_.IsInvalidArgument() &&
+             s_.ToString().substr(0, std::char_traits<char>::length(ErrTypeMessage)) == ErrTypeMessage) {
     client->SetRes(CmdRes::kMultiKey);
   } else {
-    client->SetRes(CmdRes::kErrOther, s.ToString());
+    client->SetRes(CmdRes::kErrOther, s_.ToString());
+  }
+}
+
+void IncrbyFloatCmd::DoThroughDB(PClient* client) { DoCmd(client); }
+
+void IncrbyFloatCmd::DoUpdateCache(PClient* client) {
+  if (s_.ok()) {
+    long double long_double_by;
+    if (StrToLongDouble(value_.data(), value_.size(), &long_double_by) != -1) {
+      auto key_ = client->Key();
+      PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->Incrbyfloatxx(key_, long_double_by);
+    }
   }
 }
 
@@ -583,15 +776,20 @@ void GetBitCmd::DoCmd(PClient* client) {
 }
 
 GetRangeCmd::GetRangeCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsReadonly, kAclCategoryRead | kAclCategoryString) {}
+    : BaseCmd(name, arity,
+              kCmdFlagsReadonly | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache | kCmdFlagsReadCache,
+              kAclCategoryRead | kAclCategoryString) {}
 
 bool GetRangeCmd::DoInitial(PClient* client) {
   // > range key start end
   int64_t start = 0;
   int64_t end = 0;
   // ERR value is not an integer or out of range
-  if (!(pstd::String2int(client->argv_[2].data(), client->argv_[2].size(), &start)) ||
-      !(pstd::String2int(client->argv_[3].data(), client->argv_[3].size(), &end))) {
+  if (pstd::String2int(client->argv_[2].data(), client->argv_[2].size(), &start_) == 0) {
+    client->SetRes(CmdRes::kInvalidInt);
+    return false;
+  }
+  if (pstd::String2int(client->argv_[3].data(), client->argv_[3].size(), &end_) == 0) {
     client->SetRes(CmdRes::kInvalidInt);
     return false;
   }
@@ -601,15 +799,11 @@ bool GetRangeCmd::DoInitial(PClient* client) {
 
 void GetRangeCmd::DoCmd(PClient* client) {
   PString ret;
-  int64_t start = 0;
-  int64_t end = 0;
-  pstd::String2int(client->argv_[2].data(), client->argv_[2].size(), &start);
-  pstd::String2int(client->argv_[3].data(), client->argv_[3].size(), &end);
-  auto s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Getrange(client->Key(), start, end, &ret);
-  if (!s.ok()) {
-    if (s.IsNotFound()) {
+  s_ = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Getrange(client->Key(), start_, end_, &ret);
+  if (!s_.ok()) {
+    if (s_.IsNotFound()) {
       client->AppendString("");
-    } else if (s.IsInvalidArgument()) {
+    } else if (s_.IsInvalidArgument()) {
       client->SetRes(CmdRes::kMultiKey);
     } else {
       client->SetRes(CmdRes::kErrOther, "getrange cmd error");
@@ -617,6 +811,43 @@ void GetRangeCmd::DoCmd(PClient* client) {
     return;
   }
   client->AppendString(ret);
+}
+
+void GetRangeCmd::ReadCache(PClient* client) {
+  std::string substr;
+  auto key = client->Key();
+  auto s = PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->GetRange(key, start_, end_, &substr);
+  if (s.ok()) {
+    client->AppendStringLen(substr.size());
+    client->AppendContent(substr);
+  } else {
+    client->SetRes(CmdRes::kCacheMiss);
+  }
+}
+
+void GetRangeCmd::DoThroughDB(PClient* client) {
+  client->Clear();
+  std::string substr;
+  auto key = client->Key();
+  s_ = PSTORE.GetBackend(client->GetCurrentDB())
+           ->GetStorage()
+           ->GetrangeWithValue(key, start_, end_, &substr, &value_, &sec_);
+  if (s_.ok()) {
+    client->AppendStringLen(substr.size());
+    client->AppendContent(substr);
+  } else if (s_.IsNotFound()) {
+    client->AppendStringLen(substr.size());
+    client->AppendContent(substr);
+  } else {
+    client->SetRes(CmdRes::kErrOther, s_.ToString());
+  }
+}
+
+void GetRangeCmd::DoUpdateCache(PClient* client) {
+  if (s_.ok()) {
+    auto key = client->Key();
+    PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->WriteKVToCache(key, value_, sec_);
+  }
 }
 
 SetBitCmd::SetBitCmd(const std::string& name, int16_t arity)
@@ -664,26 +895,25 @@ void SetBitCmd::DoCmd(PClient* client) {
 }
 
 SetRangeCmd::SetRangeCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsWrite, kAclCategoryWrite | kAclCategoryString) {}
+    : BaseCmd(name, arity, kCmdFlagsWrite | kCmdFlagsKv | kCmdFlagsDoThroughDB | kCmdFlagsUpdateCache,
+              kAclCategoryWrite | kAclCategoryString) {}
 
 bool SetRangeCmd::DoInitial(PClient* client) {
   // setrange key offset value
   client->SetKey(client->argv_[1]);
+  if (!(pstd::String2int(client->argv_[2].data(), client->argv_[2].size(), &offset_))) {
+    client->SetRes(CmdRes::kInvalidInt);
+    return false;
+  }
   return true;
 }
 
 void SetRangeCmd::DoCmd(PClient* client) {
-  int64_t offset = 0;
-  if (!(pstd::String2int(client->argv_[2].data(), client->argv_[2].size(), &offset))) {
-    client->SetRes(CmdRes::kInvalidInt);
-    return;
-  }
-
   int32_t ret = 0;
-  storage::Status s =
-      PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Setrange(client->Key(), offset, client->argv_[3], &ret);
-  if (!s.ok()) {
-    if (s.IsInvalidArgument()) {
+  s_ =
+      PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->Setrange(client->Key(), offset_, client->argv_[3], &ret);
+  if (!s_.ok()) {
+    if (s_.IsInvalidArgument()) {
       client->SetRes(CmdRes::kMultiKey);
     } else {
       client->SetRes(CmdRes::kErrOther, "setrange cmd error");
@@ -691,6 +921,15 @@ void SetRangeCmd::DoCmd(PClient* client) {
     return;
   }
   client->AppendInteger(static_cast<int>(ret));
+}
+
+void SetRangeCmd::DoThroughDB(PClient* client) { DoCmd(client); }
+
+void SetRangeCmd::DoUpdateCache(PClient* client) {
+  if (s_.ok()) {
+    auto key = client->Key();
+    PSTORE.GetBackend(client->GetCurrentDB())->GetCache()->SetRangexx(key, offset_, client->argv_[3]);
+  }
 }
 
 MSetnxCmd::MSetnxCmd(const std::string& name, int16_t arity)
@@ -725,5 +964,4 @@ void MSetnxCmd::DoCmd(PClient* client) {
     client->SetRes(CmdRes::kErrOther, s.ToString());
   }
 }
-
 }  // namespace pikiwidb

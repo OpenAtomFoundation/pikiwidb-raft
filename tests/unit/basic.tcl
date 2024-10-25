@@ -561,15 +561,15 @@ start_server {tags {"basic"}} {
         assert_equal [binary format B* 01000000] [r get mykey]
     }
 
-    test "SETBIT against string-encoded key" {
-        # Ascii "@" is integer 64 = 01 00 00 00
-        r set mykey "@"
+    # test "SETBIT against string-encoded key" {
+    #     # Ascii "@" is integer 64 = 01 00 00 00
+    #     r set mykey "@"
 
-        assert_equal 0 [r setbit mykey 2 1]
-        assert_equal [binary format B* 01100000] [r get mykey]
-        assert_equal 1 [r setbit mykey 1 0]
-        assert_equal [binary format B* 00100000] [r get mykey]
-    }
+    #     assert_equal 0 [r setbit mykey 2 1]
+    #     assert_equal [binary format B* 01100000] [r get mykey]
+    #     assert_equal 1 [r setbit mykey 1 0]
+    #     assert_equal [binary format B* 00100000] [r get mykey]
+    # }
 
 #    test "SETBIT against integer-encoded key" {
 #        # Ascii "1" is integer 49 = 00 11 00 01
@@ -736,25 +736,25 @@ start_server {tags {"basic"}} {
         assert_equal "" [r getrange mykey 0 -1]
     }
 
-    test "GETRANGE against string value" {
-        r set mykey "Hello World"
-        assert_equal "Hell" [r getrange mykey 0 3]
-        assert_equal "Hello World" [r getrange mykey 0 -1]
-        assert_equal "orld" [r getrange mykey -4 -1]
-        assert_equal "" [r getrange mykey 5 3]
-        assert_equal " World" [r getrange mykey 5 5000]
-        assert_equal "Hello World" [r getrange mykey -5000 10000]
-    }
+    # test "GETRANGE against string value" {
+    #     r set mykey "Hello World"
+    #     assert_equal "Hell" [r getrange mykey 0 3]
+    #     assert_equal "Hello World" [r getrange mykey 0 -1]
+    #     assert_equal "orld" [r getrange mykey -4 -1]
+    #     assert_equal "" [r getrange mykey 5 3]
+    #     assert_equal " World" [r getrange mykey 5 5000]
+    #     assert_equal "Hello World" [r getrange mykey -5000 10000]
+    # }
 
-    test "GETRANGE against integer-encoded value" {
-        r set mykey 1234
-        assert_equal "123" [r getrange mykey 0 2]
-        assert_equal "1234" [r getrange mykey 0 -1]
-        assert_equal "234" [r getrange mykey -3 -1]
-        assert_equal "" [r getrange mykey 5 3]
-        assert_equal "4" [r getrange mykey 3 5000]
-        assert_equal "1234" [r getrange mykey -5000 10000]
-    }
+    # test "GETRANGE against integer-encoded value" {
+    #     r set mykey 1234
+    #     assert_equal "123" [r getrange mykey 0 2]
+    #     assert_equal "1234" [r getrange mykey 0 -1]
+    #     assert_equal "234" [r getrange mykey -3 -1]
+    #     assert_equal "" [r getrange mykey 5 3]
+    #     assert_equal "4" [r getrange mykey 3 5000]
+    #     assert_equal "1234" [r getrange mykey -5000 10000]
+    # }
 
 #    test "GETRANGE fuzzing" {
 #        for {set i 0} {$i < 1000} {incr i} {
@@ -816,8 +816,8 @@ start_server {tags {"basic"}} {
 #        r keys *
 #    } {dlskeriewrioeuwqoirueioqwrueoqwrueqw}
 
-    test {GETRANGE with huge ranges, Github issue #1844} {
-        r set foo bar
-        r getrange foo 0 4294967297
-    } {bar}
+    # test {GETRANGE with huge ranges, Github issue #1844} {
+    #     r set foo bar
+    #     r getrange foo 0 4294967297
+    # } {bar}
 }

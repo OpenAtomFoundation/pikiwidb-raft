@@ -70,7 +70,65 @@ void BaseCmd::Execute(PClient* client) {
   if (!DoInitial(client)) {
     return;
   }
-  DoCmd(client);
+
+  if (IsNeedCacheDo(client) && PCACHE_NONE != g_config.cache_mode.load() &&
+      PSTORE.GetBackend(dbIndex)->GetCache()->CacheStatus() == PCACHE_STATUS_OK) {
+    if (IsNeedReadCache()) {
+      ReadCache(client);
+    }
+    if (HasFlag(kCmdFlagsReadonly) && client->CacheMiss()) {
+      DoThroughDB(client);
+      if (IsNeedUpdateCache()) {
+        DoUpdateCache(client);
+      }
+    } else if (HasFlag(kCmdFlagsWrite)) {
+      DoThroughDB(client);
+      if (IsNeedUpdateCache()) {
+        DoUpdateCache(client);
+      }
+    }
+  } else {
+    DoCmd(client);
+  }
+}
+
+bool BaseCmd::IsNeedReadCache() const { return HasFlag(kCmdFlagsReadCache); }
+bool BaseCmd::IsNeedUpdateCache() const { return HasFlag(kCmdFlagsUpdateCache); }
+
+bool BaseCmd::IsNeedCacheDo(PClient* client) const {
+  if (g_config.tmp_cache_disable_flag.load()) {
+    return false;
+  }
+
+  if (HasFlag(kCmdFlagsKv)) {
+    if (!g_config.cache_string.load()) {
+      return false;
+    }
+  } else if (HasFlag(kCmdFlagsSet)) {
+    if (!g_config.cache_set.load()) {
+      return false;
+    }
+  } else if (HasFlag(kCmdFlagsZset)) {
+    int32_t db_len = 0;
+    PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->ZCard(client->Key(), &db_len);
+    auto zset_cache_field_num_per_key = g_config.zset_cache_field_num_per_key.load();
+    if (!g_config.cache_zset.load() || db_len > zset_cache_field_num_per_key) {
+      return false;
+    }
+  } else if (HasFlag(kCmdFlagsHash)) {
+    if (!g_config.cache_hash.load()) {
+      return false;
+    }
+  } else if (HasFlag(kCmdFlagsList)) {
+    if (!g_config.cache_list.load()) {
+      return false;
+    }
+  } else if (HasFlag(kCmdFlagsBit)) {
+    if (!g_config.cache_bit.load()) {
+      return false;
+    }
+  }
+  return (HasFlag(kCmdFlagsDoThroughDB));
 }
 
 std::string BaseCmd::ToBinlog(uint32_t exec_time, uint32_t term_id, uint64_t logic_id, uint32_t filenum,

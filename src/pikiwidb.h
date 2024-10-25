@@ -21,6 +21,14 @@
 #  define KPIKIWIDB_BUILD_TYPE "RELEASE"
 #endif
 
+#ifndef KPIKIWIDB_GIT_COMMIT_ID
+#  define KPIKIWIDB_GIT_COMMIT_ID "unknown"
+#endif
+
+#ifndef KPIKIWIDB_BUILD_DATE
+#  define KPIKIWIDB_BUILD_DATE "unknown"
+#endif
+
 namespace pikiwidb {
 class PRaft;
 }  // namespace pikiwidb

@@ -183,6 +183,15 @@ enum CmdFlags {
   kCmdFlagsNoMulti = (1 << 14),          // Cannot be pipelined
   kCmdFlagsExclusive = (1 << 15),        // May change Storage pointer, like pika's kCmdFlagsSuspend
   kCmdFlagsRaft = (1 << 16),             // raft
+  kCmdFlagsKv = (1 << 17),
+  kCmdFlagsHash = (1 << 18),
+  kCmdFlagsList = (1 << 19),
+  kCmdFlagsSet = (1 << 20),
+  kCmdFlagsZset = (1 << 21),
+  kCmdFlagsBit = (1 << 22),
+  kCmdFlagsReadCache = (1 << 23),
+  kCmdFlagsUpdateCache = (1 << 24),
+  kCmdFlagsDoThroughDB = (1 << 25),
 };
 
 enum AclCategory {
@@ -319,9 +328,16 @@ class BaseCmd : public std::enable_shared_from_this<BaseCmd> {
 
   uint32_t GetCmdID() const;
 
+  bool IsNeedUpdateCache() const;
+  bool IsNeedReadCache() const;
+  bool IsNeedCacheDo(PClient* client) const;
+
  protected:
   // Execute a specific command
   virtual void DoCmd(PClient* client) = 0;
+  virtual void DoThroughDB(PClient* client) {}
+  virtual void DoUpdateCache(PClient* client) {}
+  virtual void ReadCache(PClient* client) {}
 
   std::string name_;
   int16_t arity_ = 0;

@@ -35,8 +35,7 @@ concept HasSetFdFunction = requires(T t, uint64_t id, int8_t index) {
   { (*t).GetConnId() } -> std::same_as<uint64_t>;        // GetFd return type is int
   { (*t).SetThreadIndex(index) } -> std::same_as<void>;  // SetThreadIndex return type is void
   { (*t).GetThreadIndex() } -> std::same_as<int8_t>;     // GetThreadIndex return type is int8_t
-}
-|| std::is_class_v<T>;  // If T is an ordinary class, the member function is called directly
+} || std::is_class_v<T>;  // If T is an ordinary class, the member function is called directly
 
 template <typename T>
 requires HasSetFdFunction<T>

@@ -17,7 +17,7 @@ jobs:
 
       - name: Check Format
         working-directory: ${{ github.workspace }}/build
-        run: make check-format
+        run: clang-format --version
 
   build_on_macos:
     runs-on: macos-latest

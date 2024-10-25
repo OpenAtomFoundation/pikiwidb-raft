@@ -329,9 +329,29 @@ class PConfig {
   // 86400 * 3 = 259200
   std::atomic_uint64_t rocksdb_periodic_second = 259200;
 
+  // cache
+  std::vector<std::string> cache_type_all;
+  std::atomic_bool tmp_cache_disable_flag = false;
+  std::atomic_uint64_t cache_maxmemory = 10737418240;
+  std::atomic_int cache_num = 5;
+  std::atomic_int cache_mode = 1;
+  std::atomic_int cache_string = 0;
+  std::atomic_int cache_set = 0;
+  std::atomic_int cache_zset = 0;
+  std::atomic_int cache_hash = 0;
+  std::atomic_int cache_list = 0;
+  std::atomic_int cache_bit = 0;
+  std::atomic_int zset_cache_start_direction = 0;
+  std::atomic_int zset_cache_field_num_per_key = 512;
+  std::atomic_int cache_maxmemory_policy = 1;
+  std::atomic_int cache_maxmemory_samples = 5;
+  std::atomic_int cache_lfu_decay_time = 1;
+
   rocksdb::Options GetRocksDBOptions();
 
   rocksdb::BlockBasedTableOptions GetRocksDBBlockBasedTableOptions();
+
+  void SetCacheType(const std::string& value);
 
  private:
   // Some functions and variables set up for internal work.

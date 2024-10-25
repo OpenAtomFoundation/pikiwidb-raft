@@ -26,6 +26,7 @@ TARGET_INCLUDE_DIRECTORIES(pikiwidb
         PRIVATE ${PROJECT_SOURCE_DIR}/src/pstd
         PRIVATE ${PROJECT_SOURCE_DIR}/src/net
         PRIVATE ${PROJECT_SOURCE_DIR}/src/storage/include
+        PRIVATE ${PROJECT_SOURCE_DIR}/src/cache
         PRIVATE ${rocksdb_SOURCE_DIR}/
         PRIVATE ${rocksdb_SOURCE_DIR}/include
         PRIVATE ${BRAFT_INCLUDE_DIR}
@@ -45,6 +46,7 @@ ADD_DEPENDENCIES(pikiwidb
         braft
         brpc
         storage
+        pcache
 )
 
 TARGET_LINK_LIBRARIES(pikiwidb
@@ -56,6 +58,7 @@ TARGET_LINK_LIBRARIES(pikiwidb
         lz4
         zstd
         storage
+        pcache
         gflags
         spdlog
         pstd

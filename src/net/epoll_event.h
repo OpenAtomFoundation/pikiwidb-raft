@@ -23,7 +23,7 @@ namespace net {
 class EpollEvent : public BaseEvent {
  public:
   explicit EpollEvent(const std::shared_ptr<NetEvent> &listen, int8_t mode)
-      : BaseEvent(listen, mode, BaseEvent::EVENT_TYPE_EPOLL){};
+      : BaseEvent(listen, mode, BaseEvent::EVENT_TYPE_EPOLL) {};
 
   ~EpollEvent() override { Close(); }
 

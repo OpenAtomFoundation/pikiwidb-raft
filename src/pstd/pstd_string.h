@@ -60,10 +60,10 @@ inline std::string Int2string(T val) {
 template <std::integral T>
 int String2int(const char* s, size_t slen, T* val) {
   auto [ptr, ec] = std::from_chars(s, s + slen, *val);
-  if (ec != std::errc()) {
-    return 0;
-  } else {
+  if (ec == std::errc()) {
     return 1;
+  } else {
+    return 0;
   }
 }
 
