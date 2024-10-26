@@ -13,16 +13,14 @@
 #include <memory>
 
 #include "fmt/core.h"
+
 #include "praft/praft.h"
 #include "pstd/log.h"
 #include "pstd/pstd_string.h"
 
 #include "base_cmd.h"
 #include "config.h"
-#include "env.h"
 #include "pikiwidb.h"
-#include "pstd_string.h"
-#include "slow_log.h"
 #include "store.h"
 
 namespace pikiwidb {
@@ -280,7 +278,7 @@ int PClient::handlePacket(const char* start, int bytes) {
   if (isPeerMaster()) {
     if (isClusterCmdTarget()) {
       // Proccees the packet at one turn.
-      int len = PRAFT.ProcessClusterCmdResponse(this, start, bytes);  // @todo
+      int len = PSTORE.GetBackend(dbno_)->GetPRaft()->ProcessClusterCmdResponse(this, start, bytes);  // @todo
       if (len > 0) {
         return len;
       }
@@ -448,7 +446,7 @@ void PClient::OnConnect() {
     }
 
     if (isClusterCmdTarget()) {
-      PRAFT.SendNodeRequest(this);
+      PSTORE.GetBackend(dbno_)->GetPRaft()->SendNodeRequest(this);
     }
   } else {
     if (g_config.password.empty()) {
@@ -511,7 +509,8 @@ bool PClient::isPeerMaster() const {
 }
 
 bool PClient::isClusterCmdTarget() const {
-  return PRAFT.GetClusterCmdCtx().GetPeerIp() == PeerIP() && PRAFT.GetClusterCmdCtx().GetPort() == PeerPort();
+  auto praft = PSTORE.GetBackend(dbno_)->GetPRaft();
+  return praft->GetClusterCmdCtx().GetPeerIp() == PeerIP() && praft->GetClusterCmdCtx().GetPort() == PeerPort();
 }
 
 uint64_t PClient::uniqueID() const { return GetConnId(); }

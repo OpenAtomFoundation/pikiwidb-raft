@@ -154,6 +154,8 @@ enum class ClientState {
   kClosed,
 };
 
+const int kChannelTimeoutMS = 200;
+
 class DB;
 struct PSlaveInfo;
 

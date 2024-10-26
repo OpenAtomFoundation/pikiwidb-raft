@@ -10,17 +10,27 @@
 
 #pragma once
 
+#include <cstdint>
+#include <optional>
+#include <shared_mutex>
+#include <string>
+#include <unordered_map>
+
+#include "praft/praft.h"
+#include "praft/praft_service.h"
+
 #define GLOG_NO_ABBREVIATED_SEVERITIES
 
-#include <map>
-#include <shared_mutex>
+#include <memory>
 #include <vector>
 
-#include "common.h"
+#include "brpc/server.h"
+#include "butil/endpoint.h"
+
 #include "db.h"
-#include "storage/storage.h"
 
 namespace pikiwidb {
+class RaftServiceImpl;
 
 enum TaskType { kCheckpoint = 0, kLoadDBFromCheckpoint, kEmpty };
 
@@ -37,12 +47,19 @@ struct TaskContext {
   bool sync = false;
   TaskContext() = delete;
   TaskContext(TaskType t, bool s = false) : type(t), sync(s) {}
-  TaskContext(TaskType t, int d, bool s = false) : type(t), db(d), sync(s) {}
-  TaskContext(TaskType t, int d, const std::map<TaskArg, std::string>& a, bool s = false)
+  TaskContext(TaskType t, int32_t d, bool s = false) : type(t), db(d), sync(s) {}
+  TaskContext(TaskType t, int32_t d, const std::map<TaskArg, std::string>& a, bool s = false)
       : type(t), db(d), args(a), sync(s) {}
 };
 
 using TasksVector = std::vector<TaskContext>;
+
+enum PRaftErrorCode {
+  kErrorDisMatch = 0,
+  kErrorAddNode,
+  kErrorRemoveNode,
+  kErrorReDirect,
+};
 
 class PStore {
  public:
@@ -60,10 +77,38 @@ class PStore {
 
   int GetDBNumber() const { return db_number_; }
 
+  brpc::Server* GetRpcServer() const { return rpc_server_.get(); }
+
+  const butil::EndPoint& GetEndPoint() const { return endpoint_; }
+
+  /**
+   * return true if add group_id -> dbno into region_map_ success.
+   * return false if group_id -> dbno already exists in region_map_.
+   */
+  bool AddRegion(const std::string& group_id, uint32_t dbno);
+
+  /**
+   * return true if remove group_id -> dbno from region_map_ success.
+   * return false if group_id -> dbno do not exists in region_map_.
+   */
+  bool RemoveRegion(const std::string& group_id);
+
+  /**
+   * return nullptr if group_id -> dbno do not existed in region_map_.
+   */
+  DB* GetDBByGroupID(const std::string& group_id) const;
+
  private:
   PStore() = default;
+
   int db_number_ = 0;
   std::vector<std::unique_ptr<DB>> backends_;
+  butil::EndPoint endpoint_;
+  std::unique_ptr<PRaftServiceImpl> praft_service_{std::make_unique<PRaftServiceImpl>()};
+  std::unique_ptr<brpc::Server> rpc_server_{std::make_unique<brpc::Server>()};
+
+  mutable std::shared_mutex rw_mutex_;
+  std::unordered_map<std::string, uint32_t> region_map_;
 };
 
 #define PSTORE PStore::Instance()

@@ -281,7 +281,7 @@ class PConfig {
   AtomicString run_id;
 
   // The number of databases.
-  std::atomic<size_t> databases = 16;
+  std::atomic<size_t> databases = 3;
 
   /*
    * For Network I/O threads, in future version, we may delete

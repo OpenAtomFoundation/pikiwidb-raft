@@ -9,15 +9,12 @@
 
 #include "base_cmd.h"
 
-#include "fmt/core.h"
-
 #include "praft/praft.h"
+#include "pstd/log.h"
 
-#include "common.h"
 #include "config.h"
-#include "log.h"
 #include "pikiwidb.h"
-#include "praft/praft.h"
+#include "store.h"
 
 namespace pikiwidb {
 
@@ -41,19 +38,18 @@ std::vector<std::string> BaseCmd::CurrentKey(PClient* client) const { return std
 void BaseCmd::Execute(PClient* client) {
   DEBUG("execute command: {}", client->CmdName());
 
-  // read consistency (lease read) / write redirection
-  if (g_config.use_raft.load(std::memory_order_relaxed) && (HasFlag(kCmdFlagsReadonly) || HasFlag(kCmdFlagsWrite))) {
-    if (!PRAFT.IsInitialized()) {
+  if (g_config.use_raft.load()) {
+    auto praft = PSTORE.GetBackend(client->GetCurrentDB())->GetPRaft();
+    // 1. If PRAFT is not initialized yet, return an error message to the client for both read and write commands.
+    if (!praft->IsInitialized() && (HasFlag(kCmdFlagsReadonly) || HasFlag(kCmdFlagsWrite))) {
+      DEBUG("drop command: {}", client->CmdName());
       return client->SetRes(CmdRes::kErrOther, "PRAFT is not initialized");
     }
 
-    if (!PRAFT.IsLeader()) {
-      auto leader_addr = PRAFT.GetLeaderAddress();
-      if (leader_addr.empty()) {
-        return client->SetRes(CmdRes::kErrOther, std::string("-CLUSTERDOWN No Raft leader"));
-      }
-
-      return client->SetRes(CmdRes::kErrOther, fmt::format("-MOVED {}", leader_addr));
+    // 2. If PRAFT is initialized and the current node is not the leader, return a redirection message for write
+    // commands.
+    if (HasFlag(kCmdFlagsWrite) && !praft->IsLeader()) {
+      return client->SetRes(CmdRes::kMoved, fmt::format("MOVED {}", praft->GetLeaderAddress()));
     }
   }
 

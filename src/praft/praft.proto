@@ -2,12 +2,33 @@ syntax="proto3";
 package pikiwidb;
 option cc_generic_services = true;
 
-message DummyRequest  {
-};
+message NodeAddRequest {
+    string group_id = 1;
+    string endpoint = 2;
+    uint32 index = 3;
+    uint32 role = 4;
+}
 
-message DummyResponse {
-};
+message NodeAddResponse {
+    bool success = 1;
+    uint32 error_code = 2;
+    string leader_endpoint = 3;
+}
 
-service DummyService  {
-    rpc DummyMethod(DummyRequest) returns (DummyResponse);
+message NodeRemoveRequest {
+    string group_id = 1;
+    string endpoint = 2;
+    uint32 index = 3;
+    uint32 role = 4;
+}
+
+message NodeRemoveResponse {
+    bool success = 1;
+    uint32 error_code = 2;
+    string leader_endpoint = 3;
+}
+
+service PRaftService  {
+    rpc AddNode(NodeAddRequest) returns (NodeAddResponse);
+    rpc RemoveNode(NodeRemoveRequest) returns (NodeRemoveResponse);
 };

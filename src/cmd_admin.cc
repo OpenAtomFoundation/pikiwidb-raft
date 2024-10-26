@@ -11,31 +11,31 @@
    management of the PikiwiDB.
 
  */
+#include "cmd_admin.h"
 
 #include <sys/resource.h>
 #include <sys/statvfs.h>
 #include <sys/time.h>
 #include <sys/utsname.h>
+
 #include <algorithm>
 #include <cctype>
-
 #include <cstddef>
 #include <cstdint>
+#include <iomanip>
 #include <optional>
 #include <string>
 #include <vector>
-#include "cmd_admin.h"
-#include "db.h"
 
 #include "braft/raft.h"
-#include "pstd_string.h"
 #include "rocksdb/version.h"
 
-#include "pikiwidb.h"
 #include "praft/praft.h"
 #include "pstd/env.h"
+#include "pstd/pstd_string.h"
 
-#include "cmd_table_manager.h"
+#include "db.h"
+#include "pikiwidb.h"
 #include "slow_log.h"
 #include "store.h"
 
@@ -120,7 +120,7 @@ void FlushallCmd::DoCmd(PClient* client) {
 }
 
 SelectCmd::SelectCmd(const std::string& name, int16_t arity)
-    : BaseCmd(name, arity, kCmdFlagsAdmin | kCmdFlagsReadonly, kAclCategoryAdmin) {}
+    : BaseCmd(name, arity, kCmdFlagsAdmin, kAclCategoryAdmin) {}
 
 bool SelectCmd::DoInitial(PClient* client) { return true; }
 
@@ -178,11 +178,11 @@ bool InfoCmd::DoInitial(PClient* client) {
     return true;
   }
 
-  std::string argv_ = client->argv_[1].data();
+  auto argv = client->argv_[1];
   // convert section to lowercase
-  std::transform(argv_.begin(), argv_.end(), argv_.begin(), [](unsigned char c) { return std::tolower(c); });
+  std::transform(argv.begin(), argv.end(), argv.begin(), [](unsigned char c) { return std::tolower(c); });
   if (argc == 2) {
-    auto it = sectionMap.find(argv_);
+    auto it = sectionMap.find(argv);
     if (it != sectionMap.end()) {
       info_section_ = it->second;
     } else {
@@ -237,7 +237,7 @@ void InfoCmd::DoCmd(PClient* client) {
       InfoCommandStats(client, info);
       break;
     case kInfoRaft:
-      InfoRaft(info);
+      InfoRaft(client, info);
       break;
     default:
       break;
@@ -260,23 +260,27 @@ void InfoCmd::DoCmd(PClient* client) {
     raft_num_voting_nodes:2
     raft_node1:id=1733428433,state=connected,voting=yes,addr=localhost,port=5001,last_conn_secs=5,conn_errors=0,conn_oks=1
 */
-void InfoCmd::InfoRaft(std::string& message) {
-  if (!PRAFT.IsInitialized()) {
-    message += "-ERR Not a cluster member.\r\n";
-    return;
+void InfoCmd::InfoRaft(PClient* client, std::string& message) {
+  if (client->argv_.size() != 2) {
+    return client->SetRes(CmdRes::kWrongNum, client->CmdName());
   }
 
-  auto node_status = PRAFT.GetNodeStatus();
+  auto praft = PSTORE.GetBackend(client->GetCurrentDB())->GetPRaft();
+  assert(praft);
+  if (!praft->IsInitialized()) {
+    return client->SetRes(CmdRes::kErrOther, "Don't already cluster member");
+  }
+
+  auto node_status = praft->GetNodeStatus();
   if (node_status.state == braft::State::STATE_END) {
     message += "-ERR Node is not initialized.\r\n";
     return;
   }
 
   std::stringstream tmp_stream;
-
-  tmp_stream << "raft_group_id:" << PRAFT.GetGroupID() << "\r\n";
-  tmp_stream << "raft_node_id:" << PRAFT.GetNodeID() << "\r\n";
-  tmp_stream << "raft_peer_id:" << PRAFT.GetPeerID() << "\r\n";
+  tmp_stream << "raft_group_id:" << praft->GetGroupID() << "\r\n";
+  tmp_stream << "raft_node_id:" << praft->GetNodeID() << "\r\n";
+  tmp_stream << "raft_peer_id:" << praft->GetPeerID() << "\r\n";
   if (braft::is_active_state(node_status.state)) {
     tmp_stream << "raft_state:up\r\n";
   } else {
@@ -286,9 +290,9 @@ void InfoCmd::InfoRaft(std::string& message) {
   tmp_stream << "raft_leader_id:" << node_status.leader_id.to_string() << "\r\n";
   tmp_stream << "raft_current_term:" << std::to_string(node_status.term) << "\r\n";
 
-  if (PRAFT.IsLeader()) {
+  if (praft->IsLeader()) {
     std::vector<braft::PeerId> peers;
-    auto status = PRAFT.GetListPeers(&peers);
+    auto status = praft->GetListPeers(&peers);
     if (!status.ok()) {
       tmp_stream.str("-ERR ");
       tmp_stream << status.error_str() << "\r\n";
@@ -319,8 +323,12 @@ void InfoCmd::InfoServer(std::string& info) {
 
   tmp_stream << "# Server\r\n";
   tmp_stream << "PikiwiDB_version:" << version << "\r\n";
+#ifdef KPIKIWIDB_GIT_COMMIT_ID
   tmp_stream << "PikiwiDB_build_git_sha:" << KPIKIWIDB_GIT_COMMIT_ID << "\r\n";
+#endif
+#ifdef KPIKIWIDB_BUILD_DATE
   tmp_stream << "Pikiwidb_build_compile_date: " << KPIKIWIDB_BUILD_DATE << "\r\n";
+#endif
   tmp_stream << "os:" << host_info.sysname << " " << host_info.release << " " << host_info.machine << "\r\n";
   tmp_stream << "arch_bits:" << (reinterpret_cast<char*>(&host_info.machine) + strlen(host_info.machine) - 2) << "\r\n";
   tmp_stream << "process_id:" << getpid() << "\r\n";

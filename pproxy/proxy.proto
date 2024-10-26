@@ -1,0 +1,26 @@
+syntax = "proto3";
+package pikiwidb.proxy;
+option cc_generic_services = true;
+
+message RunCommandRequest {
+    string command = 1;
+}
+
+message RunCommandResponse {
+    string output = 1;
+}
+message GetRouteInfoRequest {
+}
+message GetRouteInfoResponse {
+    message RouteInfo {
+        string group_id = 1;
+        string endpoint = 2;
+        int32 role = 3;
+    }
+    repeated RouteInfo infos = 1;
+}
+
+service ProxyService {
+    rpc RunCommand(RunCommandRequest) returns (RunCommandResponse);
+    rpc GetRouteInfo(GetRouteInfoRequest) returns (GetRouteInfoResponse);
+}

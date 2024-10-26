@@ -12,6 +12,7 @@
 #include "braft/file_system_adaptor.h"
 #include "braft/macros.h"
 #include "braft/snapshot.h"
+#include "praft/praft.h"
 
 #define PRAFT_SNAPSHOT_META_FILE "__raft_snapshot_meta"
 #define PRAFT_SNAPSHOT_PATH "snapshot/snapshot_"
@@ -21,8 +22,8 @@ namespace pikiwidb {
 
 class PPosixFileSystemAdaptor : public braft::PosixFileSystemAdaptor {
  public:
-  PPosixFileSystemAdaptor() {}
-  ~PPosixFileSystemAdaptor() {}
+  explicit PPosixFileSystemAdaptor(PRaft* praft) : praft_(praft) {}
+  ~PPosixFileSystemAdaptor() override = default;
 
   braft::FileAdaptor* open(const std::string& path, int oflag, const ::google::protobuf::Message* file_meta,
                            butil::File::Error* e) override;
@@ -31,6 +32,7 @@ class PPosixFileSystemAdaptor : public braft::PosixFileSystemAdaptor {
 
  private:
   braft::raft_mutex_t mutex_;
+  PRaft* praft_{nullptr};
 };
 
 }  // namespace pikiwidb

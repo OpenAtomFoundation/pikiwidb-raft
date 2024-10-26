@@ -898,12 +898,12 @@ var _ = Describe("Consistency", Ordered, func() {
 		}
 		{
 			// set write on leader
-			set, err := leader.SetEx(ctx, testKey, testValue, 3).Result()
+			set, err := leader.SetEx(ctx, testKey, testValue, 3*time.Second).Result()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(set).To(Equal("OK"))
 
 			// read check
-			time.Sleep(10 * time.Second)
+			time.Sleep(5 * time.Second)
 			readChecker(func(c *redis.Client) {
 				_, err := c.Get(ctx, testKey).Result()
 				Expect(err).To(Equal(redis.Nil))

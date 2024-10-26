@@ -1,0 +1,93 @@
+syntax = "proto3";
+package pikiwidb;
+option cc_generic_services = true;
+
+message Peer {
+  string group_id = 1;
+  int32 cluster_idx = 2;
+};
+
+message GetClusterInfoRequest {
+};
+
+message GetClusterInfoResponse {
+  bool success = 1;
+  repeated Store store = 2;
+};
+
+message Store {
+  int64 store_id = 1;
+  string ip = 2;
+  int32 port = 3;
+  StoreState state = 4;
+  repeated Region region = 5;
+};
+
+message Region {
+  int64 region_id = 1;
+  string start_key = 2;
+  string end_key = 3;
+  repeated RegionEpoch region_epoch = 4;
+  repeated Peer peers = 5;
+};
+
+message RegionEpoch {
+  int64 conf_change_ver = 1; // conf change version
+  int64 region_ver = 2; // region version (split or merge)
+};
+
+enum StoreState {
+  UP = 0;
+  OFFLINE = 1;
+  TOMBSTONE = 2;
+};
+
+message RegionOptions {
+  string start_key = 1;
+  string end_key = 2;
+  int32 max_data_size = 3;
+};
+
+message CreateAllRegionsRequest {
+  int64 regions_count = 1;
+  int32 region_peers_count = 2;
+  repeated RegionOptions regionOptions = 3;
+};
+
+message CreateAllRegionsResponse {
+  bool success = 1;
+};
+
+message DeleteAllRegionsRequest {
+};
+
+message DeleteAllRegionsResponse {
+  bool success = 1;
+};
+
+message AddStoreRequest {
+  string ip = 1;
+  int32 port = 2;
+};
+
+message AddStoreResponse {
+  bool success = 1;
+  optional int64 store_id = 2;
+  optional string redirect = 3;
+};
+
+message RemoveStoreRequest {
+  int64 store_id = 1;
+};
+
+message RemoveStoreResponse {
+  bool success = 1;
+};
+
+service PlacementDriverService {
+  rpc CreateAllRegions(CreateAllRegionsRequest) returns (CreateAllRegionsResponse);
+  rpc DeleteAllRegions(DeleteAllRegionsRequest) returns (DeleteAllRegionsResponse);
+  rpc AddStore(AddStoreRequest) returns (AddStoreResponse);
+  rpc RemoveStore(RemoveStoreRequest) returns (RemoveStoreResponse);
+  rpc GetClusterInfo(GetClusterInfoRequest) returns (GetClusterInfoResponse);
+};
