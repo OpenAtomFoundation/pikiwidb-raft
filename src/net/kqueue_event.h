@@ -24,7 +24,7 @@ namespace net {
 class KqueueEvent : public BaseEvent {
  public:
   explicit KqueueEvent(std::shared_ptr<NetEvent> listen, int8_t mode)
-      : BaseEvent(std::move(listen), mode, BaseEvent::EVENT_TYPE_KQUEUE) {};
+      : BaseEvent(std::move(listen), mode, BaseEvent::EVENT_TYPE_KQUEUE){};
 
   ~KqueueEvent() override { Close(); }
 

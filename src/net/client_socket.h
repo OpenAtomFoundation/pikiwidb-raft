@@ -13,7 +13,7 @@ namespace net {
 
 class ClientSocket : public StreamSocket {
  public:
-  explicit ClientSocket(const SocketAddr& addr) : StreamSocket(0, SOCKET_TCP), addr_(addr) {};
+  explicit ClientSocket(const SocketAddr& addr) : StreamSocket(0, SOCKET_TCP), addr_(addr){};
 
   ~ClientSocket() override = default;
 

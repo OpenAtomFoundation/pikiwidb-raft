@@ -97,7 +97,7 @@ class ParsedBaseDataValue : public ParsedInternalValue {
   }
 
  protected:
-  virtual void SetVersionToValue() override {};
+  virtual void SetVersionToValue() override{};
 
  private:
   const size_t kBaseDataValueSuffixLength = kSuffixReserveLength + kTimestampLength;
